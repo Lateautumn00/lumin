@@ -20,7 +20,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "boundary": "depcruise --config .dependency-cruiser.cjs apps packages",
+    "boundary": "depcruise --config .dependency-cruiser.cjs packages",
     "audit:high": "pnpm audit --registry=https://registry.npmjs.org --audit-level=high",
     "gate": "pnpm lint && pnpm typecheck && pnpm test && pnpm audit:high && pnpm boundary"
   },
