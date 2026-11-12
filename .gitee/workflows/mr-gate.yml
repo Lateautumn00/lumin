@@ -1,0 +1,45 @@
+# MR 门禁（AGENTS.md §10：lint → typecheck → test(含 IPC 冒烟) → audit → boundary 全绿才可合入）
+# Gitee Go 语法兼容 GitHub Actions；电子包下载走 npmmirror 镜像
+name: MR 门禁
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: 启用 corepack（packageManager 锁定 pnpm 版本）
+        run: corepack enable
+
+      - name: 安装依赖（锁文件冻结）
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck（tsc + vue-tsc + e2e）
+        run: pnpm typecheck
+
+      - name: 单元测试 + 覆盖率阈值（R1：核心 ≥80% / 全仓 ≥60%）
+        run: pnpm coverage
+
+      - name: 构建 + IPC 冒烟（R3：xvfb 下启动 Electron → invoke 全链路）
+        run: xvfb-run --auto-servernum pnpm test:e2e
+
+      - name: 依赖审计（无 high/critical）
+        run: pnpm audit:high
+
+      - name: 架构边界（dependency-cruiser）
+        run: pnpm boundary

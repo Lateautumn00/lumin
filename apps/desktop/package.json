@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && vue-tsc --noEmit -p tsconfig.web.json"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.e2e.json && vue-tsc --noEmit -p tsconfig.web.json",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "electron-log": "5.4.4"
@@ -16,6 +17,7 @@
     "@lumin/plugin-api": "workspace:*",
     "@lumin/shared": "workspace:*",
     "@lumin/tool-example": "workspace:*",
+    "@playwright/test": "1.65.0",
     "@tailwindcss/vite": "4.3.5",
     "@vitejs/plugin-vue": "6.0.10",
     "electron": "45.3.1",
