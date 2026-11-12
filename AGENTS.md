@@ -82,7 +82,7 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 
 ### 5.4 图标体系（R4）
 
-- 统一使用 **`lucide-vue-next`**（Tree-shakeable）
+- 统一使用 **`@lucide/vue`**（Tree-shakeable；lucide-vue-next 已废弃，官方继任包）
 - **禁止**混用 Naive 内置图标、手写 SVG、图标字体
 
 ---

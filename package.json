@@ -20,7 +20,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "boundary": "depcruise --config .dependency-cruiser.cjs packages",
+    "boundary": "depcruise --config .dependency-cruiser.cjs apps packages",
     "audit:high": "pnpm audit --registry=https://registry.npmjs.org --audit-level=high",
     "gate": "pnpm lint && pnpm typecheck && pnpm test && pnpm audit:high && pnpm boundary"
   },
@@ -40,6 +40,7 @@
     "turbo": "2.11.11",
     "typescript": "6.0.3",
     "vitest": "5.1.0",
-    "vue-eslint-parser": "10.4.2"
+    "vue-eslint-parser": "10.4.2",
+    "vue-tsc": "3.3.14"
   }
 }

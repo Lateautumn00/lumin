@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+@source '../../../../../../packages/tools';
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+:root {
+  --lumin-color-primary: #6366f1;
+  --lumin-color-primary-hover: #818cf8;
+  --lumin-color-bg: #f8fafc;
+  --lumin-color-surface: #ffffff;
+  --lumin-color-border: #e2e8f0;
+  --lumin-color-text: #0f172a;
+  --lumin-color-text-secondary: #64748b;
+  --lumin-color-danger: #ef4444;
+  --lumin-radius-md: 8px;
+  --lumin-radius-lg: 12px;
+  --lumin-space-3: 12px;
+  --lumin-space-4: 16px;
+  --lumin-space-5: 24px;
+  --lumin-font-size-sm: 13px;
+  --lumin-font-size-md: 14px;
+  --lumin-font-size-lg: 16px;
+}

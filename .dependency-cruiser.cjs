@@ -49,7 +49,7 @@ module.exports = {
     doNotFollow: { path: 'node_modules' },
     tsPreCompilationDeps: true,
     exclude: {
-      path: '^(node_modules|dist|out|coverage|release|binaries|userData|\\.turbo|playwright-report|test-results|\\.project-rules|docs|\\.gitee)'
+      path: '(^|/)(node_modules|dist|out|coverage|release|binaries|userData|\\.turbo|playwright-report|test-results|\\.project-rules|docs|\\.gitee)(/|$)'
     }
   }
 }
