@@ -118,5 +118,19 @@ export type TaskEvent = z.infer<typeof taskEventSchema>
 export const TASK_EVENT_CHANNEL = 'lumin:task:event'
 export const TASK_CANCEL_CHANNEL = 'lumin:task:cancel'
 
+/** 更新事件通道与形状（shell 自动更新，generic provider） */
+export const UPDATE_EVENT_CHANNEL = 'lumin:update:event'
+
+export const updateEventSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('checking') }),
+  z.object({ kind: z.literal('available'), version: z.string().min(1) }),
+  z.object({ kind: z.literal('not-available') }),
+  z.object({ kind: z.literal('downloading'), percent: z.number().min(0).max(100) }),
+  z.object({ kind: z.literal('downloaded'), version: z.string().min(1) }),
+  z.object({ kind: z.literal('error'), error: structuredErrorSchema })
+])
+
+export type UpdateEvent = z.infer<typeof updateEventSchema>
+
 /** renderer → main 的统一 invoke 通道（preload 唯一入口） */
 export const LUMIN_INVOKE_CHANNEL = 'lumin:invoke'

@@ -2,15 +2,19 @@
   "name": "@lumin/desktop",
   "version": "0.0.0",
   "private": true,
+  "description": "Lumin —— 离线优先的 Windows 桌面实用工具箱",
+  "author": "Lumin",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.e2e.json && vue-tsc --noEmit -p tsconfig.web.json",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "dist": "electron-builder --config electron-builder.yml --publish never"
   },
   "dependencies": {
-    "electron-log": "5.4.4"
+    "electron-log": "5.4.4",
+    "electron-updater": "6.8.11"
   },
   "devDependencies": {
     "@lucide/vue": "1.72.0",
@@ -21,6 +25,7 @@
     "@tailwindcss/vite": "4.3.5",
     "@vitejs/plugin-vue": "6.0.10",
     "electron": "45.3.1",
+    "electron-builder": "26.18.0",
     "electron-vite": "6.0.0",
     "naive-ui": "2.45.3",
     "pinia": "4.1.0",

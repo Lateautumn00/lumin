@@ -15,6 +15,7 @@ function createHarness(): {
   call: (channel: string, payload: unknown) => Promise<unknown>
   values: Map<string, unknown>
   cancelled: () => string
+  checks: () => number
 } {
   const handlers = new Map<string, IpcHandler<unknown, unknown>>()
   const bus: IpcBus = {
@@ -40,7 +41,14 @@ function createHarness(): {
       return true
     }
   }
-  registerShellChannels(bus, { settings, queue, logDir: () => 'C:\\logs' })
+  let checkCount = 0
+  const updater = {
+    check: async () => {
+      checkCount += 1
+      return { checked: false, reason: 'dev-mode' } as const
+    }
+  }
+  registerShellChannels(bus, { settings, queue, logDir: () => 'C:\\logs', updater })
 
   return {
     call: async (channel, payload) => {
@@ -49,7 +57,8 @@ function createHarness(): {
       return handler({ toolId: 'lumin', action: channel, payload })
     },
     values,
-    cancelled: () => cancelledId
+    cancelled: () => cancelledId,
+    checks: () => checkCount
   }
 }
 
@@ -108,5 +117,14 @@ describe('registerShellChannels', () => {
     await expect(call('lumin:task:cancel', {})).rejects.toMatchObject({
       code: 'INVALID_PAYLOAD'
     })
+  })
+
+  it('update:check 透传 updater 结果', async () => {
+    const { call, checks } = createHarness()
+    expect(await call('lumin:update:check', undefined)).toEqual({
+      checked: false,
+      reason: 'dev-mode'
+    })
+    expect(checks()).toBe(1)
   })
 })

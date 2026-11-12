@@ -5,7 +5,8 @@ coverage/
 .turbo/
 *.tsbuildinfo
 *.log
-binaries/
+binaries/*
+!binaries/.gitkeep
 userData/
 release/
 playwright-report/

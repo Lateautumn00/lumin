@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, session } from 'electron'
 import log from 'electron-log'
 import { dirname, join } from 'node:path'
-import { LUMIN_INVOKE_CHANNEL, TASK_EVENT_CHANNEL } from '@lumin/shared'
+import { LUMIN_INVOKE_CHANNEL, TASK_EVENT_CHANNEL, UPDATE_EVENT_CHANNEL } from '@lumin/shared'
 import { DEV_CSP, PROD_CSP } from './csp'
 import { createIpcBus } from './ipc-bus'
 import { loadTools, type ToolRegistration } from './plugin-host'
@@ -9,6 +9,7 @@ import { createTaskQueue } from './task-queue'
 import { registerShellChannels } from './shell-channels'
 import { createRootLogger, createToolLogger, getLogFilePath, initLog } from './services/log'
 import { createSettingsService } from './services/settings'
+import { createUpdaterService } from './services/updater'
 import { toolMains } from './tool-mains'
 import { toolManifests } from '../tool-manifests'
 
@@ -68,21 +69,29 @@ async function bootstrap(): Promise<void> {
       ? Math.floor(rawConcurrency)
       : 2
 
+  const broadcast = (channel: string, payload: unknown): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send(channel, payload)
+    }
+  }
+
   const queue = createTaskQueue({
     concurrency,
-    onEvent: (event) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send(TASK_EVENT_CHANNEL, event)
-      }
-    }
+    onEvent: (event) => broadcast(TASK_EVENT_CHANNEL, event)
   })
   const bus = createIpcBus({ queue, logger })
   ipcMain.handle(LUMIN_INVOKE_CHANNEL, (_event, raw: unknown) => bus.dispatch(raw))
 
+  const updater = createUpdaterService({
+    onEvent: (event) => broadcast(UPDATE_EVENT_CHANNEL, event),
+    logger
+  })
+
   registerShellChannels(bus, {
     settings,
     queue,
-    logDir: () => dirname(getLogFilePath())
+    logDir: () => dirname(getLogFilePath()),
+    updater
   })
 
   const registrations: ToolRegistration[] = toolManifests.map((manifest) => ({

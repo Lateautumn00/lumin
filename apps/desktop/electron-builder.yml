@@ -1,0 +1,46 @@
+# Lumin 打包配置：NSIS 安装包 + portable 单文件（Q10；无签名证书）
+appId: com.lumin.desktop
+productName: Lumin
+copyright: Copyright © 2026 Lumin
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+
+asar: true
+
+# 大二进制经 scripts/fetch-binaries.mjs 拉取到 binaries/（gitignore，M3 起启用）
+extraResources:
+  - from: ../../binaries/
+    to: binaries/
+    filter:
+      - '**/*'
+
+win:
+  target:
+    - nsis
+    - portable
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Lumin
+  artifactName: ${productName}-${version}-${os}-${arch}-setup.${ext}
+
+portable:
+  artifactName: ${productName}-${version}-${os}-${arch}-portable.${ext}
+
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+# 更新源（§5.3）：generic provider，latest.yml + blockmap 放仓库 updates/ 固定目录
+# M5 前占位——替换为实际 Gitee 仓库 raw 地址（单点配置；失败换 OSS 只改此处）
+publish:
+  provider: generic
+  url: https://gitee.com/lumin-app/lumin/raw/master/updates

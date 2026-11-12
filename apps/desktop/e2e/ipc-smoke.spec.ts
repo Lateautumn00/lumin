@@ -44,6 +44,11 @@ test.describe('IPC 冒烟（R3）', () => {
     await page.evaluate(() => window.lumin.settings.set('smoke.answer', 42))
     const answer = await page.evaluate(() => window.lumin.settings.get<number>('smoke.answer', 0))
     expect(answer).toBe(42)
+
+    const update = await page.evaluate(() =>
+      window.lumin.invoke<{ checked: boolean; reason?: string }>('lumin:update:check')
+    )
+    expect(update).toEqual({ checked: false, reason: 'dev-mode' })
   })
 
   test('任务三段式：submit → progress → done', async () => {

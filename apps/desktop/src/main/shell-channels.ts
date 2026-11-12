@@ -4,6 +4,7 @@ import { makeError } from '@lumin/shared'
 import type { IpcBus } from './ipc-bus'
 import type { TaskQueue } from './task-queue'
 import type { SettingsService } from './services/settings'
+import type { UpdateCheckResult } from './services/updater'
 
 const settingsGetSchema = z.object({
   key: z.string().min(1),
@@ -23,6 +24,7 @@ export interface ShellChannelDeps {
   settings: SettingsService
   queue: TaskQueue
   logDir: () => string
+  updater: { check(): Promise<UpdateCheckResult> }
 }
 
 export function registerShellChannels(bus: IpcBus, deps: ShellChannelDeps): void {
@@ -58,4 +60,6 @@ export function registerShellChannels(bus: IpcBus, deps: ShellChannelDeps): void
     if (!parsed.success) throw makeError('INVALID_PAYLOAD', '取消参数无效')
     return deps.queue.cancel(parsed.data.taskId)
   })
+
+  bus.registerSync('lumin:update:check', 'lumin', 'update:check', () => deps.updater.check())
 }

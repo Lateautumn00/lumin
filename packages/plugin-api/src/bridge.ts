@@ -1,4 +1,4 @@
-import type { StructuredError, TaskEvent } from '@lumin/shared'
+import type { StructuredError, TaskEvent, UpdateEvent } from '@lumin/shared'
 
 /** 应用信息（关于页展示） */
 export interface AppInfo {
@@ -16,6 +16,8 @@ export interface LuminBridge {
   invoke<R = unknown>(channel: string, payload?: unknown): Promise<R>
   /** 订阅任务事件（progress | log | done | error），返回取消订阅函数 */
   onTaskEvent(listener: (event: TaskEvent) => void): () => void
+  /** 订阅更新事件（checking | available | not-available | downloading | downloaded | error） */
+  onUpdateEvent(listener: (event: UpdateEvent) => void): () => void
   getAppInfo(): Promise<AppInfo>
   openLogDir(): Promise<void>
   readonly settings: {

@@ -2,11 +2,14 @@ import { contextBridge, ipcRenderer } from 'electron'
 import {
   LUMIN_INVOKE_CHANNEL,
   TASK_EVENT_CHANNEL,
+  UPDATE_EVENT_CHANNEL,
   invokeResponseSchema,
   makeError,
   taskEventSchema,
+  updateEventSchema,
   type InvokeResponse,
-  type TaskEvent
+  type TaskEvent,
+  type UpdateEvent
 } from '@lumin/shared'
 import type { LuminBridge } from '@lumin/plugin-api'
 
@@ -29,6 +32,16 @@ const bridge: LuminBridge = {
     ipcRenderer.on(TASK_EVENT_CHANNEL, wrapped)
     return () => {
       ipcRenderer.off(TASK_EVENT_CHANNEL, wrapped)
+    }
+  },
+  onUpdateEvent(listener) {
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: UpdateEvent): void => {
+      const parsed = updateEventSchema.safeParse(payload)
+      if (parsed.success) listener(parsed.data)
+    }
+    ipcRenderer.on(UPDATE_EVENT_CHANNEL, wrapped)
+    return () => {
+      ipcRenderer.off(UPDATE_EVENT_CHANNEL, wrapped)
     }
   },
   getAppInfo: () => invoke('lumin:app:info'),

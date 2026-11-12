@@ -8,7 +8,8 @@ import {
   submitResultSchema,
   taskEventSchema,
   taskUpdateSchema,
-  toStructuredError
+  toStructuredError,
+  updateEventSchema
 } from './envelope'
 
 describe('channelSchema', () => {
@@ -151,5 +152,28 @@ describe('taskEventSchema', () => {
   it('progress/log 事件必须带 taskId', () => {
     expect(taskEventSchema.safeParse({ kind: 'progress', current: 0 }).success).toBe(false)
     expect(taskEventSchema.safeParse({ kind: 'log', message: 'x' }).success).toBe(false)
+  })
+})
+
+describe('updateEventSchema', () => {
+  it('接受全六种事件', () => {
+    expect(updateEventSchema.safeParse({ kind: 'checking' }).success).toBe(true)
+    expect(updateEventSchema.safeParse({ kind: 'available', version: '1.0.1' }).success).toBe(true)
+    expect(updateEventSchema.safeParse({ kind: 'not-available' }).success).toBe(true)
+    expect(updateEventSchema.safeParse({ kind: 'downloading', percent: 42.5 }).success).toBe(true)
+    expect(updateEventSchema.safeParse({ kind: 'downloaded', version: '1.0.1' }).success).toBe(true)
+    expect(
+      updateEventSchema.safeParse({
+        kind: 'error',
+        error: { code: 'INTERNAL', message: '网络失败' }
+      }).success
+    ).toBe(true)
+  })
+
+  it('拒绝越界 percent / 缺失字段 / 未知 kind', () => {
+    expect(updateEventSchema.safeParse({ kind: 'downloading', percent: -1 }).success).toBe(false)
+    expect(updateEventSchema.safeParse({ kind: 'downloading', percent: 101 }).success).toBe(false)
+    expect(updateEventSchema.safeParse({ kind: 'available' }).success).toBe(false)
+    expect(updateEventSchema.safeParse({ kind: 'installed' }).success).toBe(false)
   })
 })

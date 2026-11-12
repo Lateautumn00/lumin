@@ -16,6 +16,7 @@
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "test:e2e": "pnpm build && pnpm --filter @lumin/desktop test:e2e",
+    "dist": "pnpm build && pnpm --filter @lumin/desktop dist",
     "coverage": "vitest run --coverage --passWithNoTests",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

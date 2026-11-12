@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { NButton, NSpace, NTable, NText } from 'naive-ui'
 import { toStructuredError } from '@lumin/shared'
 import type { AppInfo } from '@lumin/plugin-api'
 import { t } from '../i18n/zh-CN'
 
+type UpdateState =
+  'idle' | 'checking' | 'dev-mode' | 'latest' | 'downloading' | 'downloaded' | 'error'
+
 const info = ref<AppInfo | null>(null)
 const logError = ref('')
+const updateState = ref<UpdateState>('idle')
+const updatePercent = ref(0)
+const updateVersion = ref('')
+const updateError = ref('')
+let offUpdate: (() => void) | null = null
 
 onMounted(() => {
   void window.lumin
@@ -15,7 +23,86 @@ onMounted(() => {
       info.value = value
     })
     .catch(() => undefined)
+  offUpdate = window.lumin.onUpdateEvent((event) => {
+    switch (event.kind) {
+      case 'checking':
+        updateState.value = 'checking'
+        break
+      case 'available':
+        updateState.value = 'downloading'
+        updateVersion.value = event.version
+        updatePercent.value = 0
+        break
+      case 'not-available':
+        updateState.value = 'latest'
+        break
+      case 'downloading':
+        updateState.value = 'downloading'
+        updatePercent.value = event.percent
+        break
+      case 'downloaded':
+        updateState.value = 'downloaded'
+        updateVersion.value = event.version
+        break
+      case 'error':
+        updateState.value = 'error'
+        updateError.value = event.error.message
+        break
+    }
+  })
 })
+
+onUnmounted(() => {
+  offUpdate?.()
+  offUpdate = null
+})
+
+const updateHint = computed(() => {
+  switch (updateState.value) {
+    case 'checking':
+      return t('shell.about.updateChecking')
+    case 'dev-mode':
+      return t('shell.about.updateDevMode')
+    case 'latest':
+      return t('shell.about.updateLatest')
+    case 'downloading':
+      return `${t('shell.about.updateDownloading')} ${Math.round(updatePercent.value)}%`
+    case 'downloaded':
+      return updateVersion.value === ''
+        ? t('shell.about.updateDownloaded')
+        : `${t('shell.about.updateDownloaded')}（${updateVersion.value}）`
+    case 'error':
+      return updateError.value === ''
+        ? t('shell.about.updateFailed')
+        : `${t('shell.about.updateFailed')}：${updateError.value}`
+    default:
+      return ''
+  }
+})
+
+const updateHintType = computed(() => {
+  if (updateState.value === 'error') return 'error'
+  if (updateState.value === 'downloaded' || updateState.value === 'latest') return 'success'
+  return 'default'
+})
+
+async function checkUpdate(): Promise<void> {
+  updateState.value = 'checking'
+  updateError.value = ''
+  try {
+    const result = await window.lumin.invoke<{
+      checked: boolean
+      reason?: 'dev-mode' | 'check-failed'
+    }>('lumin:update:check')
+    if (!result.checked) {
+      updateState.value = result.reason === 'dev-mode' ? 'dev-mode' : 'error'
+      if (result.reason !== 'dev-mode') updateError.value = ''
+    }
+  } catch (err) {
+    updateState.value = 'error'
+    updateError.value = toStructuredError(err).message
+  }
+}
 
 async function openLogDir(): Promise<void> {
   logError.value = ''
@@ -62,6 +149,19 @@ async function openLogDir(): Promise<void> {
       <NButton size="small" @click="openLogDir">{{ t('shell.about.openLog') }}</NButton>
       <NText v-if="logError" type="error" class="text-xs">
         {{ t('shell.about.logFailed') }}：{{ logError }}
+      </NText>
+    </NSpace>
+    <NSpace align="center">
+      <NButton
+        size="small"
+        :loading="updateState === 'checking'"
+        :disabled="updateState === 'downloading'"
+        @click="checkUpdate"
+      >
+        {{ t('shell.about.checkUpdate') }}
+      </NButton>
+      <NText v-if="updateHint" :type="updateHintType" class="text-xs">
+        {{ updateHint }}
       </NText>
     </NSpace>
   </div>
