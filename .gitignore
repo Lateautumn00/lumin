@@ -1,0 +1,13 @@
+node_modules/
+dist/
+out/
+coverage/
+.turbo/
+*.tsbuildinfo
+*.log
+binaries/
+userData/
+release/
+playwright-report/
+test-results/
+.DS_Store

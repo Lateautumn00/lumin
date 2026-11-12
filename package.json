@@ -1,0 +1,45 @@
+{
+  "name": "lumin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Lumin — Windows 桌面实用工具箱",
+  "license": "UNLICENSED",
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @lumin/desktop dev",
+    "build": "turbo run build",
+    "typecheck": "tsc --noEmit && turbo run typecheck",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage --passWithNoTests",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "boundary": "depcruise --config .dependency-cruiser.cjs apps packages",
+    "audit:high": "pnpm audit --registry=https://registry.npmjs.org --audit-level=high",
+    "gate": "pnpm lint && pnpm typecheck && pnpm test && pnpm audit:high && pnpm boundary"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@typescript-eslint/eslint-plugin": "8.72.2",
+    "@typescript-eslint/parser": "8.72.2",
+    "@vitest/coverage-v8": "5.1.0",
+    "@vue/eslint-config-prettier": "10.2.0",
+    "@vue/eslint-config-typescript": "14.9.0",
+    "@vue/test-utils": "2.5.1",
+    "dependency-cruiser": "18.7.2",
+    "eslint": "10.14.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-vue": "10.12.1",
+    "prettier": "3.10.1",
+    "turbo": "2.11.11",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0",
+    "vue-eslint-parser": "10.4.2"
+  }
+}

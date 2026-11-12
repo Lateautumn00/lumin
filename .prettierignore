@@ -1,0 +1,12 @@
+node_modules
+dist
+out
+coverage
+.turbo
+release
+pnpm-lock.yaml
+playwright-report
+test-results
+binaries
+userData
+.project-rules
