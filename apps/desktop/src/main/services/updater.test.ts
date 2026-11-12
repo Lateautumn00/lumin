@@ -13,7 +13,8 @@ const { appMock, updaterMock, listeners } = vi.hoisted(() => {
       on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
         listeners.set(event, cb)
       }),
-      checkForUpdates: vi.fn()
+      checkForUpdates: vi.fn(),
+      quitAndInstall: vi.fn()
     }
   }
 })
@@ -92,5 +93,16 @@ describe('createUpdaterService', () => {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     createUpdaterService({ onEvent: () => undefined, logger })
     expect(updaterMock.logger).toBe(logger)
+  })
+
+  it('install：打包模式 quitAndInstall；dev 模式 no-op', () => {
+    const packaged = createUpdaterService({ onEvent: () => undefined })
+    appMock.isPackaged = true
+    packaged.install()
+    expect(updaterMock.quitAndInstall).toHaveBeenCalledTimes(1)
+
+    appMock.isPackaged = false
+    packaged.install()
+    expect(updaterMock.quitAndInstall).toHaveBeenCalledTimes(1)
   })
 })

@@ -8,3 +8,8 @@
 ### Added
 
 - M0 阶段 0–1：版本基线锁定（全部最新稳定版 + 精确钉版；TypeScript 7.0.2 实测因 `typescript-eslint` 未适配按方案 A 回退至 6.0.3，例外记录于 plan.md §1.1）；pnpm 12 + Turborepo 工作区与质量工具链（ESLint 10 / Vitest 5 / dependency-cruiser / Prettier）
+- M0 阶段 2：`shared` IPC 信封/错误码/任务事件 schema 与 `plugin-api` 插拔契约（ToolManifest / MainPluginContext / LuminBridge）；dependency-cruiser 五条架构边界规则（R7）
+- M0 阶段 3：`desktop` 三端骨架——安全基线（CSP 双保险/导航拦截/单实例锁）、`lumin:invoke` 单通道 IPC 总线、任务队列（并发上限/取消）、动态路由侧边栏与 example 占位工具（三段式长任务）；设置原子写 + electron-log 滚动日志
+- M0 阶段 4：R3 IPC 冒烟自动化（Playwright 4 用例：清单渲染/同步 invoke/三段式/取消）与 Gitee Go MR 门禁工作流（lint→typecheck→coverage→xvfb e2e→audit→boundary）
+- M0 阶段 5：electron-builder 双目标出包（NSIS setup + portable 分名产物、latest.yml/blockmap）与 electron-updater generic provider 自动更新链路（检查/进度/静默安装，关于页三态 UI）
+- M0 阶段 6：冒烟记录 `docs/smoke/shell.md`；**更新冒烟卡点通过**（0.0.0 → 0.0.1 检测/下载/静默安装/新版运行 33.3s）；R2 八类异常 shell 层映射与安全基线确认

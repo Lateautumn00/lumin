@@ -16,6 +16,7 @@ function createHarness(): {
   values: Map<string, unknown>
   cancelled: () => string
   checks: () => number
+  installs: () => number
 } {
   const handlers = new Map<string, IpcHandler<unknown, unknown>>()
   const bus: IpcBus = {
@@ -42,10 +43,14 @@ function createHarness(): {
     }
   }
   let checkCount = 0
+  let installCount = 0
   const updater = {
     check: async () => {
       checkCount += 1
       return { checked: false, reason: 'dev-mode' } as const
+    },
+    install: () => {
+      installCount += 1
     }
   }
   registerShellChannels(bus, { settings, queue, logDir: () => 'C:\\logs', updater })
@@ -58,7 +63,8 @@ function createHarness(): {
     },
     values,
     cancelled: () => cancelledId,
-    checks: () => checkCount
+    checks: () => checkCount,
+    installs: () => installCount
   }
 }
 
@@ -119,12 +125,14 @@ describe('registerShellChannels', () => {
     })
   })
 
-  it('update:check 透传 updater 结果', async () => {
-    const { call, checks } = createHarness()
+  it('update:check 透传 updater 结果；update:install 触发安装', async () => {
+    const { call, checks, installs } = createHarness()
     expect(await call('lumin:update:check', undefined)).toEqual({
       checked: false,
       reason: 'dev-mode'
     })
     expect(checks()).toBe(1)
+    expect(await call('lumin:update:install', undefined)).toBeUndefined()
+    expect(installs()).toBe(1)
   })
 })

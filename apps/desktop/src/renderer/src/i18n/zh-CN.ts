@@ -16,6 +16,7 @@ const zhCN = {
   'shell.about.updateLatest': '已是最新版本',
   'shell.about.updateDownloading': '正在下载',
   'shell.about.updateDownloaded': '已下载新版本，退出应用后自动安装',
+  'shell.about.installNow': '安装并重启',
   'shell.about.updateFailed': '检查更新失败'
 } as const
 

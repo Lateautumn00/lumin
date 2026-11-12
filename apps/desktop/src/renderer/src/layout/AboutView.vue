@@ -104,6 +104,16 @@ async function checkUpdate(): Promise<void> {
   }
 }
 
+async function installUpdate(): Promise<void> {
+  updateError.value = ''
+  try {
+    await window.lumin.invoke('lumin:update:install')
+  } catch (err) {
+    updateState.value = 'error'
+    updateError.value = toStructuredError(err).message
+  }
+}
+
 async function openLogDir(): Promise<void> {
   logError.value = ''
   try {
@@ -159,6 +169,14 @@ async function openLogDir(): Promise<void> {
         @click="checkUpdate"
       >
         {{ t('shell.about.checkUpdate') }}
+      </NButton>
+      <NButton
+        v-if="updateState === 'downloaded'"
+        size="small"
+        type="primary"
+        @click="installUpdate"
+      >
+        {{ t('shell.about.installNow') }}
       </NButton>
       <NText v-if="updateHint" :type="updateHintType" class="text-xs">
         {{ updateHint }}

@@ -21,6 +21,7 @@ export interface UpdaterDeps {
 
 export interface UpdaterService {
   check(): Promise<UpdateCheckResult>
+  install(): void
 }
 
 export function createUpdaterService(deps: UpdaterDeps): UpdaterService {
@@ -59,6 +60,10 @@ export function createUpdaterService(deps: UpdaterDeps): UpdaterService {
       } catch {
         return { checked: false, reason: 'check-failed' }
       }
+    },
+    install() {
+      if (!app.isPackaged) return
+      autoUpdater.quitAndInstall(true, true)
     }
   }
 }

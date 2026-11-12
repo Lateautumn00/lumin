@@ -24,7 +24,7 @@ export interface ShellChannelDeps {
   settings: SettingsService
   queue: TaskQueue
   logDir: () => string
-  updater: { check(): Promise<UpdateCheckResult> }
+  updater: { check(): Promise<UpdateCheckResult>; install(): void }
 }
 
 export function registerShellChannels(bus: IpcBus, deps: ShellChannelDeps): void {
@@ -62,4 +62,8 @@ export function registerShellChannels(bus: IpcBus, deps: ShellChannelDeps): void
   })
 
   bus.registerSync('lumin:update:check', 'lumin', 'update:check', () => deps.updater.check())
+
+  bus.registerSync('lumin:update:install', 'lumin', 'update:install', () => {
+    deps.updater.install()
+  })
 }
