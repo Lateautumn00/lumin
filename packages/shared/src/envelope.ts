@@ -32,6 +32,14 @@ export function makeError(code: CoreErrorCode, message: string, detail?: string)
   return detail === undefined ? { code, message } : { code, message, detail }
 }
 
+/** 将任意抛出物归一化为结构化错误（已合规的直接透传） */
+export function toStructuredError(err: unknown): StructuredError {
+  const parsed = structuredErrorSchema.safeParse(err)
+  if (parsed.success) return parsed.data
+  if (err instanceof Error) return makeError('INTERNAL', err.message)
+  return makeError('INTERNAL', String(err))
+}
+
 /** renderer → main 的 invoke 请求信封 */
 export const invokeRequestSchema = z.object({
   channel: channelSchema,
@@ -109,3 +117,6 @@ export type TaskEvent = z.infer<typeof taskEventSchema>
 /** 任务事件通道（shell 与工具共用的常量） */
 export const TASK_EVENT_CHANNEL = 'lumin:task:event'
 export const TASK_CANCEL_CHANNEL = 'lumin:task:cancel'
+
+/** renderer → main 的统一 invoke 通道（preload 唯一入口） */
+export const LUMIN_INVOKE_CHANNEL = 'lumin:invoke'

@@ -7,7 +7,8 @@ import {
   structuredErrorSchema,
   submitResultSchema,
   taskEventSchema,
-  taskUpdateSchema
+  taskUpdateSchema,
+  toStructuredError
 } from './envelope'
 
 describe('channelSchema', () => {
@@ -49,6 +50,22 @@ describe('makeError', () => {
       message: '超时',
       detail: '60s'
     })
+  })
+})
+
+describe('toStructuredError', () => {
+  it('透传已合规的结构化错误', () => {
+    const err = makeError('BUSY', '忙碌')
+    expect(toStructuredError(err)).toEqual(err)
+  })
+
+  it('Error 归一为 INTERNAL', () => {
+    expect(toStructuredError(new Error('炸了'))).toEqual({ code: 'INTERNAL', message: '炸了' })
+  })
+
+  it('其它值归一为 INTERNAL', () => {
+    expect(toStructuredError('oops')).toEqual({ code: 'INTERNAL', message: 'oops' })
+    expect(toStructuredError(42)).toEqual({ code: 'INTERNAL', message: '42' })
   })
 })
 

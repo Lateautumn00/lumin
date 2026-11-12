@@ -24,5 +24,11 @@ export interface LuminBridge {
   }
 }
 
+declare global {
+  interface Window {
+    lumin: LuminBridge
+  }
+}
+
 /** invoke 失败时 preload 抛出的错误形态（renderer 捕获后按 code 分支） */
 export type { StructuredError }
