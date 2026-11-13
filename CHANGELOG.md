@@ -13,3 +13,6 @@
 - M0 阶段 4：R3 IPC 冒烟自动化（Playwright 4 用例：清单渲染/同步 invoke/三段式/取消）与 Gitee Go MR 门禁工作流（lint→typecheck→coverage→xvfb e2e→audit→boundary）
 - M0 阶段 5：electron-builder 双目标出包（NSIS setup + portable 分名产物、latest.yml/blockmap）与 electron-updater generic provider 自动更新链路（检查/进度/静默安装，关于页三态 UI）
 - M0 阶段 6：冒烟记录 `docs/smoke/shell.md`；**更新冒烟卡点通过**（0.0.0 → 0.0.1 检测/下载/静默安装/新版运行 33.3s）；R2 八类异常 shell 层映射与安全基线确认
+- M1 计算器：`@lumin/tool-calculator` 科学计算器——`mathjs/number` 求值 + AST 白名单三重校验、DEG/RAD 角度、基础/科学双档与全键盘、本地历史（100 条/去重/刷新恢复）；字段级清单 `docs/spec/calculator.md`、冒烟 `docs/smoke/calculator.md`；naive-ui 主题改传 tokens 解析值修复 `var()` 颜色崩溃；`formatNumber` 上提 `shared`
+- M1 单位换算：`@lumin/tool-unit-converter`——10 类 63 单位双向换算（线性 + 温度偏移模型）、实时换算与单位互换、按类别收藏置顶（localStorage 持久化）、换算表全量断言 56 测试；字段级清单 `docs/spec/unit-converter.md`、冒烟 `docs/smoke/unit-converter.md`
+- M1 记录：计算器 chunk 实测 976.2KB raw / 213.1KB gzip（mathjs 官方最优入口），**R5 <200KB 未达标待决策**（见 spec §6）；单位换算 chunk 无三方求值库达标

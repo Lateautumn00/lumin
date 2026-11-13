@@ -25,10 +25,49 @@ test.describe('IPC 冒烟（R3）', () => {
   test('启动渲染工具清单', async () => {
     const page = await app.firstWindow()
     await expect(page.getByRole('link', { name: '计算器' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '单位换算' })).toBeVisible()
     await expect(page.getByRole('link', { name: '示例工具' })).toBeVisible()
     await expect(page.getByRole('heading', { name: '计算器' })).toBeVisible()
     await page.getByRole('link', { name: '示例工具' }).click()
     await expect(page.getByRole('heading', { name: '示例工具' })).toBeVisible()
+  })
+
+  test('单位换算：类别切换单位重置 + 实时换算 + 收藏', async () => {
+    const page = await app.firstWindow()
+    await page.evaluate(() => localStorage.removeItem('lumin.tool.unit-converter.favorites'))
+    await page.getByRole('link', { name: '单位换算' }).click()
+    await expect(page.getByRole('heading', { name: '单位换算' })).toBeVisible()
+
+    const value = page.getByPlaceholder('输入数值')
+    await value.fill('1')
+    await expect(page.getByText('= 0.001').first()).toBeVisible()
+
+    await value.fill('1234567')
+    await expect(page.getByText('= 1234.567').first()).toBeVisible()
+
+    await page.getByLabel('交换单位').click()
+    await expect(page.getByText('= 1234567000').first()).toBeVisible()
+
+    await value.fill('abc')
+    await expect(page.getByText('请输入有效数值')).toBeVisible()
+
+    await page.getByLabel('换算类别').click()
+    await page.getByText('温度', { exact: true }).click()
+    await value.fill('373.15')
+    await expect(page.getByText('= 100').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: '收藏源单位' })).toBeVisible()
+    await page.getByRole('button', { name: '收藏源单位' }).click()
+    await expect(page.getByRole('button', { name: '取消收藏源单位' })).toBeVisible()
+    await page.getByRole('button', { name: '收藏目标单位' }).click()
+    await value.fill('0')
+    await expect(page.getByText('= -273.15').first()).toBeVisible()
+
+    await page.reload()
+    await page.getByRole('link', { name: '单位换算' }).click()
+    await page.getByLabel('换算类别').click()
+    await page.getByText('温度', { exact: true }).click()
+    await expect(page.getByRole('button', { name: '取消收藏源单位' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '取消收藏目标单位' })).toBeVisible()
   })
 
   test('计算器求值（白名单 + DEG 角度 + 历史）', async () => {
@@ -42,6 +81,10 @@ test.describe('IPC 冒烟（R3）', () => {
     await input.fill('1/0')
     await input.press('Enter')
     await expect(page.getByText('结果无效（除零或溢出）')).toBeVisible()
+
+    await page.reload()
+    await page.getByRole('link', { name: '计算器' }).click()
+    await expect(page.getByText('sin(90)+2^8').last()).toBeVisible()
   })
 
   test('同步 invoke：app info / ping / settings 往返', async () => {
