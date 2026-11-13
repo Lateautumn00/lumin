@@ -2,7 +2,9 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { NButton, NIcon, NInput, NPopconfirm } from 'naive-ui'
 import { Delete, type LucideIcon } from '@lucide/vue'
-import { evaluate, formatNumber, type AngleMode } from '../calc/evaluate'
+import { formatNumber } from '@lumin/shared'
+
+import { evaluate, type AngleMode } from '../calc/evaluate'
 import { useHistoryStore, type HistoryEntry } from '../calc/history'
 
 type Layout = 'basic' | 'scientific'
