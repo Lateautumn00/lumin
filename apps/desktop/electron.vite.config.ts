@@ -21,6 +21,14 @@ const workspaceAlias = [
   {
     find: /^@lumin\/tool-example\/renderer\/(.+)$/,
     replacement: r('../../packages/tools/example/src/renderer/$1')
+  },
+  {
+    find: /^@lumin\/tool-calculator\/manifest$/,
+    replacement: r('../../packages/tools/calculator/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-calculator\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/calculator/src/renderer/$1')
   }
 ]
 

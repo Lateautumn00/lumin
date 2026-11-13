@@ -1,0 +1,28 @@
+{
+  "name": "@lumin/tool-calculator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./manifest": {
+      "types": "./src/manifest.ts",
+      "default": "./src/manifest.ts"
+    },
+    "./renderer/*": {
+      "types": "./src/renderer/*",
+      "default": "./src/renderer/*"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@lucide/vue": "1.72.0",
+    "@lumin/plugin-api": "workspace:*",
+    "@lumin/shared": "workspace:*",
+    "mathjs": "15.2.0",
+    "naive-ui": "2.45.3",
+    "pinia": "4.1.0",
+    "vue": "3.5.45"
+  }
+}

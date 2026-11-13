@@ -39,6 +39,24 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
+        'packages/tools/calculator/src/manifest.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
+        'packages/tools/calculator/src/calc/evaluate.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
+        'packages/tools/calculator/src/calc/history.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
         'apps/desktop/src/main/task-queue.ts': {
           lines: 80,
           functions: 80,

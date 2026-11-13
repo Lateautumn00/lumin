@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { FlaskConical, Info, Settings, Wrench, type LucideIcon } from '@lucide/vue'
+import { Calculator, FlaskConical, Info, Settings, Wrench, type LucideIcon } from '@lucide/vue'
 import { NIcon } from 'naive-ui'
 import { toolManifests } from '../../../tool-manifests'
 import { t } from '../i18n/zh-CN'
@@ -9,6 +9,7 @@ import { t } from '../i18n/zh-CN'
 const route = useRoute()
 
 const iconMap: Record<string, LucideIcon> = {
+  calculator: Calculator,
   'flask-conical': FlaskConical,
   wrench: Wrench
 }

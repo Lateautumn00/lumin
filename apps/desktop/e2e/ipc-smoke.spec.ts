@@ -24,8 +24,24 @@ test.describe('IPC 冒烟（R3）', () => {
 
   test('启动渲染工具清单', async () => {
     const page = await app.firstWindow()
+    await expect(page.getByRole('link', { name: '计算器' })).toBeVisible()
     await expect(page.getByRole('link', { name: '示例工具' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '计算器' })).toBeVisible()
+    await page.getByRole('link', { name: '示例工具' }).click()
     await expect(page.getByRole('heading', { name: '示例工具' })).toBeVisible()
+  })
+
+  test('计算器求值（白名单 + DEG 角度 + 历史）', async () => {
+    const page = await app.firstWindow()
+    await page.getByRole('link', { name: '计算器' }).click()
+    const input = page.getByPlaceholder('输入表达式，Enter 计算')
+    await input.fill('sin(90)+2^8')
+    await input.press('Enter')
+    await expect(page.getByText(/^= 257$/).first()).toBeVisible()
+    await expect(page.getByText('sin(90)+2^8').last()).toBeVisible()
+    await input.fill('1/0')
+    await input.press('Enter')
+    await expect(page.getByText('结果无效（除零或溢出）')).toBeVisible()
   })
 
   test('同步 invoke：app info / ping / settings 往返', async () => {
