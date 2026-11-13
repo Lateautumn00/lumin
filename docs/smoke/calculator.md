@@ -5,16 +5,16 @@
 
 ## 1. 冒烟总览
 
-| #   | 冒烟项                   | 方式                                   | 结果                                                                         |
-| --- | ------------------------ | -------------------------------------- | ---------------------------------------------------------------------------- |
-| 1   | 单测（求值/白名单/历史） | `pnpm test`                            | ✅ 计算器 68 tests（evaluate 全错误分支 + 白名单 + 历史上限/去重）           |
-| 2   | 覆盖率（R1 核心 ≥80%）   | `pnpm coverage`                        | ✅ evaluate.ts / history.ts / manifest.ts 均 ≥80%；全仓 90.34%               |
-| 3   | 质量门禁                 | `pnpm gate`                            | ✅ lint / typecheck / test / audit(high=0) / dependency-cruiser              |
-| 4   | e2e 求值冒烟（R3）       | `pnpm test:e2e` 计算器求值用例         | ✅ `sin(90)+2^8 → = 257`（DEG）；`1/0 → 结果无效（除零或溢出）`              |
-| 5   | 键盘双通道               | e2e（input.press Enter）+ 单测         | ✅ Enter/Escape/退格/可打印键                                                |
-| 6   | 历史持久化与刷新恢复     | e2e：计算 → `page.reload()` → 历史仍在 | ✅ 刷新后 `sin(90)+2^8` 历史条目可见（localStorage 恢复）                    |
-| 7   | 报错态不崩溃             | e2e `1/0` + 白名单外表达式单测         | ✅ 行内中文文案，表达式保留，可继续修改                                      |
-| 8   | chunk 体积（R5 <200KB）  | 构建产物实测                           | ⚠️ **976.2KB raw / 213.1KB gzip**（`mathjs/number` 官方最优入口，见下 §2.4） |
+| #   | 冒烟项                            | 方式                                   | 结果                                                               |
+| --- | --------------------------------- | -------------------------------------- | ------------------------------------------------------------------ |
+| 1   | 单测（求值/白名单/历史）          | `pnpm test`                            | ✅ 计算器 68 tests（evaluate 全错误分支 + 白名单 + 历史上限/去重） |
+| 2   | 覆盖率（R1 核心 ≥80%）            | `pnpm coverage`                        | ✅ evaluate.ts / history.ts / manifest.ts 均 ≥80%；全仓 90.34%     |
+| 3   | 质量门禁                          | `pnpm gate`                            | ✅ lint / typecheck / test / audit(high=0) / dependency-cruiser    |
+| 4   | e2e 求值冒烟（R3）                | `pnpm test:e2e` 计算器求值用例         | ✅ `sin(90)+2^8 → = 257`（DEG）；`1/0 → 结果无效（除零或溢出）`    |
+| 5   | 键盘双通道                        | e2e（input.press Enter）+ 单测         | ✅ Enter/Escape/退格/可打印键                                      |
+| 6   | 历史持久化与刷新恢复              | e2e：计算 → `page.reload()` → 历史仍在 | ✅ 刷新后 `sin(90)+2^8` 历史条目可见（localStorage 恢复）          |
+| 7   | 报错态不崩溃                      | e2e `1/0` + 白名单外表达式单测         | ✅ 行内中文文案，表达式保留，可继续修改                            |
+| 8   | chunk 体积（R5 例外 ≤300KB gzip） | 构建产物实测                           | ✅ 专属增量 977.6KB raw / **214.3KB gzip**，达标（见下 §3）        |
 
 ## 2. R2 八类异常清单
 
@@ -31,8 +31,8 @@
 | 7. 磁盘满        | 部分适用（localStorage 配额）              | 单测       | `saveHistory` setItem 抛错 → 静默不阻塞计算 ✅                                                     |
 | 8. 断电恢复      | ✅ 适用（历史持久化）                      | 单测 + e2e | 损坏 JSON → 回退 `[]` ✅；计算后刷新页面历史仍在 ✅                                                |
 
-## 3. R5 体积记录（决策项）
+## 3. R5 体积记录（2026-11-13 已决策）
 
-- 全量 `mathjs` 入口：1753.6KB raw → `mathjs/number` 官方精简入口：**976.2KB raw / 213.1KB gzip**（-44%）。
-- 根因：mathjs 公开导出的 `parse` 位于 side-effectful 聚合器（`impureFunctionsNumber.generated.js` 顶层注册全库，连带 algebra/help/embeddedDocs），无更小的官方公开入口。
-- 按批准计划「超限则报告不换库」：**不换库**，待决策（手写解析器修订 Q13 / 修订 R5 基线），见 `docs/spec/calculator.md` §6。
+- 口径：gzip；工具专属增量 = `calculator-*`（887,259 B raw / 194,979 B gzip）+ 独占 `number-*`（113,749 B raw / 24,484 B gzip）= **1,001,008 B raw / 219,463 B gzip**。
+- 全量 `mathjs` 入口（1,753.6KB raw）→ `mathjs/number` 官方精简入口（-44%）；根因：公开导出 `parse` 位于 side-effectful 聚合器（顶层注册全库，连带 algebra/help/embeddedDocs），无更小官方公开入口。
+- **决策（用户批准）**：不换库（Q13 不变），修订 R5——求值类工具例外上限 300KB gzip；已同步 AGENTS §8 与 plan.md R5。本工具 214.3KB gzip **达标**。

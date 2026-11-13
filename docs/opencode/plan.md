@@ -288,15 +288,15 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 
 ## 附录 B：修订清单 R1–R10（已全部并入）
 
-| #   | 修订                                                | 来源            | 级别 | 落点                |
-| --- | --------------------------------------------------- | --------------- | ---- | ------------------- |
-| R1  | OCR 量化验收：10 样卷、命中 ≥90%、≤3s/页            | QA              | 必须 | §4.4、§6            |
-| R2  | smoke.md 8 类异常强制清单                           | QA              | 必须 | §6                  |
-| R3  | M0 起 CI 含 IPC 冒烟自动化                          | QA              | 必须 | §5.2、§6            |
-| R4  | 三态规范 + design tokens + 图标库（lucide）         | UIUX            | 必须 | AGENTS.md UI 章     |
-| R5  | 性能基线：首屏 1.5s / chunk 200KB / PDF 2s / OCR 3s | 总架构+前端架构 | 必须 | AGENTS.md 性能章    |
-| R6  | strict + noUncheckedIndexedAccess + 样式收口        | 前端工程师      | 必须 | AGENTS.md TS/样式章 |
-| R7  | 版本锁/frozen/secrets/SHA/allowDowngrade/更新卡点   | DevOps          | 必须 | §5.2、§5.3          |
-| R8  | 功能清单 + 变更流程 + 免责定稿                      | 产品经理        | 建议 | §4、§6              |
-| R9  | CHANGELOG 从 M0 起                                  | Git             | 建议 | §6                  |
-| R10 | pdf-lib 观察项 + 日志轮转/脱敏                      | 总架构+后端     | 建议 | §7、services        |
+| #   | 修订                                                                                         | 来源            | 级别 | 落点                |
+| --- | -------------------------------------------------------------------------------------------- | --------------- | ---- | ------------------- |
+| R1  | OCR 量化验收：10 样卷、命中 ≥90%、≤3s/页                                                     | QA              | 必须 | §4.4、§6            |
+| R2  | smoke.md 8 类异常强制清单                                                                    | QA              | 必须 | §6                  |
+| R3  | M0 起 CI 含 IPC 冒烟自动化                                                                   | QA              | 必须 | §5.2、§6            |
+| R4  | 三态规范 + design tokens + 图标库（lucide）                                                  | UIUX            | 必须 | AGENTS.md UI 章     |
+| R5  | 性能基线：首屏 1.5s / chunk 200KB（gzip；求值类例外 ≤300KB gzip，M1 修订） / PDF 2s / OCR 3s | 总架构+前端架构 | 必须 | AGENTS.md 性能章    |
+| R6  | strict + noUncheckedIndexedAccess + 样式收口                                                 | 前端工程师      | 必须 | AGENTS.md TS/样式章 |
+| R7  | 版本锁/frozen/secrets/SHA/allowDowngrade/更新卡点                                            | DevOps          | 必须 | §5.2、§5.3          |
+| R8  | 功能清单 + 变更流程 + 免责定稿                                                               | 产品经理        | 建议 | §4、§6              |
+| R9  | CHANGELOG 从 M0 起                                                                           | Git             | 建议 | §6                  |
+| R10 | pdf-lib 观察项 + 日志轮转/脱敏                                                               | 总架构+后端     | 建议 | §7、services        |

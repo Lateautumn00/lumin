@@ -75,4 +75,4 @@
 - 键盘 + 按钮双通道可完成全部按钮集操作
 - 历史 100 条上限与持久化（刷新后仍在）
 - 门禁全绿
-- **chunk 实测（M1 记录）**：`calculator-*.js` **976.2KB raw / 213.1KB gzip**（`mathjs/number` 入口，较全量入口 1753.6KB 减 44%）——**R5「<200KB」未达标**；根因为 mathjs 公开入口 `parse` 位于 side-effectful 聚合器（连带 algebra/help/embeddedDocs），官方无更小公开入口。待决策：换手写表达式解析器（修订 plan Q13）或修订 R5 基线（见 M1 汇报）。
+- **chunk 实测（M1 记录，R5 口径 gzip）**：计算器专属增量 = `calculator-*` + 独占 `number-*`（mathjs/number 拆分）= **1,001,008 B raw / 219,463 B gzip（977.6KB / 214.3KB）**，较 mathjs 全量入口约 -44%。**R5 已修订（2026-11-13）**：求值类工具例外上限 300KB gzip（AGENTS §8 / plan.md R5），本工具达标。根因：mathjs 公开入口 `parse` 位于 side-effectful 聚合器（连带 algebra/help/embeddedDocs），官方无更小公开入口，按 Q13 不换库。
