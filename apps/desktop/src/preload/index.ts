@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import {
   LUMIN_INVOKE_CHANNEL,
   TASK_EVENT_CHANNEL,
@@ -46,6 +46,8 @@ const bridge: LuminBridge = {
   },
   getAppInfo: () => invoke('lumin:app:info'),
   openLogDir: () => invoke('lumin:log:open-dir'),
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  revealPath: (path) => invoke('lumin:shell:reveal', { path }),
   settings: {
     get: <T>(key: string, defaultValue: T): Promise<T> =>
       invoke<T>('lumin:settings:get', { key, defaultValue }),

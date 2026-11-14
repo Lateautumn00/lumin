@@ -20,6 +20,10 @@ export interface LuminBridge {
   onUpdateEvent(listener: (event: UpdateEvent) => void): () => void
   getAppInfo(): Promise<AppInfo>
   openLogDir(): Promise<void>
+  /** 拖拽/文件选择器拿到的 File → 磁盘绝对路径（contextIsolation 下 File.path 已移除） */
+  getPathForFile(file: File): string
+  /** 在资源管理器中定位文件/目录（shell.showItemInFolder） */
+  revealPath(path: string): Promise<void>
   readonly settings: {
     get<T>(key: string, defaultValue: T): Promise<T>
     set<T>(key: string, value: T): Promise<void>

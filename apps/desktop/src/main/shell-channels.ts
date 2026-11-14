@@ -20,6 +20,10 @@ const cancelSchema = z.object({
   taskId: z.string().min(1)
 })
 
+const revealPathSchema = z.object({
+  path: z.string().min(1)
+})
+
 export interface ShellChannelDeps {
   settings: SettingsService
   queue: TaskQueue
@@ -53,6 +57,12 @@ export function registerShellChannels(bus: IpcBus, deps: ShellChannelDeps): void
   bus.registerSync('lumin:log:open-dir', 'lumin', 'log:open-dir', async () => {
     const error = await shell.openPath(deps.logDir())
     if (error !== '') throw makeError('INTERNAL', '打开日志目录失败', error)
+  })
+
+  bus.registerSync('lumin:shell:reveal', 'lumin', 'shell:reveal', ({ payload }) => {
+    const parsed = revealPathSchema.safeParse(payload)
+    if (!parsed.success) throw makeError('INVALID_PAYLOAD', '定位路径参数无效')
+    shell.showItemInFolder(parsed.data.path)
   })
 
   bus.registerSync('lumin:task:cancel', 'lumin', 'task:cancel', ({ payload }) => {

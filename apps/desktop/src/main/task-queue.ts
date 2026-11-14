@@ -51,7 +51,8 @@ export function createTaskQueue(options: TaskQueueOptions): TaskQueue {
           taskId,
           current: update.current,
           ...(update.total !== undefined ? { total: update.total } : {}),
-          ...(update.message !== undefined ? { message: update.message } : {})
+          ...(update.message !== undefined ? { message: update.message } : {}),
+          ...(update.stage !== undefined ? { stage: update.stage } : {})
         }
         options.onEvent(event)
       } else {

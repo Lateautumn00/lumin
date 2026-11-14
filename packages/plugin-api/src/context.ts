@@ -33,6 +33,14 @@ export interface ToolLogger {
   error(message: string, ...meta: unknown[]): void
 }
 
+/** 工具可用的应用目录（由壳注入，工具不得自行猜测 userData/temp 位置） */
+export interface ToolPaths {
+  /** 系统临时目录（长任务工作区、独立 profile 建于此） */
+  readonly temp: string
+  /** 应用 userData 目录（便携组件等大文件落这里） */
+  readonly userData: string
+}
+
 /** 主进程插件上下文：工具 node.ts 的 `registerMain(ctx)` 入参 */
 export interface MainPluginContext {
   readonly toolId: string
@@ -41,6 +49,7 @@ export interface MainPluginContext {
   registerTask<P = unknown, R = unknown>(action: string, handler: TaskHandler<P, R>): void
   readonly settings: ToolSettings
   readonly log: ToolLogger
+  readonly paths: ToolPaths
 }
 
 export type RegisterMain = (ctx: MainPluginContext) => void | Promise<void>

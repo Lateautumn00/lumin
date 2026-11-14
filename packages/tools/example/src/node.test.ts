@@ -34,7 +34,8 @@ function createHarness(): {
       info: () => undefined,
       warn: () => undefined,
       error: () => undefined
-    }
+    },
+    paths: { temp: 'C:\\temp', userData: 'C:\\userData' }
   }
   registerMain(ctx)
   return { ipc, tasks }

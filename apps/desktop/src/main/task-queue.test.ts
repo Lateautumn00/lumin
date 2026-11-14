@@ -199,6 +199,28 @@ describe('createTaskQueue', () => {
     expect(events[1]?.kind).toBe('error')
   })
 
+  it('转发 progress 的 stage 阶段标记', async () => {
+    const events: TaskEvent[] = []
+    const queue = createTaskQueue({ concurrency: 1, onEvent: (e) => events.push(e) })
+    queue.submit({
+      toolId: 't',
+      action: 'a',
+      payload: null,
+      handler: async ({ emit }) => {
+        emit({ kind: 'progress', current: 0, stage: 'download', message: '下载中' })
+        return null
+      }
+    })
+    await vi.waitFor(() => expect(events.at(-1)?.kind).toBe('done'))
+    expect(events[0]).toEqual({
+      kind: 'progress',
+      taskId: expect.any(String),
+      current: 0,
+      stage: 'download',
+      message: '下载中'
+    })
+  })
+
   it('错误归一：Error → INTERNAL，结构化错误透传', async () => {
     const events: TaskEvent[] = []
     const queue = createTaskQueue({ concurrency: 2, onEvent: (e) => events.push(e) })

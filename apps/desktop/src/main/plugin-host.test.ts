@@ -34,7 +34,8 @@ function createDeps(): {
     bus,
     createSettings: () => ({ get: vi.fn(), set: vi.fn() }),
     createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
-    logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error }
+    logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error },
+    paths: { temp: 'C:\\temp', userData: 'C:\\userData' }
   }
   return { deps, sync, task, error }
 }
@@ -83,6 +84,19 @@ describe('loadTools', () => {
     expect(result.loaded).toEqual([validManifest])
     expect(sync.has('demo:go')).toBe(true)
     expect(task.has('demo:work')).toBe(true)
+  })
+
+  it('ctx.paths 注入 temp/userData', async () => {
+    const { deps } = createDeps()
+    let seen: { temp: string; userData: string } | undefined
+    const reg: ToolRegistration = {
+      manifest: validManifest,
+      registerMain: (ctx) => {
+        seen = { ...ctx.paths }
+      }
+    }
+    await loadTools([reg], deps)
+    expect(seen).toEqual({ temp: 'C:\\temp', userData: 'C:\\userData' })
   })
 
   it('非法 action（含大写）→ failed', async () => {

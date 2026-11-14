@@ -105,7 +105,11 @@ async function bootstrap(): Promise<void> {
       set: (key, value) => settings.set(`tools.${toolId}.${key}`, value)
     }),
     createLogger: createToolLogger,
-    logger
+    logger,
+    paths: {
+      temp: app.getPath('temp'),
+      userData: app.getPath('userData')
+    }
   })
   for (const failure of result.failed) {
     logger.error(`工具加载失败：${failure.id}`, failure.message)

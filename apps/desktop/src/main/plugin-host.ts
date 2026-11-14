@@ -5,6 +5,7 @@ import type {
   TaskHandler,
   ToolLogger,
   ToolManifest,
+  ToolPaths,
   ToolSettings
 } from '@lumin/plugin-api'
 import { toolManifestSchema } from '@lumin/plugin-api'
@@ -21,6 +22,7 @@ export interface LoadToolsDeps {
   createSettings: (toolId: string) => ToolSettings
   createLogger: (toolId: string) => ToolLogger
   logger: ToolLogger
+  paths: ToolPaths
 }
 
 export interface LoadToolsResult {
@@ -75,7 +77,8 @@ export async function loadTools(
           )
         },
         settings: deps.createSettings(manifest.id),
-        log: deps.createLogger(manifest.id)
+        log: deps.createLogger(manifest.id),
+        paths: deps.paths
       }
       await reg.registerMain(ctx)
       loaded.push(manifest)

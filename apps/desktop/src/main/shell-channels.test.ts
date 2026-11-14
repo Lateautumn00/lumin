@@ -8,7 +8,7 @@ import type { TaskQueue } from './task-queue'
 
 vi.mock('electron', () => ({
   app: { getVersion: () => '1.2.3', getLocale: () => 'zh-CN' },
-  shell: { openPath: vi.fn(async () => '') }
+  shell: { openPath: vi.fn(async () => ''), showItemInFolder: vi.fn() }
 }))
 
 function createHarness(): {
@@ -113,6 +113,18 @@ describe('registerShellChannels', () => {
     await expect(call('lumin:log:open-dir', undefined)).rejects.toMatchObject({
       code: 'INTERNAL',
       detail: '拒绝访问'
+    })
+  })
+
+  it('shell:reveal 定位文件；非法参数 → INVALID_PAYLOAD', async () => {
+    const { call } = createHarness()
+    await expect(call('lumin:shell:reveal', { path: 'C:\\a\\b.pdf' })).resolves.toBeUndefined()
+    expect(shell.showItemInFolder).toHaveBeenCalledWith('C:\\a\\b.pdf')
+    await expect(call('lumin:shell:reveal', { path: '' })).rejects.toMatchObject({
+      code: 'INVALID_PAYLOAD'
+    })
+    await expect(call('lumin:shell:reveal', undefined)).rejects.toMatchObject({
+      code: 'INVALID_PAYLOAD'
     })
   })
 
