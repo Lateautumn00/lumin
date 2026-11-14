@@ -34,10 +34,13 @@ export function makeError(code: CoreErrorCode, message: string, detail?: string)
 
 /** 将任意抛出物归一化为结构化错误（已合规的直接透传） */
 export function toStructuredError(err: unknown): StructuredError {
-  const parsed = structuredErrorSchema.safeParse(err)
-  if (parsed.success) return parsed.data
-  if (err instanceof Error) return makeError('INTERNAL', err.message)
-  return makeError('INTERNAL', String(err))
+  // Error 实例不透传：errno 码（EPERM/EBUSY…）也是 UPPER_SNAKE，会冒充结构化错误码泄漏
+  if (!(err instanceof Error)) {
+    const parsed = structuredErrorSchema.safeParse(err)
+    if (parsed.success) return parsed.data
+    return makeError('INTERNAL', String(err))
+  }
+  return makeError('INTERNAL', err.message)
 }
 
 /** renderer → main 的 invoke 请求信封 */
@@ -76,7 +79,9 @@ export const taskUpdateSchema = z.discriminatedUnion('kind', [
     kind: z.literal('progress'),
     current: z.number().min(0),
     total: z.number().min(0).optional(),
-    message: z.string().optional()
+    message: z.string().optional(),
+    /** 工具自定义阶段标记（如 locate/convert/download），UI 用于展示阶段文案 */
+    stage: z.string().min(1).optional()
   }),
   z.object({
     kind: z.literal('log'),
@@ -93,7 +98,8 @@ export const taskEventSchema = z.discriminatedUnion('kind', [
     taskId: z.string().min(1),
     current: z.number().min(0),
     total: z.number().min(0).optional(),
-    message: z.string().optional()
+    message: z.string().optional(),
+    stage: z.string().min(1).optional()
   }),
   z.object({
     kind: z.literal('log'),

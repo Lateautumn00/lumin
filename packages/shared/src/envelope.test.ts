@@ -64,6 +64,14 @@ describe('toStructuredError', () => {
     expect(toStructuredError(new Error('炸了'))).toEqual({ code: 'INTERNAL', message: '炸了' })
   })
 
+  it('带 errno 码的 Error 不冒充结构化错误码', () => {
+    const fsErr = Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' })
+    expect(toStructuredError(fsErr)).toEqual({
+      code: 'INTERNAL',
+      message: 'EPERM: operation not permitted'
+    })
+  })
+
   it('其它值归一为 INTERNAL', () => {
     expect(toStructuredError('oops')).toEqual({ code: 'INTERNAL', message: 'oops' })
     expect(toStructuredError(42)).toEqual({ code: 'INTERNAL', message: '42' })
@@ -112,12 +120,18 @@ describe('submitResultSchema', () => {
 })
 
 describe('taskUpdateSchema', () => {
-  it('progress 更新（可省 total/message）', () => {
+  it('progress 更新（可省 total/message/stage）', () => {
     expect(taskUpdateSchema.safeParse({ kind: 'progress', current: 1 }).success).toBe(true)
     expect(
       taskUpdateSchema.safeParse({ kind: 'progress', current: 1, total: 10, message: '处理中' })
         .success
     ).toBe(true)
+    expect(
+      taskUpdateSchema.safeParse({ kind: 'progress', current: 0, stage: 'locate' }).success
+    ).toBe(true)
+    expect(taskUpdateSchema.safeParse({ kind: 'progress', current: 1, stage: '' }).success).toBe(
+      false
+    )
   })
 
   it('log 更新', () => {

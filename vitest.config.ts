@@ -2,7 +2,14 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    projects: ['packages/*', 'packages/tools/*', 'apps/*'],
+    projects: [
+      'packages/shared',
+      'packages/plugin-api',
+      'packages/node-kit',
+      'packages/ui',
+      'packages/tools/*',
+      'apps/*'
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text-summary', 'lcov', 'html'],
@@ -16,6 +23,12 @@ export default defineConfig({
         branches: 60,
         'packages/shared/src/**/*.ts': { lines: 80, functions: 80, statements: 80, branches: 80 },
         'packages/plugin-api/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
+        'packages/node-kit/src/**/*.ts': {
           lines: 80,
           functions: 80,
           statements: 80,
@@ -64,6 +77,12 @@ export default defineConfig({
           branches: 80
         },
         'packages/tools/unit-converter/src/units/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
+        'packages/tools/docx2pdf/src/**/*.ts': {
           lines: 80,
           functions: 80,
           statements: 80,

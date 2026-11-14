@@ -1,0 +1,21 @@
+{
+  "name": "@lumin/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": {
+      "types": "./src/*",
+      "default": "./src/*"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@lucide/vue": "1.72.0",
+    "@lumin/plugin-api": "workspace:*",
+    "naive-ui": "2.45.3",
+    "vue": "3.5.45"
+  }
+}
