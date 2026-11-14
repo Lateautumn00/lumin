@@ -10,6 +10,20 @@ const r = (p: string): string => resolve(fileURLToPath(new URL(p, import.meta.ur
 const workspaceAlias = [
   { find: /^@lumin\/shared$/, replacement: r('../../packages/shared/src/index.ts') },
   { find: /^@lumin\/plugin-api$/, replacement: r('../../packages/plugin-api/src/index.ts') },
+  { find: /^@lumin\/node-kit$/, replacement: r('../../packages/node-kit/src/index.ts') },
+  { find: /^@lumin\/ui\/(.+)$/, replacement: r('../../packages/ui/src/$1') },
+  {
+    find: /^@lumin\/tool-docx2pdf\/manifest$/,
+    replacement: r('../../packages/tools/docx2pdf/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-docx2pdf\/node$/,
+    replacement: r('../../packages/tools/docx2pdf/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-docx2pdf\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/docx2pdf/src/renderer/$1')
+  },
   {
     find: /^@lumin\/tool-example\/manifest$/,
     replacement: r('../../packages/tools/example/src/manifest.ts')

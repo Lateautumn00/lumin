@@ -21,6 +21,7 @@
     "@lumin/plugin-api": "workspace:*",
     "@lumin/shared": "workspace:*",
     "@lumin/tool-calculator": "workspace:*",
+    "@lumin/tool-docx2pdf": "workspace:*",
     "@lumin/tool-unit-converter": "workspace:*",
     "@lumin/tool-example": "workspace:*",
     "@playwright/test": "1.65.0",

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Calculator,
+  FileOutput,
   FlaskConical,
   Info,
   Ruler,
@@ -19,6 +20,7 @@ const route = useRoute()
 const iconMap: Record<string, LucideIcon> = {
   calculator: Calculator,
   ruler: Ruler,
+  'file-output': FileOutput,
   'flask-conical': FlaskConical,
   wrench: Wrench
 }

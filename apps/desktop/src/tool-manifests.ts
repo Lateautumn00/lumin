@@ -1,5 +1,6 @@
 import type { ToolManifest } from '@lumin/plugin-api'
 import { manifest as calculatorManifest } from '@lumin/tool-calculator/manifest'
+import { manifest as docx2pdfManifest } from '@lumin/tool-docx2pdf/manifest'
 import { manifest as exampleManifest } from '@lumin/tool-example/manifest'
 import { manifest as unitConverterManifest } from '@lumin/tool-unit-converter/manifest'
 
@@ -7,5 +8,6 @@ import { manifest as unitConverterManifest } from '@lumin/tool-unit-converter/ma
 export const toolManifests: readonly ToolManifest[] = [
   calculatorManifest,
   unitConverterManifest,
+  docx2pdfManifest,
   exampleManifest
 ]
