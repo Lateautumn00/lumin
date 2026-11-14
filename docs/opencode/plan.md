@@ -162,11 +162,13 @@ lumin/
 ### 4.3 Word→PDF（M2）
 
 - **soffice 定位顺序**：设置自定义路径 → 系统安装（注册表/`Program Files\LibreOffice`）→ `userData/libreoffice-portable` 按需下载（~350MB，进度+断点重试）
+  - **P4 实现回写（2026-11-14）**：系统安装层仅查注册表 `HKLM/HKCU\SOFTWARE\LibreOffice\UNO\InstallPath`（`%ProgramFiles%` 硬编码回退未实现，注册表已覆盖官方安装器写入项；如需补充须走变更流程）
 - 调用：`soffice.exe --headless -env:UserInstallation=file:///独立profile --convert-to pdf --outdir <tmp> <input>`（独立 profile 防抢锁）
 - **串行队列** + 超时 60s kill + 产物存在校验 + 可读错误（加密/占用/未装引导）
+- **错误码扩展（P4 回写）**：R2.7 磁盘满类新增 `OUTPUT_WRITE_FAILED`；`shared.toStructuredError` / `docx2pdf.isStructuredError` 修复 errno 码（EPERM 等）冒充结构化错误码的透传漏洞（`Error` 实例一票否决）
 - 打包策略：默认「精简包」不含 LibreOffice；设置页「安装转换组件」按需下载
 - 中文字体走系统字体，无需打包
-- **验收**：含表格/页眉/中文字体 docx 转换保真可接受（R8 功能清单先行）
+- **验收**：含表格/页眉/中文字体 docx 转换保真可接受（R8 功能清单先行）——P4 实测：保真人工目视通过、e2e 13 passed、chunk 13,322 B gzip、R2 八类真实记录见 `docs/smoke/docx2pdf.md`
 
 ### 4.4 试卷切割（M3a PDF + M3b OCR）
 

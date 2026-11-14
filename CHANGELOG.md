@@ -16,3 +16,5 @@
 - M1 计算器：`@lumin/tool-calculator` 科学计算器——`mathjs/number` 求值 + AST 白名单三重校验、DEG/RAD 角度、基础/科学双档与全键盘、本地历史（100 条/去重/刷新恢复）；字段级清单 `docs/spec/calculator.md`、冒烟 `docs/smoke/calculator.md`；naive-ui 主题改传 tokens 解析值修复 `var()` 颜色崩溃；`formatNumber` 上提 `shared`
 - M1 单位换算：`@lumin/tool-unit-converter`——10 类 63 单位双向换算（线性 + 温度偏移模型）、实时换算与单位互换、按类别收藏置顶（localStorage 持久化）、换算表全量断言 56 测试；字段级清单 `docs/spec/unit-converter.md`、冒烟 `docs/smoke/unit-converter.md`
 - M1 记录：R5 修订（2026-11-13 决策）——chunk 口径定为 gzip、求值类工具例外上限 300KB gzip；计算器专属增量 977.6KB raw / 214.3KB gzip 达标（mathjs 官方最优入口，不换库），单位换算 37.9KB gzip 达标（见 AGENTS §8 / plan.md R5）
+- M2 Word 转 PDF：`@lumin/tool-docx2pdf`——soffice 三级定位（自定义/注册表/便携）+ `status`/`set-path` 同步通道、convert/install 双 mutex 串行三段任务、每任务独立 profile + 60s 超时杀进程树、输出命名 `(1)…(99)` 与 `%PDF-` 产物校验、组件下载固定 URL + SHA256 钉死 + 断点续传 + `msiexec /a` 便携解包；字段级清单 `docs/spec/docx2pdf.md`、冒烟 `docs/smoke/docx2pdf.md`（R2 八类真实记录 + 保真人工目视）
+- M2 修复：结构化错误透传漏洞——errno 码（`EPERM` 等）同为 UPPER_SNAKE 曾把原始 fs `Error` 冒充结构化错误泄漏给渲染进程，`shared.toStructuredError` 与 `docx2pdf.isStructuredError` 改为 **`Error` 实例一票否决**并补测试；R2.7 磁盘满类新增错误码 `OUTPUT_WRITE_FAILED`（spec §5 已回写）
