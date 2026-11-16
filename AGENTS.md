@@ -139,6 +139,8 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 
 **chunk 口径与例外（2026-11-13 M1 决策）**：chunk 基线一律按 **gzip** 计，「增量」= 工具 chunk + 其独占依赖 chunk（不含壳与共享 vendor）。**依赖表达式求值库的工具**（plan Q13 锁定 mathjs，公开入口 `parse` 位于 side-effectful 聚合器、官方无更小入口）例外上限 **300KB gzip**——计算器实测 214.3KB gzip（977.6KB raw，较 mathjs 全量入口约 -44%）达标；无求值库工具维持 200KB gzip（单位换算实测 37.9KB gzip）。变更本条例须同步 `docs/opencode/plan.md` R5（口头无效）。
 
+**运行时资产口径（2026-11-14 M3 决策，R5 修订）**：按需随包、运行时按需加载的**资产文件**（pdfjs worker、wasm、OCR 模型等）**不计入** chunk 增量与上述 200KB/300KB 上限，但必须在对应 `docs/smoke/<tool>.md` 单列记录（raw/gzip）；工具代码 chunk 仍受原口径约束。例：exam-split 实测 renderer 增量（pdfjs 主库 + 工具代码）≈150KB gzip 达标，pdfjs worker 资产 379.2KB gzip 单列，pdf-lib（184.1KB gzip）走主进程 worker 不属 R5 口径。变更本条例须同步 `docs/opencode/plan.md` R5（口头无效）。
+
 ---
 
 ## 9. Git 规范（skills-git 落地）
