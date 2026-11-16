@@ -189,6 +189,12 @@ lumin/
 **M3b — OCR 切题（Q7=b）**
 
 > 字段级功能清单：`docs/spec/exam-split.md` **§10（2026-11-16 定稿，R8）**——两段式 IPC（ocr-detect → 微调 → ocr-export）、错误码增补（`OCR_INPUT_INVALID`/`MODEL_MISSING`/`NO_REGIONS`/`OCR_FAILED`）、命名与验收细则以该节为准；实现偏差回写该节 + 本节。
+>
+> **实现期偏差（2026-11-16，R8 已拍板回写 spec §10.2/§10.4）**：① region 增加**可选** `xStart`/`xEnd`（缺省 0/1 = 全宽）以支持页面级双栏——列间空隙 ≥3% 页宽且两列均含题号行才判分栏，每列独立聚类、overlay 横线画在列内、导出按列裁剪；② 题号分两级（一级 `1.`/`1、`/`一、`/`第1题`，二级 `(1)`），仅当该列无一级题号时才启用二级，避免切碎小题。
+>
+> **P0/P1 spike 实证（2026-11-16，不入库）**：onnxruntime-web 1.31.1 在 worker_threads 内 import 23ms / det session 创建 327ms / 320² 推理 62–90ms；pdfjs-dist 6 **legacy build** + `@napi-rs/canvas`（pdfjs NodeCanvasFactory 原生支持）worker 内渲染 1191×1684 页 6–36ms、PNG 魔数 `89504E47` 正确；rec 模型输出 `[1,T,6625]`，CTC 实证 **blank=0、字典索引=输出索引−1**（渲染「1. 下列哪项正确」精确解码）；det/rec/cls/字典 SHA256 全部与上游或实测钉死一致。故 `standardFontDataUrl`/`cmaps` 须走 legacy build 的文件路径（非 file:// URL）。
+>
+> **性能达标路径（2026-11-16 拍板，已回写 spec §10.8）**：det 960 长边 + 32 对齐预处理 → 5/5 行命中、609ms/页；rec 全宽 batch 40 行 **3.3s 超 3s 预算**、`numThreads=4` 无改善（wasm 线程未生效）→ 改**行前缀裁剪 3.5×行高**（保持宽高比缩 48 高、上限 320）**38ms/行**，40 行 1.5s + det ≈0.5s ≈ 2s 达标，且 12 种内置题号样式全部精确识别。前缀裁剪为**必选实现口径**，偏离须回写 spec §10.8 + 本节。
 
 - 管线：图片/PDF 输入（pdfjs 渲染 PDF 页为图）→ PP-OCR 行级检测（onnxruntime-web wasm）→ 按题号（「1.」「一、」）聚类成题区 → **缩略图预览 + 拖拽微调边界** → 导出每题 PNG + 可选合成 PDF
 - 模型：PP-OCR det+rec+cls ≈22MB 随包（extraResources），**固定 URL + SHA256 钉死**
