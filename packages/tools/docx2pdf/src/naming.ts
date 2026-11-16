@@ -1,8 +1,11 @@
+import { resolveConflictPath } from '@lumin/node-kit'
+
 /**
  * 输出路径命名（spec §7.3）：`{原名}.pdf`；冲突依次 `{原名}(1).pdf` … `{原名}(99).pdf`；
- * 全部占用返回 null（调用方报 OUTPUT_MISSING）。纯函数，存在性由注入的 exists 判定。
+ * 全部占用返回 null（调用方报 OUTPUT_MISSING）。冲突递增核心上提 `@lumin/node-kit`
+ * （AGENTS 铁律 3，与 exam-split 共用），本模块只保留 docx2pdf 的输入基名推导。
  */
-export const MAX_OUTPUT_SUFFIX = 99
+export { MAX_CONFLICT_SUFFIX as MAX_OUTPUT_SUFFIX } from '@lumin/node-kit'
 
 export function resolveOutputPath(
   inputPath: string,
@@ -10,11 +13,5 @@ export function resolveOutputPath(
 ): string | null {
   const dot = inputPath.lastIndexOf('.')
   const base = dot > 0 ? inputPath.slice(0, dot) : inputPath
-  const first = `${base}.pdf`
-  if (!exists(first)) return first
-  for (let index = 1; index <= MAX_OUTPUT_SUFFIX; index += 1) {
-    const candidate = `${base}(${index}).pdf`
-    if (!exists(candidate)) return candidate
-  }
-  return null
+  return resolveConflictPath(`${base}.pdf`, exists)
 }

@@ -1,4 +1,8 @@
-import { structuredErrorSchema, type StructuredError } from '@lumin/shared'
+import {
+  errnoCode as sharedErrnoCode,
+  isStructuredError as sharedIsStructuredError,
+  type StructuredError
+} from '@lumin/shared'
 
 /** 工具错误码（UPPER_SNAKE；文案见 spec §5，改动须同步 spec） */
 export const DOCX2PDF_ERROR_CODES = [
@@ -54,26 +58,11 @@ export function isRetryable(code: string): boolean {
   return RETRYABLE.has(code as Docx2pdfErrorCode)
 }
 
-/**
- * 判断抛出物是否已是结构化错误（已合规的透传，不再包装）。
- * Error 实例一票否决：errno 码（EPERM/EBUSY/ENOENT…）同样是 UPPER_SNAKE，
- * 且 Error.message 可被 schema 读到，会把原始 fs 错误误判成结构化错误泄漏出去。
- */
-export function isStructuredError(err: unknown): err is StructuredError {
-  return !(err instanceof Error) && structuredErrorSchema.safeParse(err).success
-}
+/** 判断抛出物是否已是结构化错误（委托 `@lumin/shared` 单一真相源，导出 API 不变） */
+export const isStructuredError = sharedIsStructuredError
 
-/** 从任意错误取 errno 码（如 ENOENT/EBUSY），无则空串 */
-export function errnoCode(err: unknown): string {
-  if (typeof err === 'object' && err !== null && 'code' in err) {
-    const code: unknown = err.code
-    return typeof code === 'string' ? code : ''
-  }
-  return ''
-}
+/** 从任意错误取 errno 码（如 ENOENT/EBUSY），无则空串（委托 `@lumin/shared`） */
+export const errnoCode = sharedErrnoCode
 
-/** detail 截尾（spec §5：stderr/stdout 尾部 ≤2000 字符） */
-export function tail(text: string, max = 2000): string {
-  const trimmed = text.trim()
-  return trimmed.length <= max ? trimmed : `…${trimmed.slice(-max)}`
-}
+// 注：tail（detail 截尾）核心在 `@lumin/node-kit`，仅主进程侧使用；
+// 本模块被 renderer 引用（isRetryable），不得 re-export node-kit（会把 node-only 代码拉进 web 编译）

@@ -32,15 +32,29 @@ export function makeError(code: CoreErrorCode, message: string, detail?: string)
   return detail === undefined ? { code, message } : { code, message, detail }
 }
 
+/**
+ * 判断抛出物是否已是结构化错误（已合规的透传，不再包装）。
+ * Error 实例一票否决：errno 码（EPERM/EBUSY/ENOENT…）同样是 UPPER_SNAKE，
+ * 且 Error.message 可被 schema 读到，会把原始 fs 错误误判成结构化错误泄漏出去。
+ */
+export function isStructuredError(err: unknown): err is StructuredError {
+  return !(err instanceof Error) && structuredErrorSchema.safeParse(err).success
+}
+
+/** 从任意错误取 errno 码（如 ENOENT/EBUSY），无则空串 */
+export function errnoCode(err: unknown): string {
+  if (typeof err === 'object' && err !== null && 'code' in err) {
+    const code: unknown = err.code
+    return typeof code === 'string' ? code : ''
+  }
+  return ''
+}
+
 /** 将任意抛出物归一化为结构化错误（已合规的直接透传） */
 export function toStructuredError(err: unknown): StructuredError {
-  // Error 实例不透传：errno 码（EPERM/EBUSY…）也是 UPPER_SNAKE，会冒充结构化错误码泄漏
-  if (!(err instanceof Error)) {
-    const parsed = structuredErrorSchema.safeParse(err)
-    if (parsed.success) return parsed.data
-    return makeError('INTERNAL', String(err))
-  }
-  return makeError('INTERNAL', err.message)
+  if (isStructuredError(err)) return err
+  if (err instanceof Error) return makeError('INTERNAL', err.message)
+  return makeError('INTERNAL', String(err))
 }
 
 /** renderer → main 的 invoke 请求信封 */

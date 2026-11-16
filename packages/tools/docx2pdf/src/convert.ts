@@ -1,4 +1,5 @@
 import { basename, extname, join } from 'node:path'
+import { classifyPrecheckError } from '@lumin/node-kit'
 import { toolError, errnoCode, type Docx2pdfErrorCode } from './errors'
 
 /** 读权限 + 占用探测（注入 fs 包装） */
@@ -9,11 +10,9 @@ export interface PrecheckDeps {
   checkExclusive: (path: string) => Promise<void>
 }
 
-const LOCK_ERRNOS = new Set(['EBUSY', 'EPERM', 'EACCES'])
-
-/** 预检 errno → 结构化错误（spec §5：EBUSY/EPERM → 占用，其余 → 不存在） */
+/** 预检 errno → 结构化错误（spec §5：EBUSY/EPERM → 占用，其余 → 不存在；分类上提 node-kit） */
 export function mapPrecheckError(err: unknown): ReturnType<typeof toolError> {
-  return LOCK_ERRNOS.has(errnoCode(err))
+  return classifyPrecheckError(err) === 'locked'
     ? toolError('INPUT_LOCKED', errnoCode(err))
     : toolError('INPUT_NOT_FOUND', errnoCode(err))
 }

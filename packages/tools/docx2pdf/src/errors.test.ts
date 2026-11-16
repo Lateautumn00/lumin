@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { tail } from '@lumin/node-kit'
 import {
   DOCX2PDF_ERROR_CODES,
   errnoCode,
   isRetryable,
   isStructuredError,
-  tail,
   toolError
 } from './errors'
 

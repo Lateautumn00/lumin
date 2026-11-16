@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import {
   runProcess,
   SpawnError,
+  tail,
   type RunProcessOptions,
   type RunProcessResult
 } from '@lumin/node-kit'
@@ -22,7 +23,7 @@ import {
   type MoveFs
 } from './convert'
 import { downloadMsi, type DownloadOptions } from './download'
-import { tail, toolError, errnoCode, isStructuredError } from './errors'
+import { toolError, errnoCode, isStructuredError } from './errors'
 import { locateSoffice, parseRegistryInstallPath, probeSofficeDir } from './locate'
 import { createMutex } from './mutex'
 import { resolveOutputPath } from './naming'

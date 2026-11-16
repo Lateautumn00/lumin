@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   channelSchema,
+  errnoCode,
   invokeRequestSchema,
   invokeResponseSchema,
+  isStructuredError,
   makeError,
   structuredErrorSchema,
   submitResultSchema,
@@ -75,6 +77,43 @@ describe('toStructuredError', () => {
   it('其它值归一为 INTERNAL', () => {
     expect(toStructuredError('oops')).toEqual({ code: 'INTERNAL', message: 'oops' })
     expect(toStructuredError(42)).toEqual({ code: 'INTERNAL', message: '42' })
+  })
+})
+
+describe('isStructuredError', () => {
+  it('接受合规 plain object 结构化错误', () => {
+    expect(isStructuredError(makeError('BUSY', '忙碌'))).toBe(true)
+    expect(isStructuredError({ code: 'PDF_ENCRYPTED', message: '加密', detail: 'x' })).toBe(true)
+  })
+
+  it('Error 实例一票否决（即使形状合规）', () => {
+    const err = Object.assign(new Error('msg'), { code: 'EBUSY', message: 'x' })
+    expect(isStructuredError(err)).toBe(false)
+    expect(isStructuredError(new Error('x'))).toBe(false)
+  })
+
+  it('拒绝 errno 码 object、非法码形与非对象', () => {
+    expect(isStructuredError(Object.assign(new Error('e'), { code: 'EPERM' }))).toBe(false)
+    expect(isStructuredError({ code: 'file_locked', message: 'x' })).toBe(false)
+    expect(isStructuredError({ code: 'OK', message: '' })).toBe(false)
+    expect(isStructuredError({ code: 'X' })).toBe(false)
+    expect(isStructuredError(null)).toBe(false)
+    expect(isStructuredError('CODE')).toBe(false)
+  })
+})
+
+describe('errnoCode', () => {
+  it('从带 code 的错误对象取 errno 码', () => {
+    expect(errnoCode(Object.assign(new Error('e'), { code: 'EBUSY' }))).toBe('EBUSY')
+    expect(errnoCode({ code: 'ENOENT' })).toBe('ENOENT')
+  })
+
+  it('无 code / code 非字符串 / 非对象返回空串', () => {
+    expect(errnoCode(new Error('e'))).toBe('')
+    expect(errnoCode({ code: 42 })).toBe('')
+    expect(errnoCode(null)).toBe('')
+    expect(errnoCode(undefined)).toBe('')
+    expect(errnoCode('EPERM')).toBe('')
   })
 })
 

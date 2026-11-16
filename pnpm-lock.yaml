@@ -288,7 +288,11 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
-  packages/node-kit: {}
+  packages/node-kit:
+    dependencies:
+      '@lumin/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/plugin-api:
     dependencies:
