@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isRetryable, toolError } from './errors'
+import { EXAM_SPLIT_ERROR_CODES, isRetryable, toolError } from './errors'
 
 describe('toolError', () => {
   it('无 detail 时不带 detail 字段', () => {
@@ -21,21 +21,8 @@ describe('toolError', () => {
     expect(toolError('OP_FAILED', '')).not.toHaveProperty('detail')
   })
 
-  it('每个错误码都有非空中文文案（spec §5）', () => {
-    const codes = [
-      'PDF_NOT_FOUND',
-      'PDF_LOCKED',
-      'PDF_ENCRYPTED',
-      'PDF_INVALID',
-      'RANGE_INVALID',
-      'NO_PAGES_LEFT',
-      'OP_TIMEOUT',
-      'OUTPUT_WRITE_FAILED',
-      'OP_FAILED',
-      'CANCELLED',
-      'INVALID_PAYLOAD'
-    ] as const
-    for (const code of codes) {
+  it('每个错误码都有非空中文文案（spec §5/§10.5）', () => {
+    for (const code of EXAM_SPLIT_ERROR_CODES) {
       const error = toolError(code)
       expect(error.code).toBe(code)
       expect(error.message.length).toBeGreaterThan(0)
@@ -56,5 +43,29 @@ describe('isRetryable（spec §5 操作入口）', () => {
       expect(isRetryable(code)).toBe(false)
     }
     expect(isRetryable('UNKNOWN')).toBe(false)
+  })
+
+  it('OCR 错误码文案非空（spec §10.5）', () => {
+    const codes = ['OCR_INPUT_INVALID', 'MODEL_MISSING', 'NO_REGIONS', 'OCR_FAILED'] as const
+    for (const code of codes) {
+      const error = toolError(code)
+      expect(error.code).toBe(code)
+      expect(error.message.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('OCR 可重试：MODEL_MISSING/NO_REGIONS/OCR_FAILED；OCR_INPUT_INVALID 不可重试', () => {
+    for (const code of ['MODEL_MISSING', 'NO_REGIONS', 'OCR_FAILED']) {
+      expect(isRetryable(code)).toBe(true)
+    }
+    expect(isRetryable('OCR_INPUT_INVALID')).toBe(false)
+  })
+
+  it('OCR 错误码带 detail', () => {
+    expect(toolError('OCR_FAILED', 'session run failed')).toEqual({
+      code: 'OCR_FAILED',
+      message: '识别失败，请重试或查看详情',
+      detail: 'session run failed'
+    })
   })
 })

@@ -76,7 +76,7 @@ describe('toRangeList / rangeLabel', () => {
 })
 
 describe('EXAM_SPLIT_ERROR_CODES', () => {
-  it('与 spec §5 的 11 个错误码一致', () => {
+  it('与 spec §5 + §10.5 的 15 个错误码一致', () => {
     expect(EXAM_SPLIT_ERROR_CODES).toEqual([
       'PDF_NOT_FOUND',
       'PDF_LOCKED',
@@ -88,7 +88,11 @@ describe('EXAM_SPLIT_ERROR_CODES', () => {
       'OUTPUT_WRITE_FAILED',
       'OP_FAILED',
       'CANCELLED',
-      'INVALID_PAYLOAD'
+      'INVALID_PAYLOAD',
+      'OCR_INPUT_INVALID',
+      'MODEL_MISSING',
+      'NO_REGIONS',
+      'OCR_FAILED'
     ])
   })
 })
