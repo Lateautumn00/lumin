@@ -13,12 +13,14 @@ const props = withDefaults(
     accept?: string
     hint?: string
     disabled?: boolean
+    /** 多选（如合并模式）；select 逐文件循环 emit，消费方自行收集 */
+    multiple?: boolean
   }>(),
-  { accept: '', hint: '拖拽文件到此处，或点击选择', disabled: false }
+  { accept: '', hint: '拖拽文件到此处，或点击选择', disabled: false, multiple: false }
 )
 
 const emit = defineEmits<{
-  /** 校验通过并解析出磁盘绝对路径 */
+  /** 校验通过并解析出磁盘绝对路径（multiple 下逐文件循环 emit） */
   select: [payload: { file: File; path: string }]
   /** 类型不符或无法解析路径 */
   invalid: [reason: string]
@@ -54,15 +56,18 @@ function acceptFile(file: File): void {
 function onDrop(event: DragEvent): void {
   dragging.value = false
   if (props.disabled) return
-  const file = event.dataTransfer?.files[0]
-  if (file !== undefined) acceptFile(file)
+  const dropped = Array.from(event.dataTransfer?.files ?? [])
+  const files = props.multiple ? dropped : dropped.slice(0, 1)
+  for (const file of files) acceptFile(file)
 }
 
 function onChange(event: Event): void {
   const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
+  // 先快照再清空：value='' 会同步清空 files 列表
+  const selected = Array.from(target.files ?? [])
   target.value = ''
-  if (file !== undefined) acceptFile(file)
+  const files = props.multiple ? selected : selected.slice(0, 1)
+  for (const file of files) acceptFile(file)
 }
 </script>
 
@@ -101,6 +106,7 @@ function onChange(event: Event): void {
       type="file"
       class="hidden"
       :accept="accept"
+      :multiple="multiple"
       :disabled="disabled"
       @change="onChange"
     />

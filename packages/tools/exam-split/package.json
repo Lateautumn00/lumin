@@ -1,0 +1,37 @@
+{
+  "name": "@lumin/tool-exam-split",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./manifest": {
+      "types": "./src/manifest.ts",
+      "default": "./src/manifest.ts"
+    },
+    "./node": {
+      "types": "./src/node.ts",
+      "default": "./src/node.ts"
+    },
+    "./renderer/*": {
+      "types": "./src/renderer/*",
+      "default": "./src/renderer/*"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "pdfjs-dist": "6.5.438"
+  },
+  "dependencies": {
+    "@lucide/vue": "1.72.0",
+    "@lumin/node-kit": "workspace:*",
+    "@lumin/plugin-api": "workspace:*",
+    "@lumin/shared": "workspace:*",
+    "@lumin/ui": "workspace:*",
+    "naive-ui": "2.45.3",
+    "pdf-lib": "1.17.1",
+    "vue": "3.5.45",
+    "zod": "4.6.7"
+  }
+}

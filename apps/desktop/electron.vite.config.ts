@@ -25,6 +25,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/docx2pdf/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-exam-split\/manifest$/,
+    replacement: r('../../packages/tools/exam-split/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-exam-split\/node$/,
+    replacement: r('../../packages/tools/exam-split/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-exam-split\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/exam-split/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-example\/manifest$/,
     replacement: r('../../packages/tools/example/src/manifest.ts')
   },

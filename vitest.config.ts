@@ -88,6 +88,12 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
+        'packages/tools/exam-split/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
         'apps/desktop/src/main/task-queue.ts': {
           lines: 80,
           functions: 80,

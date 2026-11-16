@@ -7,6 +7,7 @@ import {
   FlaskConical,
   Info,
   Ruler,
+  Scissors,
   Settings,
   Wrench,
   type LucideIcon
@@ -22,6 +23,7 @@ const iconMap: Record<string, LucideIcon> = {
   ruler: Ruler,
   'file-output': FileOutput,
   'flask-conical': FlaskConical,
+  scissors: Scissors,
   wrench: Wrench
 }
 
