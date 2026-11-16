@@ -69,3 +69,87 @@ export const opResultSchema = z.object({
 })
 
 export type OpResult = z.infer<typeof opResultSchema>
+
+/* ─── M3b OCR 切题（spec §10） ─── */
+
+/** OCR 输入扩展名白名单（spec §10.1：.pdf/.png/.jpg/.jpeg/.webp，大小写不敏感） */
+export const OCR_INPUT_RE = /\.(pdf|png|jpe?g|webp)$/i
+
+const ocrPathSchema = z.string().min(1).regex(OCR_INPUT_RE, '仅支持 .pdf 或图片文件')
+
+/** 归一化 0–1 比例坐标（同 M3a cropBox 口径；导出时按各页实际像素换算，spec §10.4） */
+const ratio01 = z.number().min(0).max(1)
+
+/** 识别出的文本行（归一化框 + 识别文本；行内容不参与导出，仅供聚类与列表展示） */
+export const ocrLineSchema = z
+  .object({
+    text: z.string(),
+    x: ratio01,
+    y: ratio01,
+    width: ratio01,
+    height: ratio01
+  })
+  .refine((line) => line.x + line.width <= 1 + 1e-9 && line.y + line.height <= 1 + 1e-9, {
+    message: '文本行框超出页面'
+  })
+
+export type OcrLine = z.infer<typeof ocrLineSchema>
+
+/**
+ * 题区（spec §10.4）：`start`/`end` = 纵向边界（横向分隔线），`xStart`/`xEnd` = 列边界。
+ * `xStart`/`xEnd` 缺省 = 0/1 即全宽（单栏页，2026-11-16 增补，双栏页独立聚类）。
+ */
+export const ocrRegionSchema = z
+  .object({
+    start: ratio01,
+    end: ratio01,
+    xStart: ratio01.optional(),
+    xEnd: ratio01.optional(),
+    lines: z.array(ocrLineSchema)
+  })
+  .refine((region) => region.start < region.end, { message: '题区上下边界无效' })
+  .refine(
+    (region) =>
+      region.xStart === undefined || region.xEnd === undefined || region.xStart < region.xEnd,
+    { message: '题区左右边界无效' }
+  )
+
+export type OcrRegion = z.infer<typeof ocrRegionSchema>
+
+/** 识别回包的单页（width/height = 该页渲染像素，导出换算基准） */
+export const ocrPageSchema = z.object({
+  pageNumber: z.number().int().min(1),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  regions: z.array(ocrRegionSchema)
+})
+
+export type OcrPage = z.infer<typeof ocrPageSchema>
+
+/** `exam-split:ocr-detect` 入参（spec §10.4） */
+export const ocrDetectPayloadSchema = z.object({
+  inputPath: ocrPathSchema
+})
+
+export type OcrDetectPayload = z.infer<typeof ocrDetectPayloadSchema>
+
+/** `exam-split:ocr-detect` done 回包 */
+export const ocrDetectResultSchema = z.object({
+  pages: z.array(ocrPageSchema).min(1, '至少识别一页')
+})
+
+export type OcrDetectResult = z.infer<typeof ocrDetectResultSchema>
+
+/** `exam-split:ocr-export` 入参：最终边界（渲染端微调后提交）+ 导出选项 */
+export const ocrExportPayloadSchema = z
+  .object({
+    inputPath: ocrPathSchema,
+    startNumber: z.number().int().min(1).max(9999),
+    exportPdf: z.boolean(),
+    pages: z.array(ocrPageSchema).min(1, '至少需要一页边界')
+  })
+  .refine((payload) => payload.pages.some((page) => page.regions.length > 0), {
+    message: '至少需要一个题区'
+  })
+
+export type OcrExportPayload = z.infer<typeof ocrExportPayloadSchema>

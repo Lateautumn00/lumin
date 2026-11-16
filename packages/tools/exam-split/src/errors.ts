@@ -12,7 +12,11 @@ export const EXAM_SPLIT_ERROR_CODES = [
   'OUTPUT_WRITE_FAILED',
   'OP_FAILED',
   'CANCELLED',
-  'INVALID_PAYLOAD'
+  'INVALID_PAYLOAD',
+  'OCR_INPUT_INVALID',
+  'MODEL_MISSING',
+  'NO_REGIONS',
+  'OCR_FAILED'
 ] as const
 
 export type ExamSplitErrorCode = (typeof EXAM_SPLIT_ERROR_CODES)[number]
@@ -28,7 +32,11 @@ const MESSAGES: Record<ExamSplitErrorCode, string> = {
   OUTPUT_WRITE_FAILED: '无法写出结果文件，请检查目录权限与剩余空间',
   OP_FAILED: '处理失败，请重试或查看详情',
   CANCELLED: '已取消',
-  INVALID_PAYLOAD: '参数无效'
+  INVALID_PAYLOAD: '参数无效',
+  OCR_INPUT_INVALID: '图片无法读取，请换一张清晰的图片',
+  MODEL_MISSING: '识别模型缺失，请在设置中下载后重试',
+  NO_REGIONS: '未识别到题目区域，请检查图片清晰度',
+  OCR_FAILED: '识别失败，请重试或查看详情'
 }
 
 /** 可重试错误码（renderer 据此显示 [重试]；spec §5） */
@@ -36,7 +44,10 @@ const RETRYABLE = new Set<ExamSplitErrorCode>([
   'PDF_LOCKED',
   'OP_TIMEOUT',
   'OUTPUT_WRITE_FAILED',
-  'OP_FAILED'
+  'OP_FAILED',
+  'MODEL_MISSING',
+  'NO_REGIONS',
+  'OCR_FAILED'
 ])
 
 export function toolError(code: ExamSplitErrorCode, detail?: string): StructuredError {
