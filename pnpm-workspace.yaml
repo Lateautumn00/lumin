@@ -5,6 +5,7 @@ packages:
 
 saveExact: true
 allowBuilds:
+  protobufjs: false
   electron: true
   electron-winstaller: true
 minimumReleaseAgeExclude:
