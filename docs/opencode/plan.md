@@ -188,6 +188,8 @@ lumin/
 
 **M3b — OCR 切题（Q7=b）**
 
+> 字段级功能清单：`docs/spec/exam-split.md` **§10（2026-11-16 定稿，R8）**——两段式 IPC（ocr-detect → 微调 → ocr-export）、错误码增补（`OCR_INPUT_INVALID`/`MODEL_MISSING`/`NO_REGIONS`/`OCR_FAILED`）、命名与验收细则以该节为准；实现偏差回写该节 + 本节。
+
 - 管线：图片/PDF 输入（pdfjs 渲染 PDF 页为图）→ PP-OCR 行级检测（onnxruntime-web wasm）→ 按题号（「1.」「一、」）聚类成题区 → **缩略图预览 + 拖拽微调边界** → 导出每题 PNG + 可选合成 PDF
 - 模型：PP-OCR det+rec+cls ≈22MB 随包（extraResources），**固定 URL + SHA256 钉死**
 - 不做结构化题库（c 未选）；Python sidecar 留作二期升级路径
