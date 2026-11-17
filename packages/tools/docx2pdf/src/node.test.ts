@@ -78,7 +78,7 @@ function createHarness(
       warn: () => undefined,
       error: () => undefined
     },
-    paths: { temp: tempRoot, userData: userDataRoot }
+    paths: { temp: tempRoot, userData: userDataRoot, binaries: join(root, 'binaries') }
   }
   const deps: Docx2pdfDeps = {
     ...createNodeDeps(),

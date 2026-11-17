@@ -13,8 +13,11 @@
     "dist": "electron-builder --config electron-builder.yml --publish never"
   },
   "dependencies": {
+    "@napi-rs/canvas": "1.1.1",
     "electron-log": "5.4.4",
-    "electron-updater": "6.8.11"
+    "electron-updater": "6.8.11",
+    "onnxruntime-web": "1.31.1",
+    "pdfjs-dist": "6.5.438"
   },
   "devDependencies": {
     "@lucide/vue": "1.72.0",
@@ -23,8 +26,8 @@
     "@lumin/tool-calculator": "workspace:*",
     "@lumin/tool-docx2pdf": "workspace:*",
     "@lumin/tool-exam-split": "workspace:*",
-    "@lumin/tool-unit-converter": "workspace:*",
     "@lumin/tool-example": "workspace:*",
+    "@lumin/tool-unit-converter": "workspace:*",
     "@playwright/test": "1.65.0",
     "@tailwindcss/vite": "4.3.5",
     "@vitejs/plugin-vue": "6.0.10",

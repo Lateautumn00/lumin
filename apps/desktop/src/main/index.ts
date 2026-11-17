@@ -108,7 +108,12 @@ async function bootstrap(): Promise<void> {
     logger,
     paths: {
       temp: app.getPath('temp'),
-      userData: app.getPath('userData')
+      userData: app.getPath('userData'),
+      // 外部二进制/模型根：打包态走 extraResources（resources/binaries），
+      // 开发态 = 仓库根 binaries/（fetch-binaries.mjs 落盘处；__dirname = out/main）
+      binaries: app.isPackaged
+        ? join(process.resourcesPath, 'binaries')
+        : join(__dirname, '../../../../binaries')
     }
   })
   for (const failure of result.failed) {

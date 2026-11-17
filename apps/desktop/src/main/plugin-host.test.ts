@@ -35,7 +35,7 @@ function createDeps(): {
     createSettings: () => ({ get: vi.fn(), set: vi.fn() }),
     createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error },
-    paths: { temp: 'C:\\temp', userData: 'C:\\userData' }
+    paths: { temp: 'C:\\temp', userData: 'C:\\userData', binaries: 'C:\\binaries' }
   }
   return { deps, sync, task, error }
 }
@@ -88,7 +88,7 @@ describe('loadTools', () => {
 
   it('ctx.paths 注入 temp/userData', async () => {
     const { deps } = createDeps()
-    let seen: { temp: string; userData: string } | undefined
+    let seen: { temp: string; userData: string; binaries: string } | undefined
     const reg: ToolRegistration = {
       manifest: validManifest,
       registerMain: (ctx) => {
@@ -96,7 +96,7 @@ describe('loadTools', () => {
       }
     }
     await loadTools([reg], deps)
-    expect(seen).toEqual({ temp: 'C:\\temp', userData: 'C:\\userData' })
+    expect(seen).toEqual({ temp: 'C:\\temp', userData: 'C:\\userData', binaries: 'C:\\binaries' })
   })
 
   it('非法 action（含大写）→ failed', async () => {

@@ -39,6 +39,8 @@ export interface ToolPaths {
   readonly temp: string
   /** 应用 userData 目录（便携组件等大文件落这里） */
   readonly userData: string
+  /** 外部二进制/模型根目录（fetch-binaries.mjs 产物；开发态=仓库根 binaries/，打包态=resources/binaries） */
+  readonly binaries: string
 }
 
 /** 主进程插件上下文：工具 node.ts 的 `registerMain(ctx)` 入参 */

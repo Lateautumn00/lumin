@@ -89,7 +89,7 @@ describe.skipIf(!hasSoffice)('docx2pdf 保真 fixture 集成（本机有 soffice
         warn: () => undefined,
         error: () => undefined
       },
-      paths: { temp: tempRoot, userData: userDataRoot }
+      paths: { temp: tempRoot, userData: userDataRoot, binaries: join(root, 'binaries') }
     }
     registerWith(ctx, deps)
 
