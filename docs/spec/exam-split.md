@@ -180,14 +180,16 @@
 
 ## 10.5 错误码增补（其余复用 §5）
 
-| 错误码              | 触发条件                                          | 中文文案                           | 操作入口  |
-| ------------------- | ------------------------------------------------- | ---------------------------------- | --------- |
-| `OCR_INPUT_INVALID` | 图片损坏/解码失败/扩展名白名单外（PDF 类仍走 §5） | 图片无法读取，请换一张清晰的图片   | 重新选择  |
-| `MODEL_MISSING`     | 模型或 wasm 缺失/SHA256 不匹配（启动预检）        | 识别模型缺失，请在设置中下载后重试 | 重试      |
-| `NO_REGIONS`        | 检测完成但 0 个题区                               | 未识别到题目区域，请检查图片清晰度 | 重试      |
-| `OCR_FAILED`        | 推理异常（detail=消息尾部）                       | 识别失败，请重试或查看详情         | 重试+详情 |
+| 错误码              | 触发条件                                                           | 中文文案                           | 操作入口  |
+| ------------------- | ------------------------------------------------------------------ | ---------------------------------- | --------- |
+| `OCR_INPUT_INVALID` | 图片损坏/解码失败/扩展名白名单外（PDF 类仍走 §5）                  | 图片无法读取，请换一张清晰的图片   | 重新选择  |
+| `MODEL_MISSING`     | 模型缺失/SHA256 不匹配（detect 前主进程预检；wasm 由引擎加载兜底） | 识别模型缺失，请在设置中下载后重试 | 重试      |
+| `NO_REGIONS`        | 检测完成但 0 个题区                                                | 未识别到题目区域，请检查图片清晰度 | 重试      |
+| `OCR_FAILED`        | 推理异常（detail=消息尾部）                                        | 识别失败，请重试或查看详情         | 重试+详情 |
 
 - 复用：`PDF_NOT_FOUND/PDF_LOCKED/PDF_ENCRYPTED/PDF_INVALID`（PDF 输入）、`OP_TIMEOUT`、`OUTPUT_WRITE_FAILED`、`OP_FAILED`、`CANCELLED`、`INVALID_PAYLOAD`。
+- **输入错误分界（2026-11-17 P2，R8）**：先 `readFile`（ENOENT → `PDF_NOT_FOUND`；EBUSY/EPERM/EACCES → `PDF_LOCKED`；其余 errno → PDF 输入 `PDF_INVALID`、图片 `OCR_INPUT_INVALID`），再解码（图片解码失败 → `OCR_INPUT_INVALID`；pdfjs `PasswordException` → `PDF_ENCRYPTED`、`MissingPDFException` → `PDF_NOT_FOUND`、其余 → `PDF_INVALID`）。
+- **模型预检位置（2026-11-17 P2，R8）**：`ocr-detect` 在主进程先校验 det/rec/cls/dict 四文件（存在+体积+SHA256，每次不缓存，≈60ms），失败即 `MODEL_MISSING` 且不进 worker；wasm 资产不在主进程预检内，由 worker 内 `createOcrEngine` 加载失败兜底 `MODEL_MISSING`。`ocr-export` 不做模型预检（导出不需推理）。
 
 ## 10.6 三态（R4）
 
@@ -202,19 +204,33 @@
 1. 产物写**输入文件同目录**（图片输入 = 图片所在目录）；冲突递增 `(1)…(99)` 复用 `node-kit resolveConflictPath`。
 2. 命名：每题 `{原名}_题{startNumber+i}.png`（按页序+题序连续编号）；合成 PDF `{原名}_切题.pdf`。
 3. 校验：PNG 头 `89504E47`、PDF 头 `%PDF-`；不满足 → `OUTPUT_WRITE_FAILED`（写失败尽力清理半成品，同 M3a §7.4 加固）。
+4. 合成 PDF 页尺寸 = **裁图像素 ÷ 渲染倍率 1.5**（还原 PDF 点口径，导出 PDF 可直接打印；2026-11-17 P2 回写）。
 
 ## 10.8 模型与性能（R5 / R1）
 
-- 模型：PP-OCR det+rec+cls ≈ **22MB**，固定 URL + SHA256 钉死于 `scripts/fetch-binaries.mjs`；`onnxruntime-web` 版本钉版（升级前 `npm view` 复核 + 同步 plan §1.1）。
+- 模型：PP-OCR det+rec+cls+字典 **实测 16.2MB**（det 4.7 + rec 10.9 + cls 0.6 + dict 0.03），固定 URL + SHA256 钉死于 `scripts/fetch-binaries.mjs`；`onnxruntime-web` 版本钉版（升级前 `npm view` 复核 + 同步 plan §1.1）。
 - 体积口径：onnxruntime-web 的 **JS/wasm 资产单列**（R5 运行时资产修订）；工具代码 chunk 仍 <200KB gzip。
 - **预处理口径（2026-11-16 spike 实证，R8 回写）**：
   - det：长边 **960** + 32 对齐 + ImageNet mean/std（`[0.485,0.456,0.406]/[0.229,0.224,0.225]`）→ 概率图阈值 0.3，实测 5 行文字 **5/5 band 命中、609ms/页**。
   - rec：**只裁行前缀 3.5×行高**（保持宽高比缩到 48 高、宽上限 320、mean/std 0.5）→ **38ms/行**（全宽 77ms/行）；单页 40 行 rec 1.5s + det ≈0.5s ≈ **2s < 3s 预算**，且 `一、`/`1.`/`(1)`/`第1题` 等 **12 种题号样式全部精确识别**。
   - 反证：全宽 batch 40 行 3.3s **超预算**、`numThreads=4` 无改善（wasm 线程未生效）→ **前缀裁剪为达标必选路径**。
 - **CTC 映射（spike 实证）**：rec 输出 `[1,T,6625]`，**blank=0、字典索引 = 输出索引 − 1**（字典 6623 字符）。
+- **rec 批处理（2026-11-17 P2，R8）**：按前缀裁剪后的**宽度分组**批量推理（前缀比恒 3.5 → dstWidth 恒 ≈168，组内同宽零 padding），组内 `[B,3,48,W]` 一次 `rec.run`；空文本行丢弃。
+- **打包口径（2026-11-17 P2，R8）**：`pdfjs-dist`/`onnxruntime-web`/`@napi-rs/canvas` 进 `apps/desktop` dependencies，由 `externalizeDepsPlugin` 外部化；electron-builder `asarUnpack` = `**/node_modules/@napi-rs/**`、`**/node_modules/onnxruntime-web/dist/**`；wasm 在 worker 内单线程（`numThreads=1`、`proxy=false`）。
 - **单页 OCR ≤3s**（本机 wasm 实测）；连续 2 页超限 → 按 plan 风险表切 `onnxruntime-node` 复评（须先回写 plan §4.4 再动）。
 
-## 10.9 验收清单（R1 量化，开工前样卷入库）
+## 10.9 P2 实现口径（2026-11-17，R8 回写）
+
+| 项             | 实现口径                                                                                                                                                                                                                            |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 模块划分       | 主进程轻量入口 `ocr-assets.ts`（`OCR_ASSETS`/`verifyOcrAssets`/`ocrModelDir`）+ worker 侧 `ocr-render.ts`（pdfjs/napi 渲染、`encodePng`、错误分类纯函数）/`ocr-model.ts`（det+rec 引擎）/`ocr-ops.ts`（两段式编排）/`ocr.worker.ts` |
+| 渲染口径       | 倍率 **1.5**（A4 → 893×1263）；渲染前白底 `fillRect` + 渲染后 `destination-over` 补白（软掩模/抗锯齿透明像素）；注册 `msyh.ttc → YaHei`（幂等、失败不阻断）；pdfjs v6 用 `cMapUrl`（`cmaps`/`isEvalSupported` 已移除）              |
+| 引擎口径       | ort node 构建**仅 default 导出**（`loadOrt` 运行时互操作兜底）；det/rec 输出 dims 全守卫；加载失败 → `MODEL_MISSING`，推理期异常 → 编排层 `OCR_FAILED`（结构化透传）                                                                |
+| 编排口径       | detect：`render → detect(加载识别模型…) → 每页 detect/cluster`；export：仅 `write`（无 message）；全页 0 题区 → `NO_REGIONS`，空 regions 页保留；导出按 pageNumber 排序 + `startNumber` 连续编号；任一失败清理**本批全部已写**文件  |
+| 图片输入       | 先 `readFile` 后 `loadImage`（IO 与解码错误分界见 §10.5）；PDF 渲染失败按 pdfjs `name` 分类                                                                                                                                         |
+| 构建验证（P2） | `out/main/chunks/ocr.worker-*.js` 真实 spawn：三页卷 2.25s（≈750ms/页）、A4@1.5 893×1263、regions 1/1/1；exam-split 单测 200+ 条、分组分支覆盖 ≥80%；`pnpm gate` + `format:check` 全绿                                              |
+
+## 10.10 验收清单（R1 量化，开工前样卷入库）
 
 - [ ] R8 本清单先行（本节）；实现偏差回写本节 + plan §4.4
 - [ ] **固定 10 份样卷测试集**入库（手写/印刷/双栏/带图混合，`fixtures/ocr/`）

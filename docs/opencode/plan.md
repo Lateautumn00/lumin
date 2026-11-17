@@ -195,9 +195,11 @@ lumin/
 > **P0/P1 spike 实证（2026-11-16，不入库）**：onnxruntime-web 1.31.1 在 worker_threads 内 import 23ms / det session 创建 327ms / 320² 推理 62–90ms；pdfjs-dist 6 **legacy build** + `@napi-rs/canvas`（pdfjs NodeCanvasFactory 原生支持）worker 内渲染 1191×1684 页 6–36ms、PNG 魔数 `89504E47` 正确；rec 模型输出 `[1,T,6625]`，CTC 实证 **blank=0、字典索引=输出索引−1**（渲染「1. 下列哪项正确」精确解码）；det/rec/cls/字典 SHA256 全部与上游或实测钉死一致。故 `standardFontDataUrl`/`cmaps` 须走 legacy build 的文件路径（非 file:// URL）。
 >
 > **性能达标路径（2026-11-16 拍板，已回写 spec §10.8）**：det 960 长边 + 32 对齐预处理 → 5/5 行命中、609ms/页；rec 全宽 batch 40 行 **3.3s 超 3s 预算**、`numThreads=4` 无改善（wasm 线程未生效）→ 改**行前缀裁剪 3.5×行高**（保持宽高比缩 48 高、上限 320）**38ms/行**，40 行 1.5s + det ≈0.5s ≈ 2s 达标，且 12 种内置题号样式全部精确识别。前缀裁剪为**必选实现口径**，偏离须回写 spec §10.8 + 本节。
+>
+> **P2 实现记录（2026-11-17，R8 已回写 spec §10.9）**：① 模块拆分 —— 主进程 `ocr-assets.ts`（存在+体积+SHA256 预检，不缓存）与 worker 侧 `ocr-render.ts`/`ocr-model.ts`/`ocr-ops.ts`/`ocr.worker.ts` 分离，主进程 bundle 不拖入推理代码；② pdfjs v6 用 `cMapUrl`（`cmaps`/`isEvalSupported` 已移除），渲染 1.5 倍率 + 白底 + `destination-over` 补白 + `msyh.ttc` 注册；③ ort node 构建仅 default 导出（`loadOrt` 互操作兜底，`numThreads=1/proxy=false`），rec 按前缀宽度分组 batch（同宽零 padding）；④ 打包：三依赖进 `apps/desktop` dependencies 由 `externalizeDepsPlugin` 外部化，`asarUnpack` = `@napi-rs/**` + `onnxruntime-web/dist/**`；⑤ 构建产物 `out/main/chunks/ocr.worker-*.js` 真实 spawn 验证三页卷 **2.25s（≈750ms/页）**、A4@1.5 = 893×1263、regions 1/1/1；⑥ 单页 ≤3s 预算内，暂不切 onnxruntime-node。
 
 - 管线：图片/PDF 输入（pdfjs 渲染 PDF 页为图）→ PP-OCR 行级检测（onnxruntime-web wasm）→ 按题号（「1.」「一、」）聚类成题区 → **缩略图预览 + 拖拽微调边界** → 导出每题 PNG + 可选合成 PDF
-- 模型：PP-OCR det+rec+cls ≈22MB 随包（extraResources），**固定 URL + SHA256 钉死**
+- 模型：PP-OCR det+rec+cls+字典 实测 **16.2MB** 随包（extraResources），**固定 URL + SHA256 钉死**
 - 不做结构化题库（c 未选）；Python sidecar 留作二期升级路径
 - **验收（R1 量化）**：固定 10 份样卷测试集（含手写/印刷/双栏/带图），**自动切题边界命中率 ≥90%，或每题人工微调 ≤1 次**；单页 OCR **≤3s**（超则切 onnxruntime-node 复评）
 
