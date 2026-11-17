@@ -194,3 +194,25 @@ export function cropRgbaLeft(image: RgbaImage, width: number): RgbaImage {
   }
   return { data: out, width: keep, height: image.height }
 }
+
+/**
+ * 按像素矩形裁剪（导出每题 PNG 用；spec §10.7）。
+ * 矩形先夹到图内，宽高至少 1px；坐标为整数像素（调用方由归一化边界换算）。
+ */
+export function cropRgbaRegion(
+  image: RgbaImage,
+  rect: { x: number; y: number; width: number; height: number }
+): RgbaImage {
+  const x0 = clampInt(Math.floor(rect.x), 0, image.width - 1)
+  const y0 = clampInt(Math.floor(rect.y), 0, image.height - 1)
+  const x1 = clampInt(Math.ceil(rect.x + rect.width), x0 + 1, image.width)
+  const y1 = clampInt(Math.ceil(rect.y + rect.height), y0 + 1, image.height)
+  const keepWidth = x1 - x0
+  const keepHeight = y1 - y0
+  const out = new Uint8ClampedArray(keepWidth * keepHeight * 4)
+  for (let y = 0; y < keepHeight; y++) {
+    const from = ((y0 + y) * image.width + x0) * 4
+    out.set(image.data.subarray(from, from + keepWidth * 4), y * keepWidth * 4)
+  }
+  return { data: out, width: keepWidth, height: keepHeight }
+}

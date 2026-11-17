@@ -43,3 +43,13 @@ export function rotateDesiredPath(inputPath: string, degrees: number): string {
 export function cropDesiredPath(inputPath: string): string {
   return `${baseName(inputPath)}_裁剪.pdf`
 }
+
+/** OCR 每题 PNG：`{原名}_题{n}.png`（按页序+题序连续编号，spec §10.7） */
+export function ocrPngDesiredPath(inputPath: string, number: number): string {
+  return `${baseName(inputPath)}_题${number}.png`
+}
+
+/** OCR 合成 PDF：`{原名}_切题.pdf`（spec §10.7） */
+export function ocrPdfDesiredPath(inputPath: string): string {
+  return `${baseName(inputPath)}_切题.pdf`
+}

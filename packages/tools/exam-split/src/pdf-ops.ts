@@ -65,8 +65,8 @@ async function loadSource(inputPath: string): Promise<PDFDocument> {
   }
 }
 
-/** 冲突递增解析唯一输出路径（spec §7.3；99 次耗尽 → OUTPUT_WRITE_FAILED） */
-function resolveOutput(desired: string): string {
+/** 冲突递增解析唯一输出路径（spec §7.3；99 次耗尽 → OUTPUT_WRITE_FAILED）；ocr-ops 复用 */
+export function resolveOutput(desired: string): string {
   const resolved = resolveConflictPath(desired, existsSync)
   if (resolved === null) throw toolError('OUTPUT_WRITE_FAILED', 'conflict-exhausted')
   return resolved

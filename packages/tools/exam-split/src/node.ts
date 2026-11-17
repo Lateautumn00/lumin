@@ -1,4 +1,5 @@
 import { access, constants, open } from 'node:fs/promises'
+import ocrWorkerPath from './ocr.worker.ts?modulePath'
 import workerPath from './pdf.worker.ts?modulePath'
 import {
   classifyPrecheckError,
@@ -12,11 +13,15 @@ import type { MainPluginContext, RegisterMain, TaskHandlerContext } from '@lumin
 import { errnoCode } from '@lumin/shared'
 import type { ZodType } from 'zod'
 import { toolError } from './errors'
+import type { OcrTaskResult, OcrWorkerRequest } from './ocr-ops'
+import { ocrModelDir, verifyOcrAssets } from './ocr-assets'
 import type { OpResult, WorkerRequest } from './pdf-ops'
 import {
   cropPayloadSchema,
   deletePayloadSchema,
   mergePayloadSchema,
+  ocrDetectPayloadSchema,
+  ocrExportPayloadSchema,
   rotatePayloadSchema,
   splitPayloadSchema
 } from './schema'
@@ -26,11 +31,16 @@ export const OP_TIMEOUT_MS = 120_000
 
 /** 工具可用的外部资源（node.ts 组装真实实现，测试注入假件） */
 export interface ExamSplitDeps {
-  /** worker 绝对路径（生产 = electron-vite `?modulePath` 构建产物；vitest 下该 query 解析不出值，由测试注入） */
+  /** pdf worker 绝对路径（生产 = electron-vite `?modulePath` 构建产物；vitest 下该 query 解析不出值，由测试注入） */
   workerPath: string
+  /** OCR worker 绝对路径（同上口径） */
+  ocrWorkerPath: string
   checkReadable(path: string): Promise<void>
   checkExclusive(path: string): Promise<void>
   run(options: RunTaskOptions<WorkerRequest>): Promise<OpResult>
+  runOcr(options: RunTaskOptions<OcrWorkerRequest>): Promise<OcrTaskResult>
+  /** 模型目录预检 + 定位（每次 detect 前执行；缺失/损坏 → MODEL_MISSING，spec §10.5） */
+  ocrBinariesDir(): Promise<string>
 }
 
 /** worker 错误映射：超时/崩溃 → 工具错误码；结构化错误原样透传（队列再归一 CANCELLED） */
@@ -40,6 +50,17 @@ export function mapWorkerError(err: unknown): unknown {
     const cause = err.cause
     const detail = cause instanceof Error ? cause.message : String(cause ?? err.message)
     return toolError('OP_FAILED', tail(detail))
+  }
+  return err
+}
+
+/** OCR worker 错误映射：超时 → OP_TIMEOUT；崩溃 → OCR_FAILED（detail=cause 尾部，spec §10.5） */
+export function mapOcrWorkerError(err: unknown): unknown {
+  if (err instanceof TaskTimeoutError) return toolError('OP_TIMEOUT')
+  if (err instanceof TaskCrashError) {
+    const cause = err.cause
+    const detail = cause instanceof Error ? cause.message : String(cause ?? err.message)
+    return toolError('OCR_FAILED', tail(detail))
   }
   return err
 }
@@ -78,7 +99,7 @@ function parseWith<T>(schema: ZodType<T>, payload: unknown): T {
 
 type TaskArgs = Pick<TaskHandlerContext<unknown>, 'signal' | 'emit'>
 
-/** 注册五个任务通道（split/merge/delete/rotate/crop），可注入 deps 供测试 */
+/** 注册七个任务通道（split/merge/delete/rotate/crop/ocr-detect/ocr-export），可注入 deps 供测试 */
 export function registerWith(ctx: MainPluginContext, deps: ExamSplitDeps): void {
   async function runWorker(request: WorkerRequest, args: TaskArgs): Promise<OpResult> {
     try {
@@ -91,6 +112,20 @@ export function registerWith(ctx: MainPluginContext, deps: ExamSplitDeps): void 
       })
     } catch (err) {
       throw mapWorkerError(err)
+    }
+  }
+
+  async function runOcrWorker(request: OcrWorkerRequest, args: TaskArgs): Promise<OcrTaskResult> {
+    try {
+      return await deps.runOcr({
+        workerPath: deps.ocrWorkerPath,
+        payload: request,
+        timeoutMs: OP_TIMEOUT_MS,
+        signal: args.signal,
+        onUpdate: (update) => args.emit(update)
+      })
+    } catch (err) {
+      throw mapOcrWorkerError(err)
     }
   }
 
@@ -123,22 +158,43 @@ export function registerWith(ctx: MainPluginContext, deps: ExamSplitDeps): void 
     await precheckInputs([parsed.inputPath], deps)
     return runWorker({ op: 'crop', payload: parsed }, { signal, emit })
   })
+
+  ctx.registerTask('ocr-detect', async ({ payload, signal, emit }) => {
+    const parsed = parseWith(ocrDetectPayloadSchema, payload)
+    await precheckInputs([parsed.inputPath], deps)
+    // 模型预检仅 detect（export 不需模型）；失败 → MODEL_MISSING 快速失败（spec §10.5）
+    const binariesDir = await deps.ocrBinariesDir()
+    return runOcrWorker({ op: 'detect', payload: parsed, binariesDir }, { signal, emit })
+  })
+
+  ctx.registerTask('ocr-export', async ({ payload, signal, emit }) => {
+    const parsed = parseWith(ocrExportPayloadSchema, payload)
+    await precheckInputs([parsed.inputPath], deps)
+    return runOcrWorker({ op: 'export', payload: parsed }, { signal, emit })
+  })
 }
 
-/** 生产实现：fs 预检 + 真实 worker（测试可作基底再覆盖） */
-export function createNodeDeps(): ExamSplitDeps {
+/** 生产实现：fs 预检 + 真实 worker + 模型资产预检（测试可作基底再覆盖） */
+export function createNodeDeps(binariesRoot: string): ExamSplitDeps {
   return {
     workerPath,
+    ocrWorkerPath,
     checkReadable: (path) => access(path, constants.R_OK),
     // 读方式打开探测共享冲突（独占句柄 share=None 拒绝任何打开）；'r' 不误判只读文件
     checkExclusive: async (path) => {
       const handle = await open(path, 'r')
       await handle.close()
     },
-    run: (options) => runTask<WorkerRequest, OpResult>(options)
+    run: (options) => runTask<WorkerRequest, OpResult>(options),
+    runOcr: (options) => runTask<OcrWorkerRequest, OcrTaskResult>(options),
+    ocrBinariesDir: async () => {
+      const dir = ocrModelDir(binariesRoot)
+      await verifyOcrAssets(dir)
+      return dir
+    }
   }
 }
 
 export const registerMain: RegisterMain = (ctx) => {
-  registerWith(ctx, createNodeDeps())
+  registerWith(ctx, createNodeDeps(ctx.paths.binaries))
 }
