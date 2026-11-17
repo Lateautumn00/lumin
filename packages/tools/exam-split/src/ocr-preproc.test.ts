@@ -4,6 +4,7 @@ import {
   REC_HEIGHT,
   REC_PREFIX_RATIO,
   cropRgbaLeft,
+  cropRgbaRegion,
   detInputSize,
   normalizeRgba,
   prepDet,
@@ -167,5 +168,36 @@ describe('cropRgbaLeft', () => {
     const src = gradient(3, 3)
     expect(cropRgbaLeft(src, 3)).toBe(src)
     expect(cropRgbaLeft(src, 99)).toBe(src)
+  })
+})
+
+describe('cropRgbaRegion（导出每题 PNG，spec §10.7）', () => {
+  it('按矩形裁剪且逐行对齐（不串行）', () => {
+    const src = gradient(4, 3)
+    const out = cropRgbaRegion(src, { x: 1, y: 1, width: 2, height: 2 })
+    expect(out.width).toBe(2)
+    expect(out.height).toBe(2)
+    // (1,1)=2, (2,1)=3, (1,2)=3, (2,2)=4
+    expect(out.data[0]).toBe(2)
+    expect(out.data[4]).toBe(3)
+    expect(out.data[8]).toBe(3)
+    expect(out.data[12]).toBe(4)
+  })
+
+  it('小数边界按 floor/ceil 取整（不截断题目内容）', () => {
+    const src = gradient(10, 10)
+    const out = cropRgbaRegion(src, { x: 0.5, y: 0.5, width: 2.2, height: 2.2 })
+    expect(out.width).toBe(3)
+    expect(out.height).toBe(3)
+  })
+
+  it('越界/负值矩形夹到图内且至少 1px', () => {
+    const src = gradient(5, 5)
+    const clampLeft = cropRgbaRegion(src, { x: -10, y: -10, width: 1, height: 1 })
+    expect(clampLeft).toMatchObject({ width: 1, height: 1 })
+    const clampRight = cropRgbaRegion(src, { x: 4, y: 4, width: 99, height: 99 })
+    expect(clampRight).toMatchObject({ width: 1, height: 1 })
+    const tiny = cropRgbaRegion(src, { x: 2, y: 2, width: 0, height: 0 })
+    expect(tiny).toMatchObject({ width: 1, height: 1 })
   })
 })

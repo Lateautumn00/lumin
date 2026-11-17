@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,16 +10,19 @@ import { manifest } from './manifest'
 import {
   createNodeDeps,
   type ExamSplitDeps,
+  mapOcrWorkerError,
   mapWorkerError,
   OP_TIMEOUT_MS,
   registerMain,
   registerWith
 } from './node'
+import type { OcrTaskResult, OcrWorkerRequest } from './ocr-ops'
 import type { OpResult, WorkerRequest } from './pdf-ops'
 
 interface Harness {
   tasks: Map<string, TaskHandler<unknown, unknown>>
   calls: RunTaskOptions<WorkerRequest>[]
+  ocrCalls: RunTaskOptions<OcrWorkerRequest>[]
   updates: TaskUpdate[]
 }
 
@@ -50,7 +53,11 @@ function createCtx(
       warn: () => undefined,
       error: () => undefined
     },
-    paths: { temp: join(root, 'temp'), userData: join(root, 'userData') }
+    paths: {
+      temp: join(root, 'temp'),
+      userData: join(root, 'userData'),
+      binaries: join(root, 'binaries')
+    }
   }
 }
 
@@ -59,10 +66,12 @@ function createHarness(overrides: Partial<ExamSplitDeps> = {}): Harness {
   roots.push(root)
   const tasks = new Map<string, TaskHandler<unknown, unknown>>()
   const calls: RunTaskOptions<WorkerRequest>[] = []
+  const ocrCalls: RunTaskOptions<OcrWorkerRequest>[] = []
   const updates: TaskUpdate[] = []
   const ctx = createCtx(root, tasks)
   const deps: ExamSplitDeps = {
     workerPath: 'fake-worker.js',
+    ocrWorkerPath: 'fake-ocr-worker.js',
     checkReadable: async () => undefined,
     checkExclusive: async () => undefined,
     run: async (options) => {
@@ -70,10 +79,16 @@ function createHarness(overrides: Partial<ExamSplitDeps> = {}): Harness {
       options.onUpdate?.({ kind: 'progress', stage: 'load', current: 1, total: 1 })
       return { outputPaths: ['out.pdf'] } satisfies OpResult
     },
+    runOcr: async (options) => {
+      ocrCalls.push(options)
+      options.onUpdate?.({ kind: 'progress', stage: 'detect', current: 1, total: 1 })
+      return { pages: [] } satisfies OcrTaskResult
+    },
+    ocrBinariesDir: async () => '/fake/binaries/ocr',
     ...overrides
   }
   registerWith(ctx, deps)
-  return { tasks, calls, updates }
+  return { tasks, calls, ocrCalls, updates }
 }
 
 async function runTask(
@@ -104,10 +119,18 @@ function makeInput(root: string, name = '卷.pdf'): string {
   return path
 }
 
-describe('registerWith 五通道（spec §2 任务表）', () => {
-  it('注册 split/merge/delete/rotate/crop 五个任务', () => {
+describe('registerWith 七通道（spec §2 任务表 / §10.4 IPC）', () => {
+  it('注册 split/merge/delete/rotate/crop/ocr-detect/ocr-export 七个任务', () => {
     const harness = createHarness()
-    expect([...harness.tasks.keys()].sort()).toEqual(['crop', 'delete', 'merge', 'rotate', 'split'])
+    expect([...harness.tasks.keys()].sort()).toEqual([
+      'crop',
+      'delete',
+      'merge',
+      'ocr-detect',
+      'ocr-export',
+      'rotate',
+      'split'
+    ])
   })
 
   it('split：合法入参 → 校验+预检+转发 worker，进度透传', async () => {
@@ -224,6 +247,80 @@ describe('registerWith 五通道（spec §2 任务表）', () => {
     })
     expect(error).toBe(structured)
   })
+
+  it('ocr-detect：预检 → 模型预检 → 转发 OCR worker（binariesDir 注入，进度透传）', async () => {
+    const harness = createHarness()
+    const input = join(roots[0]!, '卷.png')
+    writeFileSync(input, 'png')
+    const { result, error } = await runTask(harness, 'ocr-detect', { inputPath: input })
+    expect(error).toBeUndefined()
+    expect(result).toEqual({ pages: [] })
+    expect(harness.ocrCalls).toHaveLength(1)
+    const options = harness.ocrCalls[0]!
+    expect(options.workerPath).toBe('fake-ocr-worker.js')
+    expect(options.timeoutMs).toBe(OP_TIMEOUT_MS)
+    expect(options.payload).toEqual({
+      op: 'detect',
+      payload: { inputPath: input },
+      binariesDir: '/fake/binaries/ocr'
+    })
+    expect(harness.updates.at(-1)).toMatchObject({ kind: 'progress', stage: 'detect' })
+  })
+
+  it('ocr-detect：模型预检失败 → MODEL_MISSING 快速失败，不进 worker', async () => {
+    const missing = { code: 'MODEL_MISSING', message: '识别模型缺失' }
+    const harness = createHarness({ ocrBinariesDir: async () => Promise.reject(missing) })
+    const { error } = await runTask(harness, 'ocr-detect', {
+      inputPath: join(roots[0]!, '卷.png')
+    })
+    expect(error).toBe(missing)
+    expect(harness.ocrCalls).toHaveLength(0)
+  })
+
+  it('ocr-export：预检 + 转发（不预检模型，export 不需模型）', async () => {
+    const harness = createHarness({
+      ocrBinariesDir: async () => {
+        throw new Error('export 不应触碰模型预检')
+      }
+    })
+    const input = join(roots[0]!, '卷.pdf')
+    writeFileSync(input, '%PDF-1.7')
+    const payload = {
+      inputPath: input,
+      startNumber: 1,
+      exportPdf: true,
+      pages: [
+        {
+          pageNumber: 1,
+          width: 100,
+          height: 200,
+          regions: [{ start: 0, end: 0.5, lines: [] }]
+        }
+      ]
+    }
+    const { error } = await runTask(harness, 'ocr-export', payload)
+    expect(error).toBeUndefined()
+    expect(harness.ocrCalls[0]?.payload).toEqual({ op: 'export', payload })
+  })
+
+  it('ocr-export：无题区 → INVALID_PAYLOAD（zod 拒绝，不进 worker）', async () => {
+    const harness = createHarness()
+    const { error } = await runTask(harness, 'ocr-export', {
+      inputPath: join(roots[0]!, '卷.png'),
+      startNumber: 1,
+      exportPdf: false,
+      pages: [{ pageNumber: 1, width: 10, height: 10, regions: [] }]
+    })
+    expect(error).toMatchObject({ code: 'INVALID_PAYLOAD' })
+    expect(harness.ocrCalls).toHaveLength(0)
+  })
+
+  it('ocr-detect：输入扩展名非白名单 → INVALID_PAYLOAD', async () => {
+    const harness = createHarness()
+    const { error } = await runTask(harness, 'ocr-detect', { inputPath: 'a.txt' })
+    expect(error).toMatchObject({ code: 'INVALID_PAYLOAD' })
+    expect(harness.ocrCalls).toHaveLength(0)
+  })
 })
 
 describe('mapWorkerError（spec §4/§5）', () => {
@@ -249,9 +346,30 @@ describe('mapWorkerError（spec §4/§5）', () => {
   })
 })
 
+describe('mapOcrWorkerError（spec §10.5）', () => {
+  it('超时 → OP_TIMEOUT', () => {
+    expect(mapOcrWorkerError(new TaskTimeoutError(120_000))).toMatchObject({
+      code: 'OP_TIMEOUT'
+    })
+  })
+
+  it('崩溃 → OCR_FAILED，detail 取 cause 尾部', () => {
+    const err = mapOcrWorkerError(
+      new TaskCrashError('worker exited', new Error('y'.repeat(400) + 'ocr-tail'))
+    )
+    expect(err).toMatchObject({ code: 'OCR_FAILED' })
+    expect((err as { detail?: string }).detail?.endsWith('ocr-tail')).toBe(true)
+  })
+
+  it('结构化错误原样返回（MODEL_MISSING/NO_REGIONS 等透传）', () => {
+    const structured = { code: 'MODEL_MISSING', message: '识别模型缺失' }
+    expect(mapOcrWorkerError(structured)).toBe(structured)
+  })
+})
+
 describe('createNodeDeps（生产实现）', () => {
   it('checkReadable：存在可读通过，缺失拒绝', async () => {
-    const deps = createNodeDeps()
+    const deps = createNodeDeps(tmpdir())
     const path = join(roots[0] ?? mkdtempSync(join(tmpdir(), 'lumin-exam-dep-')), 'ok.pdf')
     if (roots[0] === undefined) roots.push(path)
     writeFileSync(path, 'x')
@@ -262,7 +380,7 @@ describe('createNodeDeps（生产实现）', () => {
   })
 
   it('checkExclusive：正常文件可打开关闭', async () => {
-    const deps = createNodeDeps()
+    const deps = createNodeDeps(tmpdir())
     const root = mkdtempSync(join(tmpdir(), 'lumin-exam-ex-'))
     roots.push(root)
     const path = join(root, 'a.pdf')
@@ -271,7 +389,7 @@ describe('createNodeDeps（生产实现）', () => {
   })
 
   it('run：转发 runTask（fixture worker 协议回 done）', async () => {
-    const deps = createNodeDeps()
+    const deps = createNodeDeps(tmpdir())
     const workerPath = fileURLToPath(
       new URL('../../../node-kit/fixtures/worker-protocol.mjs', import.meta.url)
     )
@@ -282,14 +400,36 @@ describe('createNodeDeps（生产实现）', () => {
     })
     expect(result).toBeNull()
   })
+
+  it('ocrBinariesDir：模型目录不存在 → MODEL_MISSING（spec §10.5）', async () => {
+    const deps = createNodeDeps(join(tmpdir(), 'lumin-no-such-binaries'))
+    await expect(deps.ocrBinariesDir()).rejects.toMatchObject({ code: 'MODEL_MISSING' })
+  })
+
+  it('ocrBinariesDir：真实模型齐全 → 返回 {binaries}/ocr 目录', async () => {
+    const binaries = fileURLToPath(new URL('../../../../binaries', import.meta.url))
+    // binaries/ 为 gitignore 拉取物（AGENTS §3）；未拉取的环境跳过
+    if (!existsSync(join(binaries, 'ocr'))) return
+    const deps = createNodeDeps(binaries)
+    const dir = await deps.ocrBinariesDir()
+    expect(dir).toBe(join(binaries, 'ocr'))
+  })
 })
 
 describe('registerMain（生产入口）', () => {
-  it('组装生产 deps 并注册五通道', () => {
+  it('组装生产 deps 并注册七通道', () => {
     const root = mkdtempSync(join(tmpdir(), 'lumin-exam-reg-'))
     roots.push(root)
     const tasks = new Map<string, TaskHandler<unknown, unknown>>()
     registerMain(createCtx(root, tasks))
-    expect([...tasks.keys()].sort()).toEqual(['crop', 'delete', 'merge', 'rotate', 'split'])
+    expect([...tasks.keys()].sort()).toEqual([
+      'crop',
+      'delete',
+      'merge',
+      'ocr-detect',
+      'ocr-export',
+      'rotate',
+      'split'
+    ])
   })
 })

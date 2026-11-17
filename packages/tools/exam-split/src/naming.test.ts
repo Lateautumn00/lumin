@@ -3,11 +3,14 @@ import {
   cropDesiredPath,
   deleteDesiredPath,
   mergeDesiredPath,
+  ocrPdfDesiredPath,
+  ocrPngDesiredPath,
   rotateDesiredPath,
   splitDesiredPaths
 } from './naming'
 
 const INPUT = 'C:/试卷/2026 期末卷.pdf'
+const IMAGE = 'C:/试卷/扫描件.JPG'
 
 describe('naming（spec §7.2 命名模板）', () => {
   it('拆分：{原名}_p{标签}.pdf，每区间一个产物', () => {
@@ -35,6 +38,17 @@ describe('naming（spec §7.2 命名模板）', () => {
 
   it('裁剪：{原名}_裁剪.pdf', () => {
     expect(cropDesiredPath(INPUT)).toBe('C:/试卷/2026 期末卷_裁剪.pdf')
+  })
+
+  it('OCR 每题 PNG：{原名}_题{n}.png（PDF 与图片输入同口径）', () => {
+    expect(ocrPngDesiredPath(INPUT, 1)).toBe('C:/试卷/2026 期末卷_题1.png')
+    expect(ocrPngDesiredPath(INPUT, 42)).toBe('C:/试卷/2026 期末卷_题42.png')
+    expect(ocrPngDesiredPath(IMAGE, 3)).toBe('C:/试卷/扫描件_题3.png')
+  })
+
+  it('OCR 合成 PDF：{原名}_切题.pdf', () => {
+    expect(ocrPdfDesiredPath(INPUT)).toBe('C:/试卷/2026 期末卷_切题.pdf')
+    expect(ocrPdfDesiredPath(IMAGE)).toBe('C:/试卷/扫描件_切题.pdf')
   })
 
   it('无扩展名路径原样保留；空分组标签为空（边界分支）', () => {
