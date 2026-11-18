@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { createSettingsService } from './settings'
@@ -75,5 +75,108 @@ describe('createSettingsService', () => {
     expect(entries.filter((name) => name.endsWith('.tmp'))).toEqual([])
     const raw = await readFile(file, 'utf8')
     expect(JSON.parse(raw)).toEqual({ k: { nested: true } })
+  })
+
+  it('并发 set 不丢写、不抛错（Windows rename EPERM 竞态，R2.6 实测）', async () => {
+    const file = await tempFile()
+    const service = createSettingsService(file)
+    await service.set('warm', 1) // 先落盘一次，使后续并发 rename 命中已存在目标
+    const results = await Promise.allSettled(
+      Array.from({ length: 50 }, (_, i) => service.set(`k${i}`, i))
+    )
+    const rejected = results.filter((r) => r.status === 'rejected')
+    expect(rejected).toEqual([])
+    // 全部写入落盘（队列串行，最后一致）
+    for (let i = 0; i < 50; i++) {
+      expect(await service.get(`k${i}`, -1)).toBe(i)
+    }
+  })
+
+  it('rename 瞬时占用（EPERM）重试后成功', async () => {
+    const file = await tempFile()
+    const service = createSettingsService(file)
+    await service.set('a', 1)
+
+    let renameCalls = 0
+    const retrying = createSettingsService(file, {
+      renameImpl: async (from, to) => {
+        renameCalls++
+        if (renameCalls === 1) throw Object.assign(new Error('占用'), { code: 'EPERM' })
+        return rename(from, to)
+      }
+    })
+    await retrying.set('b', 2)
+    expect(renameCalls).toBe(2)
+    expect(await retrying.get('b', 0)).toBe(2)
+  })
+
+  it('rename 瞬时占用重试上限 5 次后直抛', async () => {
+    const file = await tempFile()
+    let renameCalls = 0
+    const service = createSettingsService(file, {
+      renameImpl: async () => {
+        renameCalls++
+        throw Object.assign(new Error('一直占用'), { code: 'EPERM' })
+      }
+    })
+    await expect(service.set('a', 1)).rejects.toMatchObject({ code: 'EPERM' })
+    expect(renameCalls).toBe(5)
+  })
+
+  it('rename 非瞬时错误（ENOENT）直抛不重试', async () => {
+    const file = await tempFile()
+    let renameCalls = 0
+    const service = createSettingsService(file, {
+      renameImpl: async () => {
+        renameCalls++
+        throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+      }
+    })
+    await expect(service.set('a', 1)).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(renameCalls).toBe(1)
+  })
+
+  it('rename 无 code 的裸错误不重试', async () => {
+    const file = await tempFile()
+    let renameCalls = 0
+    const service = createSettingsService(file, {
+      renameImpl: async () => {
+        renameCalls++
+        throw new Error('裸错误')
+      }
+    })
+    await expect(service.set('a', 1)).rejects.toThrow('裸错误')
+    expect(renameCalls).toBe(1)
+  })
+
+  it('EACCES 同样走瞬时重试', async () => {
+    const file = await tempFile()
+    const service = createSettingsService(file)
+    await service.set('a', 1)
+    let renameCalls = 0
+    const retrying = createSettingsService(file, {
+      renameImpl: async (from, to) => {
+        renameCalls++
+        if (renameCalls === 1) throw Object.assign(new Error('EACCES'), { code: 'EACCES' })
+        return rename(from, to)
+      }
+    })
+    await retrying.set('c', 3)
+    expect(renameCalls).toBe(2)
+    expect(await retrying.get('c', 0)).toBe(3)
+  })
+
+  it('写链失败不断链：失败后下一次 set 仍落盘', async () => {
+    const file = await tempFile()
+    const service = createSettingsService(file)
+    const service2 = createSettingsService(file, {
+      renameImpl: async () => {
+        throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+      }
+    })
+    await expect(service2.set('bad', 0)).rejects.toMatchObject({ code: 'ENOENT' })
+    await service.set('good', 42) // 失败后的写入仍入队并成功
+    expect(await service.get('good', 0)).toBe(42)
+    expect(await service.get('bad', -1)).toBe(-1) // 失败写入未落盘
   })
 })

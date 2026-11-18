@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UpdateEvent } from '@lumin/shared'
 
-const { appMock, updaterMock, listeners } = vi.hoisted(() => {
+const { updaterMock, listeners } = vi.hoisted(() => {
   const listeners = new Map<string, (...args: unknown[]) => void>()
   return {
     listeners,
-    appMock: { isPackaged: false },
     updaterMock: {
       autoDownload: false,
       autoInstallOnAppQuit: false,
@@ -19,7 +18,7 @@ const { appMock, updaterMock, listeners } = vi.hoisted(() => {
   }
 })
 
-vi.mock('electron', () => ({ app: appMock }))
+vi.mock('electron', () => ({ app: {} }))
 vi.mock('electron-updater', () => ({ autoUpdater: updaterMock }))
 
 import { createUpdaterService } from './updater'
@@ -32,7 +31,6 @@ function fire(event: string, ...args: unknown[]): void {
 
 beforeEach(() => {
   listeners.clear()
-  appMock.isPackaged = false
   updaterMock.on.mockClear()
   updaterMock.checkForUpdates.mockReset()
   updaterMock.logger = undefined
@@ -41,11 +39,28 @@ beforeEach(() => {
 describe('createUpdaterService', () => {
   it('dev 模式：跳过检查且不发事件', async () => {
     const events: UpdateEvent[] = []
-    const service = createUpdaterService({ onEvent: (event) => events.push(event) })
+    const service = createUpdaterService({ onEvent: (event) => events.push(event), isDev: true })
 
     expect(await service.check()).toEqual({ checked: false, reason: 'dev-mode' })
     expect(updaterMock.checkForUpdates).not.toHaveBeenCalled()
     expect(events).toEqual([])
+  })
+
+  it('缺省 isDev 时按 process.defaultApp 判定（Electron 45 isPackaged 不可靠）', async () => {
+    const proc = process as unknown as { defaultApp?: boolean }
+    const saved = proc.defaultApp
+    try {
+      proc.defaultApp = true
+      const dev = createUpdaterService({ onEvent: () => undefined })
+      expect(await dev.check()).toEqual({ checked: false, reason: 'dev-mode' })
+
+      proc.defaultApp = undefined
+      const packaged = createUpdaterService({ onEvent: () => undefined })
+      updaterMock.checkForUpdates.mockResolvedValue({ updateInfo: { version: '9.9.9' } })
+      expect(await packaged.check()).toEqual({ checked: true, version: '9.9.9' })
+    } finally {
+      proc.defaultApp = saved
+    }
   })
 
   it('注册 6 类更新事件监听并透传为 UpdateEvent', () => {
@@ -71,9 +86,8 @@ describe('createUpdaterService', () => {
   })
 
   it('打包模式检查成功：checked + 版本号', async () => {
-    appMock.isPackaged = true
     updaterMock.checkForUpdates.mockResolvedValue({ updateInfo: { version: '1.2.3' } })
-    const service = createUpdaterService({ onEvent: () => undefined })
+    const service = createUpdaterService({ onEvent: () => undefined, isDev: false })
 
     expect(await service.check()).toEqual({ checked: true, version: '1.2.3' })
     expect(updaterMock.autoDownload).toBe(true)
@@ -81,10 +95,9 @@ describe('createUpdaterService', () => {
   })
 
   it('检查抛错：check-failed（错误同时经 error 事件推送）', async () => {
-    appMock.isPackaged = true
     updaterMock.checkForUpdates.mockRejectedValue(new Error('offline'))
     const events: UpdateEvent[] = []
-    const service = createUpdaterService({ onEvent: (event) => events.push(event) })
+    const service = createUpdaterService({ onEvent: (event) => events.push(event), isDev: false })
 
     expect(await service.check()).toEqual({ checked: false, reason: 'check-failed' })
   })
@@ -96,13 +109,12 @@ describe('createUpdaterService', () => {
   })
 
   it('install：打包模式 quitAndInstall；dev 模式 no-op', () => {
-    const packaged = createUpdaterService({ onEvent: () => undefined })
-    appMock.isPackaged = true
+    const packaged = createUpdaterService({ onEvent: () => undefined, isDev: false })
     packaged.install()
     expect(updaterMock.quitAndInstall).toHaveBeenCalledTimes(1)
 
-    appMock.isPackaged = false
-    packaged.install()
+    const dev = createUpdaterService({ onEvent: () => undefined, isDev: true })
+    dev.install()
     expect(updaterMock.quitAndInstall).toHaveBeenCalledTimes(1)
   })
 })

@@ -257,6 +257,9 @@ importers:
       '@lumin/tool-example':
         specifier: workspace:*
         version: link:../../packages/tools/example
+      '@lumin/tool-image-toolbox':
+        specifier: workspace:*
+        version: link:../../packages/tools/image-toolbox
       '@lumin/tool-unit-converter':
         specifier: workspace:*
         version: link:../../packages/tools/unit-converter
@@ -427,6 +430,33 @@ importers:
       '@lumin/shared':
         specifier: workspace:*
         version: link:../../shared
+      naive-ui:
+        specifier: 2.45.3
+        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
+      vue:
+        specifier: 3.5.45
+        version: 3.5.45(typescript@6.0.3)
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
+  packages/tools/image-toolbox:
+    dependencies:
+      '@lucide/vue':
+        specifier: 1.72.0
+        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
+      '@lumin/node-kit':
+        specifier: workspace:*
+        version: link:../../node-kit
+      '@lumin/plugin-api':
+        specifier: workspace:*
+        version: link:../../plugin-api
+      '@lumin/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@lumin/ui':
+        specifier: workspace:*
+        version: link:../../ui
       naive-ui:
         specifier: 2.45.3
         version: 2.45.3(vue@3.5.45(typescript@6.0.3))

@@ -1,4 +1,3 @@
-import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { toStructuredError, type UpdateEvent } from '@lumin/shared'
 
@@ -17,6 +16,8 @@ export interface UpdaterLogger {
 export interface UpdaterDeps {
   onEvent: (event: UpdateEvent) => void
   logger?: UpdaterLogger
+  /** dev 运行态判定（可注入；缺省取 process.defaultApp——Electron 45 起 `electron .` 的 isPackaged 恒为 true，不可再用） */
+  isDev?: boolean
 }
 
 export interface UpdaterService {
@@ -25,6 +26,9 @@ export interface UpdaterService {
 }
 
 export function createUpdaterService(deps: UpdaterDeps): UpdaterService {
+  // dev 判定单一真相源：Electron 主进程经默认入口（electron . / Playwright e2e）加载时
+  // process.defaultApp === true，打包安装后为 undefined（electron.d.ts 官方语义）
+  const isDev = deps.isDev ?? process.defaultApp === true
   if (deps.logger !== undefined) {
     autoUpdater.logger = deps.logger
   }
@@ -53,7 +57,7 @@ export function createUpdaterService(deps: UpdaterDeps): UpdaterService {
 
   return {
     async check() {
-      if (!app.isPackaged) return { checked: false, reason: 'dev-mode' }
+      if (isDev) return { checked: false, reason: 'dev-mode' }
       try {
         const result = await autoUpdater.checkForUpdates()
         return { checked: true, version: result?.updateInfo?.version }
@@ -62,7 +66,7 @@ export function createUpdaterService(deps: UpdaterDeps): UpdaterService {
       }
     },
     install() {
-      if (!app.isPackaged) return
+      if (isDev) return
       autoUpdater.quitAndInstall(true, true)
     }
   }

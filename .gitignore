@@ -16,3 +16,4 @@ test-results/
 .claude/*
 .gitee/*
 .trae/*
+coverage-dump.txt

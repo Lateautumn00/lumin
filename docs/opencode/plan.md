@@ -227,6 +227,14 @@ lumin/
 >
 > **平台范围**：一期验收 B站 + YouTube；抖音等国内平台一期直连试探一次，成功记录、失败标注二期；不承诺平台可用性，链接失效不视为缺陷。② **引擎保鲜口径**：版本随包钉死（fetch 脚本固定 URL+SHA256），设置页「检查更新」仅网络对比提示，不做运行时动态下载（守 R7）。③ 字段级清单 `docs/spec/video-download.md` 已定稿（含暂停 = cancel + `.part` 续传的零契约方案、历史字段、错误码 VD_*）。
 
+### 4.6 图片工具箱（M6，2026-11-18 R8 登记）
+
+- **决策（用户拍板 2026-11-18）**：下一个功能 = 图片批量压缩/格式转换/缩放（一工具三 Tab）；引擎 = **复用 M4 的 ffmpeg.exe/ffprobe.exe**（零新增依赖与二进制）；格式矩阵**含 AVIF**（libaom-av1 单张 5–30s，UI 标注）；输出冲突**自动重命名**；GIF **转 webp 保留动画**（其他格式取首帧并标注）
+- 通道：`image-toolbox:probe`（sync，ffprobe 元信息）+ `image-toolbox:process`（task，批量串行 + 可取消）；编码参数映射/缩放求解/输出命名/冲突重命名全部纯函数（≥80% 覆盖）
+- 字段级清单：`docs/spec/image-toolbox.md`（已定稿）；错误码 `IT_*`；settings 仅记忆输出目录，一期无历史列表
+- 依据实测：gyan.dev essentials 6.1.1 编码器 libwebp/png/mjpeg/libaom-av1 与 muxer avif/webp/image2 全部可用
+- **验收**：gif→webp 帧数一致、缩放四模式尺寸断言、冲突重命名、单张 jpg < 1s（avif 除外）、R2 八类 smoke、gate 全绿
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -275,6 +283,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M3b v0.3b** | OCR 切题（PP-OCR wasm+预览微调+导出）                                                                                                                                                                              | **10 份样卷命中 ≥90% 或微调 ≤1 次/题；≤3s/页（R1）**                 | 4–6 天 |
 | **M4 v0.4**   | 短视频下载（fetch-binaries+队列+进度/暂停/历史+自更新+免责）                                                                                                                                                       | B站/YouTube 真实下载成功；**免责文案定稿（R8）**                     | 5–8 天 |
 | **M5 发布**   | 更新端到端验证；Gitee Release 首发；README/许可/SmartScreen 指引                                                                                                                                                   | 旧版自动升新版                                                       | 2–3 天 |
+| **M6 v0.5**   | 图片工具箱（ffmpeg 复用：压缩/转换/缩放三 Tab，含 AVIF，gif→webp 动画）                                                                                                                                            | §4.6 验收；smoke 8 类全过（R2）；**字段级清单先行（R8）**            | 3–5 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

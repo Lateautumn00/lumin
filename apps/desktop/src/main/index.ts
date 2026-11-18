@@ -113,7 +113,8 @@ async function bootstrap(): Promise<void> {
       // 外部二进制/模型根：按「resources/binaries 是否存在」探测——打包态由
       // extraResources 保证存在；回落开发态仓库根 binaries/（fetch-binaries.mjs
       // 落盘处；__dirname = out/main）。不依赖 app.isPackaged：pnpm 的 .pnpm 目录
-      // 布局会让 Electron 误判 isPackaged=true（e2e 实测），该标志仅供 CSP/updater。
+      // 布局与 Electron 45 的 `electron .` 语义都会让 isPackaged 误判 true，
+      // updater 的 dev 判定已改用 process.defaultApp（见 services/updater.ts）。
       binaries: existsSync(join(process.resourcesPath, 'binaries'))
         ? join(process.resourcesPath, 'binaries')
         : join(__dirname, '../../../../binaries')
