@@ -8,6 +8,7 @@ import {
   ocrDetectResultSchema,
   ocrExportPayloadSchema,
   ocrRegionSchema,
+  ocrRotationSchema,
   rotatePayloadSchema,
   splitPayloadSchema
 } from './schema'
@@ -96,6 +97,51 @@ describe('OCR 输入白名单（spec §10.1）', () => {
     for (const path of ['a.docx', 'b.gif', 'c', 'd.png.txt']) {
       expect(OCR_INPUT_RE.test(path)).toBe(false)
     }
+  })
+})
+
+describe('ocrRotationSchema（spec §10.12）', () => {
+  it('仅接受 0/90/180/270 四个顺时针角度', () => {
+    for (const value of [0, 90, 180, 270]) {
+      expect(ocrRotationSchema.safeParse(value).success).toBe(true)
+    }
+  })
+
+  it('拒绝非四分之一转与字符串', () => {
+    for (const value of [45, 360, -90, 180.5, '90']) {
+      expect(ocrRotationSchema.safeParse(value).success).toBe(false)
+    }
+  })
+
+  it('detect/export 入参缺省 rotation = 0（老载荷兼容）', () => {
+    const detect = ocrDetectPayloadSchema.parse({ inputPath: 'C:/卷/一.png' })
+    expect(detect.rotation).toBe(0)
+    expect(
+      ocrDetectPayloadSchema.safeParse({ inputPath: 'C:/卷/一.png', rotation: 90 }).success
+    ).toBe(true)
+    expect(
+      ocrDetectPayloadSchema.safeParse({ inputPath: 'C:/卷/一.png', rotation: 45 }).success
+    ).toBe(false)
+    const exported = ocrExportPayloadSchema.parse({
+      inputPath: 'C:/卷/一.png',
+      startNumber: 1,
+      exportPdf: false,
+      pages: [
+        { pageNumber: 1, width: 100, height: 200, regions: [{ start: 0, end: 1, lines: [] }] }
+      ]
+    })
+    expect(exported.rotation).toBe(0)
+    expect(
+      ocrExportPayloadSchema.safeParse({
+        inputPath: 'C:/卷/一.png',
+        rotation: 180,
+        startNumber: 1,
+        exportPdf: false,
+        pages: [
+          { pageNumber: 1, width: 100, height: 200, regions: [{ start: 0, end: 1, lines: [] }] }
+        ]
+      }).success
+    ).toBe(true)
   })
 })
 

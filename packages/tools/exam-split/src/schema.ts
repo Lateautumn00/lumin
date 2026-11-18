@@ -75,6 +75,19 @@ export type OpResult = z.infer<typeof opResultSchema>
 /** OCR 输入扩展名白名单（spec §10.1：.pdf/.png/.jpg/.jpeg/.webp，大小写不敏感） */
 export const OCR_INPUT_RE = /\.(pdf|png|jpe?g|webp)$/i
 
+/**
+ * 页面旋转（顺时针 90° 步进，spec §10.12）：识别与导出同一变换，region 坐标无需换算。
+ * 缺省 0（老载荷兼容）。
+ */
+export const ocrRotationSchema = z.union([
+  z.literal(0),
+  z.literal(90),
+  z.literal(180),
+  z.literal(270)
+])
+
+export type OcrRotation = z.infer<typeof ocrRotationSchema>
+
 const ocrPathSchema = z.string().min(1).regex(OCR_INPUT_RE, '仅支持 .pdf 或图片文件')
 
 /** 归一化 0–1 比例坐标（同 M3a cropBox 口径；导出时按各页实际像素换算，spec §10.4） */
@@ -128,7 +141,8 @@ export type OcrPage = z.infer<typeof ocrPageSchema>
 
 /** `exam-split:ocr-detect` 入参（spec §10.4） */
 export const ocrDetectPayloadSchema = z.object({
-  inputPath: ocrPathSchema
+  inputPath: ocrPathSchema,
+  rotation: ocrRotationSchema.default(0)
 })
 
 export type OcrDetectPayload = z.infer<typeof ocrDetectPayloadSchema>
@@ -144,6 +158,7 @@ export type OcrDetectResult = z.infer<typeof ocrDetectResultSchema>
 export const ocrExportPayloadSchema = z
   .object({
     inputPath: ocrPathSchema,
+    rotation: ocrRotationSchema.default(0),
     startNumber: z.number().int().min(1).max(9999),
     exportPdf: z.boolean(),
     pages: z.array(ocrPageSchema).min(1, '至少需要一页边界')

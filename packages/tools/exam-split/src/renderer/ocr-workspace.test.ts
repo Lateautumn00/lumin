@@ -51,4 +51,46 @@ describe('createOcrWorkspace（OCR Tab 共享会话）', () => {
     ws.resetCurrentPage()
     expect(ws.pages.value[0]).toEqual({ pageNumber: 3, width: 893, height: 1263, regions: [] })
   })
+
+  it('rotation：缺省 0，+90/−90 累加并回绕（spec §10.12）', () => {
+    const ws = createOcrWorkspace()
+    expect(ws.rotation.value).toBe(0)
+    ws.rotate(90)
+    expect(ws.rotation.value).toBe(90)
+    ws.rotate(90)
+    expect(ws.rotation.value).toBe(180)
+    ws.rotate(-90)
+    expect(ws.rotation.value).toBe(90)
+    ws.rotate(-90)
+    ws.rotate(-90)
+    expect(ws.rotation.value).toBe(270)
+    ws.rotate(90)
+    expect(ws.rotation.value).toBe(0)
+  })
+
+  it('rotate 是破坏性操作：清空题区/自动结果/手动模式/结果与进度残留', () => {
+    const ws = createOcrWorkspace()
+    const original = page(1, 2)
+    ws.pages.value = [original]
+    ws.detected.value = [original]
+    ws.manualMode.value = true
+    ws.pageNumber.value = 3
+    ws.selected.value = { pageNumber: 1, columnIndex: 0, afterRegion: 1 }
+    ws.activeRegion.value = 0
+    ws.adding.value = true
+    ws.error.value = { code: 'OCR_FAILED', message: '识别失败' }
+    ws.outputPaths.value = ['C:/卷_题1.png']
+    ws.pageSizes.value = { 1: { width: 10, height: 20 } }
+    ws.rotate(90)
+    expect(ws.pages.value).toEqual([])
+    expect(ws.detected.value).toEqual([])
+    expect(ws.manualMode.value).toBe(false)
+    expect(ws.pageNumber.value).toBe(1)
+    expect(ws.selected.value).toBeNull()
+    expect(ws.activeRegion.value).toBeNull()
+    expect(ws.adding.value).toBe(false)
+    expect(ws.error.value).toBeNull()
+    expect(ws.outputPaths.value).toEqual([])
+    expect(ws.pageSizes.value).toEqual({})
+  })
 })

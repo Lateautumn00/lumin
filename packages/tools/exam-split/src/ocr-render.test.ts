@@ -11,6 +11,7 @@ import {
   encodePng,
   ensureCjkFont,
   renderOcrInput,
+  rotatedSize,
   type RenderOptions
 } from './ocr-render'
 import type { RgbaImage } from './ocr-preproc'
@@ -147,6 +148,22 @@ describe('renderOcrInput · 图片（spec §10.1）', () => {
     expect(pages[0]?.image.data[3]).toBe(255)
   })
 
+  it('图片旋转 90°/270° → 宽高互换且白底不透明', async () => {
+    const path = makePng('侧拍.png')
+    for (const rotation of [90, 270] as const) {
+      const [page] = await renderOcrInput(path, { rotation })
+      expect(page?.width).toBe(80)
+      expect(page?.height).toBe(120)
+      expect(page?.image.data[3]).toBe(255)
+      for (const rgba of samplePixels(page!.image)) {
+        expect(rgba[3]).toBe(255)
+      }
+    }
+    const [upright] = await renderOcrInput(path, { rotation: 180 })
+    expect(upright?.width).toBe(120)
+    expect(upright?.height).toBe(80)
+  })
+
   it('透明 PNG → 白底兜底（destination-over 补白，不落黑底）', async () => {
     const path = makePng('透明.png', true)
     const pages = await renderOcrInput(path)
@@ -165,6 +182,23 @@ describe('renderOcrInput · 图片（spec §10.1）', () => {
 
   it('图片不存在 → PDF_NOT_FOUND（ENOENT 统一归类）', async () => {
     await expectCode(() => renderOcrInput(join(tempRoot(), '不存在.jpg')), 'PDF_NOT_FOUND')
+  })
+})
+
+describe('rotatedSize / 旋转渲染（spec §10.12）', () => {
+  it('90/270 交换宽高，0/180 保持', () => {
+    expect(rotatedSize(120, 80, 0)).toEqual({ width: 120, height: 80 })
+    expect(rotatedSize(120, 80, 90)).toEqual({ width: 80, height: 120 })
+    expect(rotatedSize(120, 80, 180)).toEqual({ width: 120, height: 80 })
+    expect(rotatedSize(120, 80, 270)).toEqual({ width: 80, height: 120 })
+  })
+
+  it('PDF 旋转 90° → 渲染尺寸宽高互换（叠加页面固有旋转）', async () => {
+    const [page] = await renderOcrInput(THREE_PAGE, { pageNumbers: [1], rotation: 90 })
+    expect(page?.width).toBe(Math.ceil(842 * PDF_RENDER_SCALE))
+    expect(page?.height).toBe(Math.ceil(595 * PDF_RENDER_SCALE))
+    expect(page?.image.width).toBe(page?.width)
+    expect(page?.image.height).toBe(page?.height)
   })
 })
 

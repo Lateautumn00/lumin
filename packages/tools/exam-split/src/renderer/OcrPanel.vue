@@ -172,9 +172,12 @@ function onEvent(event: TaskEvent): void {
 }
 
 async function submit(kind: 'detect' | 'export'): Promise<SubmitResult> {
-  if (kind === 'detect') return submitOcrDetect({ inputPath: path.value })
+  if (kind === 'detect') {
+    return submitOcrDetect({ inputPath: path.value, rotation: ws.rotation.value })
+  }
   const payload: OcrExportPayload = {
     inputPath: path.value,
+    rotation: ws.rotation.value,
     startNumber: startNumber.value,
     exportPdf: exportPdf.value,
     pages: toExportPages(pages.value)
@@ -237,6 +240,7 @@ function resetSession(): void {
 
 function onSelect(payload: { file: File; path: string }): void {
   resetSession()
+  ws.rotation.value = 0
   ws.inputFile.value = payload.file
   ws.name.value = payload.file.name
   ws.path.value = payload.path
@@ -246,6 +250,7 @@ function onSelect(payload: { file: File; path: string }): void {
 
 function resetInput(): void {
   resetSession()
+  ws.rotation.value = 0
   ws.invalidHint.value = ''
   ws.previewError.value = null
   ws.inputFile.value = null

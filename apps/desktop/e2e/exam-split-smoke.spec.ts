@@ -462,8 +462,49 @@ async function makeSampleImage(filePath: string): Promise<void> {
   fs.writeFileSync(filePath, await canvas.encode('png'))
 }
 
-/** IPC 单任务（done/error 二选一） */
-async function runTask(
+/** 顺时针 90° 旋转 PNG（模拟手机侧拍；spec §10.12） */
+async function makeSidewaysImage(sourcePath: string, targetPath: string): Promise<void> {
+  const { createCanvas, loadImage } = await import('@napi-rs/canvas')
+  const image = await loadImage(fs.readFileSync(sourcePath))
+  const canvas = createCanvas(image.height, image.width)
+  const ctx = canvas.getContext('2d')
+  ctx.translate(canvas.width / 2, canvas.height / 2)
+  ctx.rotate(Math.PI / 2)
+  ctx.drawImage(image, -image.width / 2, -image.height / 2)
+  fs.writeFileSync(targetPath, await canvas.encode('png'))
+}
+
+/** 整本摊开的跨页照（2000×1400：左 3 题、右 2 题、页脚跨书脊；spec §10.12） */
+async function makeSpreadImage(filePath: string): Promise<void> {
+  const { createCanvas, GlobalFonts } = await import('@napi-rs/canvas')
+  if (fs.existsSync('C:\\Windows\\Fonts\\msyh.ttc')) {
+    GlobalFonts.registerFromPath('C:\\Windows\\Fonts\\msyh.ttc', 'Microsoft YaHei')
+  }
+  const canvas = createCanvas(2000, 1400)
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, 2000, 1400)
+  ctx.fillStyle = '#111111'
+  ctx.font = '52px "Microsoft YaHei", sans-serif'
+  const left = [
+    '1、下列各数中最小的是（  ）',
+    '2、计算三加五的结果（  ）',
+    '3、轴对称图形是哪一个（  ）'
+  ]
+  const right = ['1、看拼音写词语（  ）', '2、给加点字注音（  ）']
+  left.forEach((text, index) => ctx.fillText(text, 110, 300 + index * 300))
+  right.forEach((text, index) => ctx.fillText(text, 1120, 300 + index * 300))
+  ctx.font = '40px "Microsoft YaHei", sans-serif'
+  ctx.fillText('一年级语文 第 1 页', 820, 1300)
+  fs.writeFileSync(filePath, await canvas.encode('png'))
+}
+
+/** PNG 像素宽（IHDR 偏移 16；验证导出与识别同一旋转变换） */
+function pngWidth(filePath: string): number {
+  return fs.readFileSync(filePath).readUInt32BE(16)
+}
+
+/** IPC 单任务（done/error 二选一） */ async function runTask(
   page: Awaited<ReturnType<ElectronApplication['firstWindow']>>,
   channel: string,
   payload: unknown
@@ -655,6 +696,108 @@ test.describe('exam-split（OCR 切题 · M3b）冒烟', () => {
       )
       expect(error.code).toBe('CANCELLED')
     } finally {
+      await app.close()
+    }
+  })
+
+  test('页面旋转（spec §10.12）：[左转] 复原侧拍图 → 识别与导出同一旋转', async () => {
+    test.setTimeout(240_000)
+    const { app, page } = await launch()
+    const workDir = makeWorkDir('lumin ocr rotate')
+    try {
+      const upright = path.join(workDir, '卷.png')
+      await makeSampleImage(upright)
+      const sideways = path.join(workDir, '侧拍.png')
+      await makeSidewaysImage(upright, sideways)
+
+      await page.getByRole('link', { name: '试卷切割' }).click()
+      await page.getByRole('tab', { name: 'OCR 切题' }).click()
+      const panel = page.locator('section[aria-label="OCR 切题"]')
+      await panel.locator('input[type="file"]').setInputFiles(sideways)
+      await expect(page.locator('img[alt="当前页预览"]')).toBeVisible({ timeout: 20_000 })
+
+      // 侧拍（顺时针 90°）→ [左转] 270° 复原
+      await page.getByRole('button', { name: '向左旋转 90°' }).click()
+      await expect(page.getByText('旋转 270°')).toBeVisible()
+      await panel.getByRole('button', { name: '开始识别' }).click()
+      await expect(panel.getByText(/共 \d+ 题/)).toBeVisible({ timeout: 120_000 })
+
+      // 同一 rotation：detect 回包尺寸 = 复原后原图尺寸（1600×1200 侧拍 → 1200×1600）
+      const detected = await runTask(page, 'exam-split:ocr-detect', {
+        inputPath: sideways,
+        rotation: 270
+      })
+      expect(detected.error).toBeUndefined()
+      const pages = (detected.result as { pages: { width: number; height: number }[] }).pages
+      expect(pages[0]?.width).toBe(1200)
+      expect(pages[0]?.height).toBe(1600)
+
+      // 导出按旋转后尺寸裁剪：270° 全页宽 1200（未旋转则 1600）
+      const fullPage = (startNumber: number) => ({
+        inputPath: sideways,
+        rotation: 270,
+        startNumber,
+        exportPdf: false,
+        pages: [
+          {
+            pageNumber: 1,
+            width: 1200,
+            height: 1600,
+            regions: [{ start: 0, end: 0.5, lines: [] }]
+          }
+        ]
+      })
+      const rotatedExport = await runTask(page, 'exam-split:ocr-export', fullPage(1))
+      expect(rotatedExport.error).toBeUndefined()
+      expect(pngWidth(path.join(workDir, '侧拍_题1.png'))).toBe(1200)
+
+      const rawExport = await runTask(page, 'exam-split:ocr-export', {
+        ...fullPage(2),
+        rotation: 0
+      })
+      expect(rawExport.error).toBeUndefined()
+      expect(pngWidth(path.join(workDir, '侧拍_题2.png'))).toBe(1600)
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('跨页展开照（spec §10.12）：书脊=列缝 → 左右两页各自切题、左页在前', async () => {
+    test.setTimeout(180_000)
+    const { app, page } = await launch()
+    const workDir = makeWorkDir('lumin ocr spread')
+    try {
+      const input = path.join(workDir, '跨页.png')
+      await makeSpreadImage(input)
+      const outcome = await runTask(page, 'exam-split:ocr-detect', { inputPath: input })
+      expect(outcome.error).toBeUndefined()
+      const result = outcome.result as {
+        pages: {
+          width: number
+          height: number
+          regions: { start: number; end: number; xStart?: number; xEnd?: number }[]
+        }[]
+      }
+      const first = result.pages[0]
+      expect(first?.width).toBe(2000)
+      const regions = first?.regions ?? []
+      expect(regions.length).toBeGreaterThanOrEqual(4)
+
+      // 所有题区均带列边界（书脊被识别为栏缝）
+      for (const region of regions) expect(region.xStart).toBeDefined()
+
+      const leftRegions = regions.filter((region) => (region.xStart ?? 1) < 0.4)
+      const rightRegions = regions.filter((region) => (region.xStart ?? 0) >= 0.4)
+      expect(leftRegions.length).toBeGreaterThanOrEqual(2)
+      expect(rightRegions.length).toBeGreaterThanOrEqual(2)
+
+      // 编号/列表按页序 → 列序：左页题区全部排在右页之前
+      const lastLeft = regions.lastIndexOf(leftRegions[leftRegions.length - 1]!)
+      const firstRight = regions.indexOf(rightRegions[0]!)
+      expect(lastLeft).toBeLessThan(firstRight)
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
       await app.close()
     }
   })

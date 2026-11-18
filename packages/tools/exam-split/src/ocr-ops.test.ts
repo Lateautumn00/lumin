@@ -68,7 +68,7 @@ function engineOf(sequence: readonly OcrLine[][]): OcrEngine {
 
 /** detect 请求（binariesDir 只在 worker 内使用） */
 function detectRequest(inputPath = '卷.pdf'): OcrWorkerRequest {
-  return { op: 'detect', payload: { inputPath }, binariesDir: '/bin/ocr' }
+  return { op: 'detect', payload: { inputPath, rotation: 0 }, binariesDir: '/bin/ocr' }
 }
 
 /** 单页题区（默认 2 题，全宽纵向对半） */
@@ -89,6 +89,7 @@ function exportRequest(
     op: 'export',
     payload: {
       inputPath,
+      rotation: 0,
       startNumber: 1,
       exportPdf: false,
       pages: [regionPage(1)],

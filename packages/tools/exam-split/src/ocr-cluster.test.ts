@@ -48,7 +48,7 @@ describe('detectColumnSplit', () => {
     ]
     const split = detectColumnSplit(lines)
     expect(split).not.toBeNull()
-    expect(split).toBeCloseTo(0.505, 5)
+    expect(split).toBeCloseTo(0.5, 5)
   })
 
   it('空隙 <3% → 单栏', () => {
@@ -65,7 +65,7 @@ describe('detectColumnSplit', () => {
     expect(detectColumnSplit(lines)).toBeNull()
   })
 
-  it('全宽标题行不参与列检测', () => {
+  it('全宽标题行被覆盖阈值容忍（跨中部但不断栏）', () => {
     const lines = [
       line('一、选择题（每题 5 分，共 30 分）', 0.05, 0.05, 0.9),
       line('1. 左栏题', 0.06, 0.1, 0.38),
@@ -84,6 +84,88 @@ describe('detectColumnSplit', () => {
     expect(
       detectColumnSplit([line('正文甲', 0.06, 0.1, 0.38), line('正文乙', 0.56, 0.1, 0.38)])
     ).toBeNull()
+  })
+})
+
+describe('detectColumnSplit · 跨页展开照（spec §10.12）', () => {
+  /** 整本摊开：左右各一页，书脊窄、页脚行跨缝（旧「最大空隙」口径恒判单栏） */
+  const spread = [
+    line('1. 左页第一题', 0.02, 0.1, 0.44),
+    line('2. 左页第二题', 0.02, 0.35, 0.44),
+    line('3. 左页第三题', 0.02, 0.62, 0.44),
+    line('1. 右页第一题', 0.54, 0.12, 0.44),
+    line('2. 右页第二题', 0.54, 0.4, 0.44),
+    line('一年级语文 第 1 页', 0.4, 0.94, 0.2)
+  ]
+
+  it('页脚跨缝仍判两列，切分落在书脊', () => {
+    const split = detectColumnSplit(spread)
+    expect(split).not.toBeNull()
+    // 书脊真实中点 0.5；页脚（0.4–0.6）跨缝只让谷底收窄，切分仍落在书脊附近
+    expect(split).toBeCloseTo(0.5, 5)
+  })
+
+  it('clusterPage 按列各自聚类：左 3 题 + 右 2 题，按页序→列序编号', () => {
+    const split = detectColumnSplit(spread) ?? 0.5
+    const regions = clusterPage(spread)
+    expect(regions).toHaveLength(5)
+    const left = regions.slice(0, 3)
+    for (const region of left) {
+      expect(region.xStart).toBe(0)
+      expect(region.xEnd).toBeCloseTo(split, 5)
+    }
+    expect(left.map((region) => region.lines[0]?.text)).toEqual([
+      '1. 左页第一题',
+      '2. 左页第二题',
+      '3. 左页第三题'
+    ])
+    const right = regions.slice(3)
+    for (const region of right) {
+      expect(region.xStart).toBeCloseTo(split, 5)
+      expect(region.xEnd).toBe(1)
+    }
+    expect(right.map((region) => region.lines[0]?.text)).toEqual(['1. 右页第一题', '2. 右页第二题'])
+    // 页脚中心 x=0.5 → 归右页末题
+    expect(right[1]?.lines.at(-1)?.text).toBe('一年级语文 第 1 页')
+  })
+
+  it('单栏满宽排版（覆盖率无谷底）→ null', () => {
+    const lines = Array.from({ length: 40 }, (_, index) =>
+      line(`${index + 1}. 正文第 ${index + 1} 行`, 0.05, index / 40, 0.9)
+    )
+    expect(detectColumnSplit(lines)).toBeNull()
+  })
+
+  it('书脊/栏缝窄于 3% → 不判分栏', () => {
+    const lines = [line('1. 左题', 0.02, 0.1, 0.465), line('2. 右题', 0.515, 0.1, 0.465)]
+    expect(detectColumnSplit(lines)).toBeNull()
+  })
+})
+
+describe('detectColumnSplit · 候选排序（spec §10.4 P4）', () => {
+  /**
+   * 34 行（谷底阈值 2 行）：左栏内 8% 宽的配对题留白有 2 行跨过，
+   * 真实栏缝 6% 宽且完全空白。旧「最宽优先」会选内部留白（会裁掉右列内容）。
+   */
+  const lines = (() => {
+    const out = Array.from({ length: 14 }, (_, index) =>
+      line('页边注', 0, 0.1 + index * 0.05, 0.16)
+    )
+    for (let index = 0; index < 6; index++) {
+      out.push(line(`${index + 1}. 左栏题`, 0.2, 0.1 + index * 0.12, 0.16))
+    }
+    out.push(line('跨留白行一', 0.24, 0.06, 0.24), line('跨留白行二', 0.24, 0.88, 0.24))
+    for (let index = 0; index < 6; index++) {
+      out.push(line('左栏正文', 0.44, 0.1 + index * 0.12, 0.11))
+    }
+    for (let index = 0; index < 6; index++) {
+      out.push(line(`${index + 1}. 右栏题`, 0.62, 0.1 + index * 0.12, 0.3))
+    }
+    return out
+  })()
+
+  it('宽而浅的内部留白 vs 窄而空的真实栏缝 → 选后者', () => {
+    expect(detectColumnSplit(lines)).toBeCloseTo(0.59, 5)
   })
 })
 

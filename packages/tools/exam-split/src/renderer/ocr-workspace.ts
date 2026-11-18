@@ -4,7 +4,7 @@
  */
 import { inject, ref, type InjectionKey, type Ref } from 'vue'
 import type { StructuredError } from '@lumin/shared'
-import type { OcrPage } from '../schema'
+import type { OcrPage, OcrRotation } from '../schema'
 import { resetPage, type BoundaryRef } from './ocr-edit'
 
 /** 任务阶段进度（message 由 worker 提供，如「加载识别模型…」） */
@@ -51,6 +51,10 @@ export interface OcrWorkspace {
   /** 各页渲染像素尺寸（预览 meta 回填；手动模式建页） */
   pageSizes: Ref<Record<number, { width: number; height: number }>>
   invalidHint: Ref<string>
+  /** 页面旋转（顺时针 0/90/180/270，spec §10.12；detect 与 export 同值） */
+  rotation: Ref<OcrRotation>
+  /** 旋转 90°（delta = ±90）：破坏性，清空识别结果与题区（需重新识别） */
+  rotate(delta: 90 | -90): void
   /** [重置本页]：自动页恢复自动结果、手动页清空题区（仅当前页） */
   resetCurrentPage(): void
 }
@@ -61,27 +65,47 @@ export function createOcrWorkspace(): OcrWorkspace {
   const pageNumber = ref(1)
   const selected = ref<BoundaryRef | null>(null)
   const activeRegion = ref<number | null>(null)
+  const manualMode = ref(false)
+  const adding = ref(false)
+  const error = ref<StructuredError | null>(null)
+  const outputPaths = ref<string[]>([])
+  const pageSizes = ref<Record<number, { width: number; height: number }>>({})
+  const rotation = ref<OcrRotation>(0)
   return {
     inputFile: ref<File | null>(null),
     path: ref(''),
     name: ref(''),
     pages,
     detected,
-    manualMode: ref(false),
+    manualMode,
     running: ref<'detect' | 'export' | null>(null),
     progress: ref<OcrProgressState | null>(null),
-    error: ref<StructuredError | null>(null),
+    error,
     previewError: ref<StructuredError | null>(null),
-    outputPaths: ref<string[]>([]),
+    outputPaths,
     pageNumber,
     selected,
-    adding: ref(false),
+    adding,
     activeRegion,
     startNumber: ref<number | null>(1),
     exportPdf: ref(true),
     totalPages: ref(0),
-    pageSizes: ref<Record<number, { width: number; height: number }>>({}),
+    pageSizes,
     invalidHint: ref(''),
+    rotation,
+    rotate(delta: 90 | -90): void {
+      rotation.value = ((((rotation.value + delta) % 360) + 360) % 360) as OcrRotation
+      pages.value = []
+      detected.value = []
+      manualMode.value = false
+      selected.value = null
+      activeRegion.value = null
+      adding.value = false
+      error.value = null
+      outputPaths.value = []
+      pageSizes.value = {}
+      pageNumber.value = 1
+    },
     resetCurrentPage(): void {
       pages.value = resetPage(pages.value, detected.value, pageNumber.value)
       selected.value = null

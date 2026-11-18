@@ -17,6 +17,7 @@ import { errnoCode, type StructuredError } from '@lumin/shared'
 import { toolError } from './errors'
 import type { RgbaImage } from './ocr-preproc'
 import { PDF_RENDER_SCALE } from './preview'
+import type { OcrRotation } from './schema'
 
 /** pdfjs 的 DOM 画布类型（结构兼容别名；工具包不引 DOM lib，主进程 typecheck 才通过） */
 type PdfCanvasTarget = Parameters<import('pdfjs-dist').PDFPageProxy['render']>[0]['canvas']
@@ -41,8 +42,19 @@ export interface RenderedPage {
 export interface RenderOptions {
   /** 只渲染指定页（导出按需渲染）；缺省渲染全部页 */
   pageNumbers?: readonly number[]
+  /** 顺时针旋转（0/90/180/270，spec §10.12）；detect 与 export 必须同值 */
+  rotation?: OcrRotation
   /** 渲染进度：已渲染页数 / 总页数（detect 侧 render 阶段 progress） */
   onPage?: (done: number, total: number) => void
+}
+
+/** 旋转后的像素尺寸（90/270 交换宽高；纯函数，覆盖全部分支） */
+export function rotatedSize(
+  width: number,
+  height: number,
+  rotation: OcrRotation
+): { width: number; height: number } {
+  return rotation === 90 || rotation === 270 ? { width: height, height: width } : { width, height }
 }
 
 let fontRegistered = false
@@ -128,7 +140,9 @@ async function renderPdf(inputPath: string, options: RenderOptions): Promise<Ren
         throw toolError('INVALID_PAYLOAD', `页码 ${pageNumber} 超出 1..${total}`)
       }
       const page = await doc.getPage(pageNumber)
-      const viewport = page.getViewport({ scale: PDF_RENDER_SCALE })
+      // 用户旋转叠加页面固有旋转（spec §10.12；pdfjs viewport.rotation 为绝对值）
+      const rotation = (page.rotate + (options.rotation ?? 0)) % 360
+      const viewport = page.getViewport({ scale: PDF_RENDER_SCALE, rotation })
       const width = Math.max(1, Math.ceil(viewport.width))
       const height = Math.max(1, Math.ceil(viewport.height))
       const canvas = createCanvas(width, height)
@@ -176,13 +190,22 @@ async function renderImage(inputPath: string, options: RenderOptions): Promise<R
   } catch (err) {
     throw toolError('OCR_INPUT_INVALID', tail(messageOf(err)))
   }
-  const width = Math.max(1, Math.floor(source.width))
-  const height = Math.max(1, Math.floor(source.height))
+  const rotation = options.rotation ?? 0
+  const naturalWidth = Math.max(1, Math.floor(source.width))
+  const naturalHeight = Math.max(1, Math.floor(source.height))
+  const { width, height } = rotatedSize(naturalWidth, naturalHeight, rotation)
   const canvas = createCanvas(width, height)
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, width, height)
-  ctx.drawImage(source, 0, 0)
+  if (rotation === 0) {
+    ctx.drawImage(source, 0, 0)
+  } else {
+    // 绕画布中心顺时针旋转（canvas 正角为顺时针，y 轴向下）；源图居中绘制
+    ctx.translate(width / 2, height / 2)
+    ctx.rotate((rotation * Math.PI) / 180)
+    ctx.drawImage(source, -naturalWidth / 2, -naturalHeight / 2, naturalWidth, naturalHeight)
+  }
   options.onPage?.(1, 1)
   return [{ pageNumber: 1, width, height, image: ctx.getImageData(0, 0, width, height) }]
 }

@@ -76,7 +76,7 @@ function deps(): OcrDeps {
 function exportRequest(input: string): Parameters<typeof runOcrOp>[0] {
   return {
     op: 'export',
-    payload: { inputPath: input, startNumber: 1, exportPdf: false, pages: [page] }
+    payload: { inputPath: input, rotation: 0, startNumber: 1, exportPdf: false, pages: [page] }
   }
 }
 

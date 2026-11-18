@@ -7,7 +7,7 @@
  */
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { NButton, NText } from 'naive-ui'
-import { FileText } from '@lucide/vue'
+import { FileText, RotateCcw, RotateCw } from '@lucide/vue'
 import { toolError } from '../errors'
 import { PDF_RENDER_SCALE } from '../preview'
 import type { OcrPage, OcrRegion } from '../schema'
@@ -51,6 +51,9 @@ let openSeq = 0
 let renderSeq = 0
 let dragId = 0
 let suppressClick = false
+/** 图片原图（data URL 解码后；旋转预览据此重绘） */
+let imageSource: HTMLImageElement | null = null
+let sourceUrl = ''
 
 const isPdf = computed(() => props.file !== null && /\.pdf$/i.test(props.file.name))
 const pages = computed(() => ws.pages.value)
@@ -60,6 +63,8 @@ const adding = computed(() => ws.adding.value)
 const activeRegion = computed(() => ws.activeRegion.value)
 const disabled = computed(() => ws.running.value !== null)
 const startNumber = computed(() => ws.startNumber.value ?? 1)
+const rotation = computed(() => ws.rotation.value)
+const rotationLabel = computed(() => `旋转 ${rotation.value}°`)
 
 const currentPage = computed<OcrPage | null>(
   () => pages.value.find((page) => page.pageNumber === pageNumber.value) ?? null
@@ -85,6 +90,8 @@ const isEmptyPage = computed(
 
 function clearImage(): void {
   imgUrl.value = ''
+  imageSource = null
+  sourceUrl = ''
 }
 
 function dispose(): void {
@@ -118,6 +125,48 @@ function decodeImage(url: string): Promise<HTMLImageElement> {
   })
 }
 
+/** 旋转后的像素尺寸（90/270 交换宽高；与 worker 侧 `rotatedSize` 同口径） */
+function rotatedSize(
+  width: number,
+  height: number,
+  degrees: number
+): { width: number; height: number } {
+  return degrees === 90 || degrees === 270 ? { width: height, height: width } : { width, height }
+}
+
+/**
+ * 按旋转角把图片重绘为 data URL（CSP `img-src` 仅 `data:`，不放宽 `blob:`；spec §10.12）。
+ * 与 worker 渲染同一几何变换，overlay 归一化坐标因此与导出裁剪一致。
+ */
+function rotatedDataUrl(image: HTMLImageElement, degrees: number): string {
+  const naturalWidth = image.naturalWidth
+  const naturalHeight = image.naturalHeight
+  const size = rotatedSize(naturalWidth, naturalHeight, degrees)
+  const element = document.createElement('canvas')
+  element.width = size.width
+  element.height = size.height
+  const ctx = element.getContext('2d')
+  if (ctx === null) return sourceUrl
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, size.width, size.height)
+  ctx.translate(size.width / 2, size.height / 2)
+  ctx.rotate((degrees * Math.PI) / 180)
+  ctx.drawImage(image, -naturalWidth / 2, -naturalHeight / 2, naturalWidth, naturalHeight)
+  return element.toDataURL('image/png')
+}
+
+/** 应用当前旋转到图片预览（0° 复用原 data URL，避免无谓重编码） */
+function applyImageRotation(): void {
+  const image = imageSource
+  if (image === null) return
+  const degrees = rotation.value
+  imgUrl.value = degrees === 0 ? sourceUrl : rotatedDataUrl(image, degrees)
+  ws.pageSizes.value = {
+    ...ws.pageSizes.value,
+    1: rotatedSize(image.naturalWidth, image.naturalHeight, degrees)
+  }
+}
+
 async function open(file: File | null): Promise<void> {
   dispose()
   clearImage()
@@ -145,16 +194,14 @@ async function open(file: File | null): Promise<void> {
       return
     }
     const url = await readAsDataUrl(file)
-    imgUrl.value = url
     const image = await decodeImage(url)
     if (seq !== openSeq) return
+    sourceUrl = url
+    imageSource = image
     pageCount.value = 1
     ws.totalPages.value = 1
-    ws.pageSizes.value = {
-      ...ws.pageSizes.value,
-      1: { width: image.naturalWidth, height: image.naturalHeight }
-    }
     loading.value = false
+    applyImageRotation()
   } catch (err) {
     if (seq !== openSeq) return
     const code = isPdf.value ? classifyPdfOpenError(err) : 'OCR_INPUT_INVALID'
@@ -173,7 +220,9 @@ async function renderPdfPage(target: number): Promise<void> {
   try {
     const page = await currentDoc.getPage(target)
     if (seq !== renderSeq) return
-    const base = page.getViewport({ scale: PDF_RENDER_SCALE })
+    // 用户旋转叠加页面固有旋转（pdfjs viewport.rotation 为绝对值；与 worker 同口径）
+    const pdfRotation = (page.rotate + rotation.value) % 360
+    const base = page.getViewport({ scale: PDF_RENDER_SCALE, rotation: pdfRotation })
     const width = Math.max(1, Math.ceil(base.width))
     const height = Math.max(1, Math.ceil(base.height))
     const cssWidth = pageBox.value?.clientWidth ?? 0
@@ -181,7 +230,10 @@ async function renderPdfPage(target: number): Promise<void> {
     const scale = cssWidth > 0 ? (cssWidth * dpr) / base.width : 1
     element.width = Math.max(1, Math.round(base.width * scale))
     element.height = Math.max(1, Math.round(base.height * scale))
-    await page.render({ canvas: element, viewport: page.getViewport({ scale }) }).promise
+    await page.render({
+      canvas: element,
+      viewport: page.getViewport({ scale, rotation: pdfRotation })
+    }).promise
     if (seq !== renderSeq) return
     ws.pageSizes.value = { ...ws.pageSizes.value, [target]: { width, height } }
     ws.totalPages.value = currentDoc.numPages
@@ -361,6 +413,18 @@ watch(
   }
 )
 
+/** 旋转变更（spec §10.12）：PDF 重渲染当前页；图片按新角度重绘 data URL */
+watch(
+  () => rotation.value,
+  () => {
+    if (isPdf.value) {
+      if (doc !== null && !loading.value) void renderPdfPage(pageNumber.value)
+      return
+    }
+    applyImageRotation()
+  }
+)
+
 onUnmounted(() => {
   dispose()
   clearImage()
@@ -491,6 +555,29 @@ onUnmounted(() => {
 
       <!-- 工具栏（spec §10.2） -->
       <div class="flex shrink-0 flex-wrap items-center gap-2" role="toolbar" aria-label="题区编辑">
+        <div class="flex items-center gap-1">
+          <NButton
+            size="tiny"
+            quaternary
+            :disabled="disabled"
+            aria-label="向左旋转 90°"
+            title="向左旋转 90°"
+            @click="ws.rotate(-90)"
+          >
+            <RotateCcw :size="14" aria-hidden="true" />
+          </NButton>
+          <NButton
+            size="tiny"
+            quaternary
+            :disabled="disabled"
+            aria-label="向右旋转 90°"
+            title="向右旋转 90°"
+            @click="ws.rotate(90)"
+          >
+            <RotateCw :size="14" aria-hidden="true" />
+          </NButton>
+          <NText depth="3" class="text-xs">{{ rotationLabel }}</NText>
+        </div>
         <div v-if="pageCount > 1" class="flex items-center gap-1">
           <NButton
             size="tiny"

@@ -261,7 +261,7 @@ describe('registerWith 七通道（spec §2 任务表 / §10.4 IPC）', () => {
     expect(options.timeoutMs).toBe(OP_TIMEOUT_MS)
     expect(options.payload).toEqual({
       op: 'detect',
-      payload: { inputPath: input },
+      payload: { inputPath: input, rotation: 0 },
       binariesDir: '/fake/binaries/ocr'
     })
     expect(harness.updates.at(-1)).toMatchObject({ kind: 'progress', stage: 'detect' })
@@ -287,6 +287,7 @@ describe('registerWith 七通道（spec §2 任务表 / §10.4 IPC）', () => {
     writeFileSync(input, '%PDF-1.7')
     const payload = {
       inputPath: input,
+      rotation: 0,
       startNumber: 1,
       exportPdf: true,
       pages: [

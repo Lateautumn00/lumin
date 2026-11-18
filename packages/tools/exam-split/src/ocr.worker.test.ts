@@ -69,6 +69,7 @@ describe('handleOcrTask · export（不依赖模型）', () => {
       op: 'export',
       payload: {
         inputPath: input,
+        rotation: 0,
         startNumber: 1,
         exportPdf: false,
         pages: [
@@ -99,7 +100,7 @@ describe('handleOcrTask · detect（模型缺失/真实模型）', () => {
     mkdirSync(empty, { recursive: true })
     const request: OcrWorkerRequest = {
       op: 'detect',
-      payload: { inputPath: input },
+      payload: { inputPath: input, rotation: 0 },
       binariesDir: empty
     }
     const { ctx } = ctxOf()
@@ -112,7 +113,7 @@ describe('handleOcrTask · detect（模型缺失/真实模型）', () => {
       const input = makeTextImage()
       const request: OcrWorkerRequest = {
         op: 'detect',
-        payload: { inputPath: input },
+        payload: { inputPath: input, rotation: 0 },
         binariesDir: REAL_DIR
       }
       const { updates, ctx } = ctxOf()

@@ -103,6 +103,7 @@ async function runDetect(
 ): Promise<OcrDetectResult> {
   try {
     const pages = await deps.render(request.payload.inputPath, {
+      rotation: request.payload.rotation,
       onPage: (done, total) =>
         emit({ stage: 'render', current: done, total, message: `渲染 ${done}/${total} 页…` })
     })
@@ -176,7 +177,8 @@ async function runExport(
   let rendered: RenderedPage[]
   try {
     rendered = await deps.render(payload.inputPath, {
-      pageNumbers: ordered.map((page) => page.pageNumber)
+      pageNumbers: ordered.map((page) => page.pageNumber),
+      rotation: payload.rotation
     })
   } catch (err) {
     // 重渲染阶段：读/解码错误已结构化透传，页边界与文件不匹配 → INVALID_PAYLOAD
