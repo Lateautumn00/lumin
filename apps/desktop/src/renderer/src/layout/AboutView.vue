@@ -188,7 +188,12 @@ async function openLogDir(): Promise<void> {
       </NText>
     </NSpace>
 
-    <NModal v-model:show="statementVisible" preset="card" :title="t('shell.about.statement.title')" class="max-w-lg">
+    <NModal
+      v-model:show="statementVisible"
+      preset="card"
+      :title="t('shell.about.statement.title')"
+      class="max-w-lg"
+    >
       <p class="text-sm leading-relaxed text-[var(--lumin-color-text-secondary)]">
         {{ t('shell.about.statement.body') }}
       </p>
