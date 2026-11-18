@@ -31,7 +31,7 @@
     "@lumin/ui": "workspace:*",
     "@napi-rs/canvas": "1.1.1",
     "naive-ui": "2.45.3",
-    "onnxruntime-web": "1.31.1",
+    "onnxruntime-node": "1.31.1",
     "pdf-lib": "1.17.1",
     "vue": "3.5.45",
     "zod": "4.6.7"

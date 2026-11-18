@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, session } from 'electron'
 import log from 'electron-log'
+import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { LUMIN_INVOKE_CHANNEL, TASK_EVENT_CHANNEL, UPDATE_EVENT_CHANNEL } from '@lumin/shared'
 import { DEV_CSP, PROD_CSP } from './csp'
@@ -109,9 +110,11 @@ async function bootstrap(): Promise<void> {
     paths: {
       temp: app.getPath('temp'),
       userData: app.getPath('userData'),
-      // 外部二进制/模型根：打包态走 extraResources（resources/binaries），
-      // 开发态 = 仓库根 binaries/（fetch-binaries.mjs 落盘处；__dirname = out/main）
-      binaries: app.isPackaged
+      // 外部二进制/模型根：按「resources/binaries 是否存在」探测——打包态由
+      // extraResources 保证存在；回落开发态仓库根 binaries/（fetch-binaries.mjs
+      // 落盘处；__dirname = out/main）。不依赖 app.isPackaged：pnpm 的 .pnpm 目录
+      // 布局会让 Electron 误判 isPackaged=true（e2e 实测），该标志仅供 CSP/updater。
+      binaries: existsSync(join(process.resourcesPath, 'binaries'))
         ? join(process.resourcesPath, 'binaries')
         : join(__dirname, '../../../../binaries')
     }

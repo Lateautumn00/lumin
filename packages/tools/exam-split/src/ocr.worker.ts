@@ -3,7 +3,7 @@ import { createOcrEngine } from './ocr-model'
 import { runOcrOp, type OcrDeps, type OcrTaskResult, type OcrWorkerRequest } from './ocr-ops'
 import { renderOcrInput } from './ocr-render'
 
-/** 真实依赖：pdfjs/napi 渲染 + ort wasm 推理（单测直接调 handleOcrTask 覆盖） */
+/** 真实依赖：pdfjs/napi 渲染 + onnxruntime-node 推理（单测直接调 handleOcrTask 覆盖） */
 const deps: OcrDeps = {
   render: renderOcrInput,
   createEngine: createOcrEngine

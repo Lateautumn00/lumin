@@ -1,11 +1,12 @@
 /**
  * PP-OCR 推理引擎（spec §10.4/§10.8）：det 行检测 + rec 题号识别（前缀裁剪）。
- * 仅 worker 内执行（onnxruntime-web wasm 单线程，spawn per task，无跨任务缓存）。
+ * 仅 worker 内执行（onnxruntime-node CPU EP，spawn per task，无跨任务缓存）。
  *
- * spike 实证（2026-11-16，plan §4.4）：
- * - det 长边 960 + 32 对齐、阈值 0.3 → 609ms/页；rec 前缀 3.5×行高 → 38ms/行
- * - 输入名 `x`；det 输出 [1,1,H,W]、rec 输出 [1,T,6625]；CTC blank=0、字典索引 = 输出 −1
- * - worker 内 `env.wasm.numThreads=1`、`proxy=false`（spike：numThreads=4 无改善）
+ * 引擎选型（2026-11-18 P4 R1 复评，plan §4.4/§1.1）：onnxruntime-web wasm 在真实样卷
+ * （60–120 行文本）单页 3.3–4.7s，超 R1 ≤3s 基线；按 R1 规则切 onnxruntime-node 原生
+ * CPU 推理。预调优沿用 spike 口径：det 长边 960 + 32 对齐、阈值 0.3；rec 前缀 3.5×行高、
+ * 同宽分组 batch。输入名 `x`；det 输出 [1,1,H,W]、rec 输出 [1,T,6625]；CTC blank=0、
+ * 字典索引 = 输出 −1。
  */
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -25,19 +26,17 @@ import {
 } from './ocr-preproc'
 import type { OcrLine } from './schema'
 
-type OrtModule = typeof import('onnxruntime-web')
+type OrtModule = typeof import('onnxruntime-node')
 
 /** ort 模块单例（同一 worker 内 det/rec 共用；失败重置以便任务级重试） */
 let ortPromise: Promise<OrtModule> | undefined
 
 async function loadOrt(): Promise<OrtModule> {
   if (ortPromise === undefined) {
-    ortPromise = import('onnxruntime-web').then((mod) => {
-      // node 条件构建只导出 default（spike 同口径），类型侧按命名导出描述，此处运行时兜底
+    ortPromise = import('onnxruntime-node').then((mod) => {
+      // CJS 包经 ESM import 的 interop 兜底（与 web 版 node 条件构建同口径）
       const ort =
         'InferenceSession' in mod ? mod : (mod as unknown as { default: OrtModule }).default
-      ort.env.wasm.numThreads = 1
-      ort.env.wasm.proxy = false
       return ort
     })
     void ortPromise.catch(() => {
@@ -116,13 +115,13 @@ export interface OcrEngine {
 
 /**
  * 创建推理引擎：det + rec session + 字典（cls 只校验不推理，spec §10.8）。
- * 加载失败（模型/wasm 缺失或损坏）→ `MODEL_MISSING`（spec §10.5）；
+ * 加载失败（模型/native binding 缺失或损坏）→ `MODEL_MISSING`（spec §10.5）；
  * 推理期异常由编排层包 `OCR_FAILED`。
  */
 export async function createOcrEngine(ocrDir: string): Promise<OcrEngine> {
   try {
     const ort = await loadOrt()
-    const options = { executionProviders: ['wasm'] as const }
+    const options = { executionProviders: ['cpu'] as const }
     const det = await ort.InferenceSession.create(join(ocrDir, OCR_ASSETS.det.file), options)
     const rec = await ort.InferenceSession.create(join(ocrDir, OCR_ASSETS.rec.file), options)
     const dict = parseDict(await readFile(join(ocrDir, OCR_ASSETS.dict.file), 'utf8'))

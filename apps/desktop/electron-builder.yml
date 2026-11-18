@@ -13,10 +13,11 @@ files:
 
 asar: true
 
-# 原生模块不能从 asar 内加载（@napi-rs/canvas 的 .node；onnxruntime-web 的 wasm/ESM 随包解出）
+# 原生模块不能从 asar 内加载（@napi-rs/canvas / onnxruntime-node 的 .node + 运行时 dll）
 asarUnpack:
   - '**/node_modules/@napi-rs/**'
-  - '**/node_modules/onnxruntime-web/dist/**'
+  - '**/node_modules/onnxruntime-node/**'
+  - '**/node_modules/onnxruntime-common/**'
 
 # 大二进制经 scripts/fetch-binaries.mjs 拉取到 binaries/（gitignore，M3 起启用）
 extraResources:
