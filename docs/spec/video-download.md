@@ -19,12 +19,13 @@
 | 3   | 壳关于页「使用声明」 | 链接弹窗展示全文（通用合规声明，**不含任何工具名**）                                                                                | 壳层 `i18n` + About 页             |
 
 **平台范围（随免责一并定）**：一期验收 B站（bilibili.com）+ YouTube（youtube.com）；抖音等国内平台一期 yt-dlp 直连试探一次，成功则记录、失败标注二期（C 类候选池）；不承诺任何平台可用性，链接失效不视为缺陷。
+**抖音实测（2026-11-18，yt-dlp 2026.10.26）**：分享口令短链（`v.douyin.com/…`）可被 Douyin extractor 解析出视频 id，但取流需 fresh cookies（`Fresh cookies (not necessarily logged in) are needed`）——一期无 cookie 支持，报错经 `VD_DOWNLOAD_FAILED` detail 透出；cookie 能力列入二期候选（C 类）。
 
 ## 1. 输入项
 
 | 字段     | 类型                                 | 约束                                                                                                          | 默认值        |
 | -------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------- |
-| 视频链接 | string（粘贴/手动输入）              | `http(s)://` URL（zod 校验）；空白 → 禁用 [获取信息]；非法 → `VD_URL_INVALID`                                  | 空            |
+| 视频链接 | string（粘贴/手动输入）              | `http(s)` URL（zod 校验）；支持**整段分享口令直接粘贴**——入参 preprocess 自动提取第一个 URL（剥离反引号/引号/书名号包裹与紧邻中文正文，纯函数 `extractVideoUrl`）；空白 → 禁用 [获取信息]；无 URL → `VD_URL_INVALID` | 空            |
 | 格式预设 | enum `best \| 1080p \| audio-mp3`    | 单选；`best` = `bv*+ba/b`（自动合流）、`1080p` = `bv*[height<=1080]+ba/b[height<=1080]`、`audio-mp3` = `ba` + `--extract-audio --audio-format mp3` | `best`        |
 | 输出目录 | string（目录路径）                   | 必须存在且可写（precheck）；默认 `userData/downloads`（壳 paths 派生，首次可改）；选择器不可用时回退手输 | `userData/downloads` |
 
