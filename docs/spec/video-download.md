@@ -1,0 +1,102 @@
+# 短视频下载 — 字段级功能清单（M4 验收附件）
+
+> 依据 AGENTS §11：开工前定稿。变更须同步更新本文件与 `docs/opencode/plan.md` §4.5。
+> 工具 id：`video-download` · 显示名：**视频下载** · 包：`@lumin/tool-video-download` · 图标：`download`
+> 引擎：yt-dlp（版本随包钉死）+ ffmpeg/ffprobe（合流），`scripts/fetch-binaries.mjs` 固定 URL + SHA256，gitignore，打包走 `resources/binaries`。
+
+## 0. 合规与免责（R8 定稿，2026-11-18）
+
+**文案正文**（plan §4.5 同文，修改须重走 R8）：
+
+> 本工具仅用于个人学习、研究与非商业用途的内容备份。您应确保：① 仅下载您拥有合法权利或平台明确允许下载的内容；② 遵守目标平台服务条款与所在地法律法规；③ 不将下载内容用于商业传播、二次分发或任何侵权用途；④ 因使用本工具产生的法律责任由使用者自行承担。本工具不内置任何绕过平台技术限制的能力。
+
+**三重呈现**（用户拍板）：
+
+| #   | 位置                 | 形态                                                                                                                                | 归属（零耦合）                     |
+| --- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 1   | 工具页首次进入弹窗   | Naive UI modal 展示全文 + [同意并继续]（唯一主按钮）+ [不再提示] 复选框；未同意则工具主功能区置灰不可操作；重置途径 = 设置页开关 | 工具包内，settings `tools.video-download.disclaimerAccepted` |
+| 2   | 工具页顶部常驻 banner | 一句话：「仅供个人学习与研究使用，请遵守平台条款与著作权法」（`text-xs` tokens 弱化样式，不可关闭）                                  | 工具包内                           |
+| 3   | 壳关于页「使用声明」 | 链接弹窗展示全文（通用合规声明，**不含任何工具名**）                                                                                | 壳层 `i18n` + About 页             |
+
+**平台范围（随免责一并定）**：一期验收 B站（bilibili.com）+ YouTube（youtube.com）；抖音等国内平台一期 yt-dlp 直连试探一次，成功则记录、失败标注二期（C 类候选池）；不承诺任何平台可用性，链接失效不视为缺陷。
+
+## 1. 输入项
+
+| 字段     | 类型                                 | 约束                                                                                                          | 默认值        |
+| -------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------- |
+| 视频链接 | string（粘贴/手动输入）              | `http(s)://` URL（zod 校验）；空白 → 禁用 [获取信息]；非法 → `VD_URL_INVALID`                                  | 空            |
+| 格式预设 | enum `best \| 1080p \| audio-mp3`    | 单选；`best` = `bv*+ba/b`（自动合流）、`1080p` = `bv*[height<=1080]+ba/b[height<=1080]`、`audio-mp3` = `ba` + `--extract-audio --audio-format mp3` | `best`        |
+| 输出目录 | string（目录路径）                   | 必须存在且可写（precheck）；默认 `userData/downloads`（壳 paths 派生，首次可改）；选择器不可用时回退手输 | `userData/downloads` |
+
+- 无拖拽需求（纯链接输入）；链接框支持粘贴后自动去首尾空白。
+
+## 2. 页面结构
+
+| 区域     | 内容                                                                                                              |
+| -------- | ----------------------------------------------------------------------------------------------------------------- |
+| 顶部     | 免责 banner（呈现 #2）                                                                                            |
+| 输入区   | 链接输入框 + [获取信息]（主按钮，触发 probe）+ 预设单选 + 输出目录（[浏览…] 或手输）                              |
+| 信息卡   | probe 成功后显示：标题、平台、时长、估计体积（可选）+ [加入队列]（主按钮）；probe 失败 → 报错态                   |
+| 队列/历史 | 任务列表（进行中：进度条/速度/ETA + [暂停] [取消]；已完成：文件名/体积/时长 + [打开所在文件夹]）+ 历史记录（最近 100 条，[清空历史]） |
+| 空态     | 引导文案（粘贴链接开始）+ 输入框聚焦；无白屏                                                                       |
+
+- 复用 `ui` 包：`TaskProgress` / `ResultCard` / `ErrorCard`；图标 `@lucide/vue`（`download/pause/play/history/trash-2/folder-open/link` 等，新增进壳 `iconMap`）。
+
+## 3. 按钮集与交互
+
+| 按钮           | 行为                                                                                          | 状态约束                                   |
+| -------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| 获取信息       | `video-download:probe`（sync invoke，超时 20s）                                               | 引擎缺失 → `VD_ENGINE_MISSING` 直接报错    |
+| 加入队列       | `video-download:start`（task，返回 `{taskId}`）                                               | 队列并发 2（壳 `shell.taskConcurrency`）   |
+| 暂停           | `video-download:mark-pause`（登记暂停意图）→ 通用 `lumin:task:cancel`（AbortSignal 杀进程树）；`.part` 保留，历史标记 `PAUSED` | 仅 running 可见                            |
+| 继续下载       | 再次 `video-download:start`（同 url/预设/目录，yt-dlp `--continue` 续传 `.part`）             | 仅 `PAUSED` 历史项可见                     |
+| 取消           | 通用 cancel（不 mark-pause）；历史标记 `CANCELLED`，删除 `.part`（best-effort）               | queued/running 均可                        |
+| 打开所在文件夹 | 壳通道 `window.lumin.revealPath`（`lumin:shell:reveal`，工具不自带 reveal 通道）              | 仅已完成/已暂停项可见                      |
+| 清空历史       | 确认弹窗 → 清空 `tools.video-download.history`                                                | 二次确认                                   |
+
+## 4. IPC 与数据
+
+| 通道                      | 类型 | payload → 返回                                                              |
+| ------------------------- | ---- | ---------------------------------------------------------------------------- |
+| `video-download:probe`    | sync | `{url}` → `{title, platform, durationSec, thumbnailUrl}`；超时 20s 杀树      |
+| `video-download:start`    | task | `{url, preset, outputDir?}`（缺省 `userData/downloads`）→ `{taskId}`；progress `{current, total?, message?}`；done → `{outputPath}` |
+| `video-download:mark-pause` | sync | `{taskId}` → `{}`（登记暂停意图，供 abort 后区分 PAUSED/CANCELLED）        |
+| `video-download:history`  | sync | `{}` → `{entries: 历史数组}`（读 settings，坏条目丢弃 + RUNNING→FAILED）     |
+| `video-download:history:clear` | sync | `{}` → `{}`                                                            |
+
+- 打开文件夹复用壳 `lumin:shell:reveal`（不新增工具 reveal 通道）。
+
+- 入参全部 zod 校验；错误结构化（`makeError`/`toolError`）；进度解析为纯函数（可测）。
+
+## 5. 错误码
+
+| 错误码                    | 触发                                                          | 中文文案                                     |
+| ------------------------- | ------------------------------------------------------------- | -------------------------------------------- |
+| `VD_URL_INVALID`          | URL 非法/非 http(s)                                           | 链接格式不正确，请检查后重试                 |
+| `VD_ENGINE_MISSING`       | `binaries/download/yt-dlp.exe` 缺失或损坏（SHA 预检失败）      | 下载引擎未就绪，请运行 fetch 脚本获取 yt-dlp 后重试 |
+| `VD_PROBE_FAILED`         | probe 超时/非零退出/输出不可解析                              | 无法获取视频信息，请确认链接可公开访问       |
+| `VD_UNSUPPORTED_PLATFORM` | yt-dlp 报 `Unsupported URL`                                   | 暂不支持该平台链接                           |
+| `VD_OUTPUT_WRITE_FAILED`  | 输出目录不存在/不可写/磁盘满（errno ENOSPC → 磁盘满专项文案） | 输出目录不可写或磁盘空间不足                 |
+| `VD_DOWNLOAD_FAILED`      | 下载中非零退出（网络中断等），stderr 尾行入 detail            | 下载失败，请查看详情或稍后重试               |
+| `VD_HISTORY_FAILED`       | 历史读写 settings 失败                                        | 历史记录读写失败                             |
+| `VD_CANCELLED`            | 用户取消/暂停（复用 shared `CANCELLED` 语义，工具内细分状态）  | 已取消                                       |
+
+## 6. 历史字段（`tools.video-download.history` JSON，滚动 100 条）
+
+`{ id, url, title, platform, preset, outputDir, outputName?, status: RUNNING|PAUSED|DONE|FAILED|CANCELLED, downloadedBytes?, totalBytes?, startedAt, endedAt? }`
+
+- 应用重启后 `RUNNING` 状态项归一为 `FAILED`（进程已随退出终止）；`PAUSED` 保留可续传。
+
+## 7. 引擎保鲜（一期口径，R8）
+
+- 版本随包钉死：`fetch-binaries.mjs` 固定 release URL + SHA256；升级 = 改脚本常量（新版本号 + 新 SHA256）走代码变更
+- 设置页「下载引擎」卡片：显示当前 yt-dlp/ffmpeg 版本（spawn `-version`）+ [检查更新]（网络对比远端 latest，仅提示不做运行时下载，守 R7）
+- 引擎缺失时工具页报错态引导文案同 `VD_ENGINE_MISSING`
+
+## 8. 验收标准（plan §4.5 同源）
+
+1. B站 + YouTube 真实链接下载成功（best 与 audio-mp3 各一），进度/暂停/续传/队列可用（smoke 人工记录）
+2. 免责三重呈现逐项截图入 smoke
+3. 三态强制 + tokens + `@lucide/vue`；chunk < 200KB gzip
+4. 核心纯函数（进度解析/预设映射/schema/历史归一）≥80%；全仓 ≥60%
+5. R2 八类异常逐条真实记录；`pnpm gate` 全绿（audit 维持已知 picomatch 例外）
