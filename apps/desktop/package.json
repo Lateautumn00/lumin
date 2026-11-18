@@ -28,6 +28,7 @@
     "@lumin/tool-exam-split": "workspace:*",
     "@lumin/tool-example": "workspace:*",
     "@lumin/tool-unit-converter": "workspace:*",
+    "@lumin/tool-video-download": "workspace:*",
     "@playwright/test": "1.65.0",
     "@tailwindcss/vite": "4.3.5",
     "@vitejs/plugin-vue": "6.0.10",

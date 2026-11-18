@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { NButton, NSpace, NTable, NText } from 'naive-ui'
+import { NButton, NModal, NSpace, NTable, NText } from 'naive-ui'
 import { toStructuredError } from '@lumin/shared'
 import type { AppInfo } from '@lumin/plugin-api'
 import { t } from '../i18n/zh-CN'
@@ -14,6 +14,8 @@ const updateState = ref<UpdateState>('idle')
 const updatePercent = ref(0)
 const updateVersion = ref('')
 const updateError = ref('')
+/** 使用声明弹窗（R8 三重呈现 #3：通用合规声明，不含任何工具名） */
+const statementVisible = ref(false)
 let offUpdate: (() => void) | null = null
 
 onMounted(() => {
@@ -157,6 +159,9 @@ async function openLogDir(): Promise<void> {
     </NTable>
     <NSpace align="center">
       <NButton size="small" @click="openLogDir">{{ t('shell.about.openLog') }}</NButton>
+      <NButton size="small" quaternary @click="statementVisible = true">
+        {{ t('shell.about.statement') }}
+      </NButton>
       <NText v-if="logError" type="error" class="text-xs">
         {{ t('shell.about.logFailed') }}：{{ logError }}
       </NText>
@@ -182,5 +187,11 @@ async function openLogDir(): Promise<void> {
         {{ updateHint }}
       </NText>
     </NSpace>
+
+    <NModal v-model:show="statementVisible" preset="card" :title="t('shell.about.statement.title')" class="max-w-lg">
+      <p class="text-sm leading-relaxed text-[var(--lumin-color-text-secondary)]">
+        {{ t('shell.about.statement.body') }}
+      </p>
+    </NModal>
   </div>
 </template>

@@ -4,6 +4,7 @@ import { manifest as docx2pdfManifest } from '@lumin/tool-docx2pdf/manifest'
 import { manifest as exampleManifest } from '@lumin/tool-example/manifest'
 import { manifest as examSplitManifest } from '@lumin/tool-exam-split/manifest'
 import { manifest as unitConverterManifest } from '@lumin/tool-unit-converter/manifest'
+import { manifest as videoDownloadManifest } from '@lumin/tool-video-download/manifest'
 
 /** 壳内唯一工具清单（Q14）：新增工具 = 新包 + 此处 1 行 + tool-mains 1 行（如有主进程）+ renderer 薄壳 1 行 */
 export const toolManifests: readonly ToolManifest[] = [
@@ -11,5 +12,6 @@ export const toolManifests: readonly ToolManifest[] = [
   unitConverterManifest,
   docx2pdfManifest,
   examSplitManifest,
+  videoDownloadManifest,
   exampleManifest
 ]

@@ -37,6 +37,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/exam-split/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-video-download\/manifest$/,
+    replacement: r('../../packages/tools/video-download/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-video-download\/node$/,
+    replacement: r('../../packages/tools/video-download/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-video-download\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/video-download/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-example\/manifest$/,
     replacement: r('../../packages/tools/example/src/manifest.ts')
   },
