@@ -101,3 +101,71 @@
 3. 三态强制 + tokens + `@lucide/vue`；chunk < 200KB gzip
 4. 核心纯函数（进度解析/预设映射/schema/历史归一）≥80%；全仓 ≥60%
 5. R2 八类异常逐条真实记录；`pnpm gate` 全绿（audit 维持已知 picomatch 例外）
+
+## 9. Cookie 支持（二期，字段级设计定稿 2026-11-18，R8）
+
+> plan M4 章节二期候选的落地设计。决策：获取 = **粘贴 + 浏览器自动读取**；作用域 = **按平台分别管理**；存储 = **Electron safeStorage 加密**（硬约束，settings 明文 JSON 禁存 cookie）。合规边界不变：仅透传用户自有凭证，**不内置签名逆向/cookie 池/绕过平台技术限制能力**（守免责 ④）。
+
+### 9.1 数据模型与存储
+
+- 存储键：`tools.video-download.cookies.<platform>`，值为 `{ cipher: string, updatedAt: number }`——`cipher` = `safeStorage.encryptString(cookieText)` 的 base64，永不落明文
+- `platform` 枚举与域名匹配表（纯函数 `matchPlatformFor(url): platform | null`）：
+
+| platform  | 匹配域名                              | 说明                     |
+| --------- | ------------------------------------- | ------------------------ |
+| `douyin`  | `douyin.com`（含 `v.douyin.com`）     | 登录态可见非公开内容     |
+| `bilibili`| `bilibili.com` / `bilibili.tv`        | 大会员高码率画质         |
+| `youtube` | `youtube.com` / `youtu.be`            | 年龄限制/登录可见内容    |
+| （null）  | 其余                                  | 不注入 cookie，行为同一期 |
+
+- 读写前必查 `safeStorage.isEncryptionAvailable()`：不可用（如 Linux 无 keyring）→ 功能置灰 + 文案说明，**禁止降级明文存储**
+- 解析输入（纯函数 `parseCookieText(raw): NetscapeLine[]`）：同时接受三种粘贴形态——① DevTools `Cookie:` 请求头行（`name=value; name2=v2`）② Netscape 文件内容（`#` 注释 + TAB 七段行）③ 裸 `name=value` 换行序列；非法行丢弃，全部非法 → `VD_COOKIE_FORMAT_INVALID`
+- cookie 有效域/过期：粘贴形态缺失 domain/expiry 时按当前 platform 的匹配域名 + 会话级处理（Netscape 行固定 `FALSE` path `/`）；有 expiry 的行过期即丢弃并在导入结果中提示条数
+
+### 9.2 IPC 通道（全部 zod 校验，返回值脱敏）
+
+| 通道                                 | 类型 | payload → 返回                                                                 |
+| ------------------------------------ | ---- | ------------------------------------------------------------------------------ |
+| `video-download:cookie:list`         | sync | `{}` → `{ items: [{ platform, summary, cookieCount, updatedAt }] }`——`summary` = 前 4 字符 + `…(n 条)` 脱敏 |
+| `video-download:cookie:set`          | sync | `{ platform, raw }`（raw ≤ 64KB）→ `{ cookieCount, droppedCount }`；加密后落存储        |
+| `video-download:cookie:remove`       | sync | `{ platform }` → `{}`                                                   |
+| `video-download:cookie:import-browser` | task | `{ platform, browser: 'firefox' \| 'chromium-legacy' }` → `{ taskId }`，progress = 扫描/解密/解析三阶段，done → `{ cookieCount }` |
+
+### 9.3 浏览器自动读取（实现层约定）
+
+| browser           | 路径与做法                                                                                                                              | 支持矩阵 |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `firefox`         | 定位 `%APPDATA%/Mozilla/Firefox/Profiles/*/cookies.sqlite` → 复制到 temp（避文件占用）→ `node:sqlite` 只读查询 `moz_cookies` → 转 Netscape | ✅ 支持（未开主密码；多 profile 取默认 release profile） |
+| `chromium-legacy` | 定位旧版 Chromium/Edge profile 的 `Cookies` 库 → 同上复制 + `node:sqlite` 取密文 → 密列经 PowerShell `Add-Type` 调 DPAPI `ProtectedData.Unprotect` 解密（项目已有 csc/PowerShell 先例，**不引原生 npm 依赖**，守 R7） | ⚠ 版本相关：仅 App-Bound Encryption 上线前的版本 |
+| Chrome/Edge 新版  | App-Bound Encryption，离线不可解                                                                                                        | ✘ UI 明示「该浏览器新版已加密，请手动粘贴」 |
+
+- 读取是**只读**操作：不写浏览器库、不装任何扩展；失败 → `VD_COOKIE_IMPORT_FAILED`（detail = 阶段 + 原因）
+- `node:sqlite` 为 Node 24 内置，实现前先验证 Electron 45 主进程可用性（不可用则降级 PowerShell `System.Data.SQLite`/复制后手工解析，实现期决策并回写本节）
+
+### 9.4 下载链路集成
+
+- `probe` / `start` 组参前：`matchPlatformFor(url)` 非 null 且该平台已存 cookie → `safeStorage.decryptString` 解密 → 由 Netscape 行写**临时 cookie 文件**（`ctx.paths.temp/cookie-<taskId>.txt`，任务终态 finally 删除）→ 追加 `--cookies <file>`
+- 临时文件权限最小化、进程退出清理；**日志一律不得出现 cookie 值/临时文件内容**（R10 脱敏）
+- cookie 过期/失效由引擎报错透出（stderr detail，如「login required」），不新增猜测性错误码
+
+### 9.5 UI（Cookie 管理弹窗，挂在工具页工具栏）
+
+- 入口：页内 [Cookie 管理] 按钮（`KeyRound` 图标）；弹窗内按平台三个 Tab（抖音/B站/YouTube）
+- 每 Tab：脱敏状态行（已存 n 条 · 更新时间）+ 粘贴框（textarea，支持三种形态）+ [保存] / [从浏览器读取]（下拉 firefox / chromium-legacy）+ [删除]（NPopconfirm 二次确认）
+- 三态：空态（未配置 → 引导文案「粘贴浏览器 Cookie 后可下载登录可见内容」）；加载态（浏览器读取 task 进度 + 可取消）；报错态（结构化错误 → 中文文案 + 详情）
+- 主下载流程 UI 不变——cookie 配置后自动生效，无全局开关
+
+### 9.6 错误码（§5 表追加）
+
+| 错误码                    | 触发                                                   | 中文文案                                       |
+| ------------------------- | ------------------------------------------------------ | ---------------------------------------------- |
+| `VD_COOKIE_FORMAT_INVALID`| 粘贴内容解析后无有效 cookie 行                          | Cookie 格式无法识别，请粘贴浏览器导出的 Cookie |
+| `VD_COOKIE_IMPORT_FAILED` | 浏览器未安装/profile 不存在/sqlite 读取或解密失败       | 从浏览器读取 Cookie 失败，请改用手动粘贴       |
+| `VD_COOKIE_STORE_UNAVAILABLE` | `safeStorage.isEncryptionAvailable()` 为 false      | 系统不支持加密存储，Cookie 功能不可用          |
+
+### 9.7 二期验收标准
+
+1. 粘贴三种形态（Header 行/Netscape/裸键值）解析正确（纯函数单测 ≥80% 覆盖）
+2. Firefox 真实 profile 读取 → 抖音登录态真实下载一条登录可见内容成功；B站大会员账号 probe 返回会员画质
+3. 存储加密落盘验证（磁盘文件中无明文 cookie）；日志无 cookie 值
+4. 临时 cookie 文件任务终态后不存在；R2 八类在 cookie 场景的等价异常（占用/失效/损坏）逐条入 smoke

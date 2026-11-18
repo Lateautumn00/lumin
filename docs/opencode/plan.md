@@ -218,7 +218,7 @@ lumin/
 - 功能：链接粘贴、格式预设（best/1080p/仅音频 mp3）、暂停（kill + `--continue` 续传）、取消、输出目录、历史（JSON）
 - 保鲜：设置页「更新下载引擎」；UI 免责声明（**文案 M4 开工前定稿，R8**）
 - 抖音等国内平台：一期先 yt-dlp 直连试，失败标注二期
-- **二期候选（2026-11-18，R8 记录）**：**Cookie 支持**——用户自带登录态（浏览器导出/粘贴 cookie → yt-dlp `--cookies` 透传），用于非公开/登录可见内容（抖音 `Fresh cookies are needed`、B站大会员画质等）。合规边界：仅透传用户自有凭证，**不内置签名逆向/cookie 池/绕过平台技术限制能力**（守免责文案 ④）。实测依据：yt-dlp Douyin extractor 可解析视频 id 但取流需 fresh cookies；第三方小程序（如「河畔视频提取」）可下非公开内容系其内置签名算法或服务端账号池，本项目不做
+- **二期候选（2026-11-18，R8 记录）**：**Cookie 支持**——用户自带登录态（浏览器导出/粘贴 cookie → yt-dlp `--cookies` 透传），用于非公开/登录可见内容（抖音 `Fresh cookies are needed`、B站大会员画质等）。合规边界：仅透传用户自有凭证，**不内置签名逆向/cookie 池/绕过平台技术限制能力**（守免责文案 ④）。实测依据：yt-dlp Douyin extractor 可解析视频 id 但取流需 fresh cookies；第三方小程序（如「河畔视频提取」）可下非公开内容系其内置签名算法或服务端账号池，本项目不做。**字段级设计已定稿（2026-11-18）**：`docs/spec/video-download.md` §9——粘贴 + 浏览器自动读取（firefox ✓ / chromium-legacy ⚠ / 新版 Chrome ✘ App-Bound）、按平台三套管理（douyin/bilibili/youtube 域名匹配注入）、safeStorage 加密存储（禁明文 settings）、四条 `cookie:*` IPC 通道、三个新错误码；实现走 `feature/m5-cookie` 新分支（M4 合入后开工）
 - **验收**：B站 + YouTube 真实链接下载成功；进度/暂停/队列可用
 
 > **M4 开工前置已完成（2026-11-18，R8）**：① **免责文案定稿**（用户拍板**三重呈现**：工具页首次弹窗（`tools.video-download.disclaimerAccepted`，壳零工具知识）+ 工具页常驻 banner + 关于页「使用声明」全文链接）。正文：
