@@ -85,17 +85,18 @@ export type ProbeResult = z.infer<typeof probeResultSchema>
 
 // —— 目标格式 ——
 
-export const targetFormatSchema = z.enum(['jpg', 'png', 'webp', 'avif'])
+/** 目标格式（bmp/tiff 为无损直出，不支持质量参数） */
+export const targetFormatSchema = z.enum(['jpg', 'png', 'webp', 'avif', 'bmp', 'tiff'])
 export type TargetFormat = z.infer<typeof targetFormatSchema>
 
 // —— compress / convert / resize options（spec §2） ——
 
 export const qualitySchema = z.number().int().min(1).max(100)
 
-/** 压缩参数：质量 + 目标格式（原格式/统一 jpg/统一 webp） */
+/** 压缩参数：质量 + 目标格式（原格式 / 统一 jpg/png/webp/avif） */
 export const compressOptionsSchema = z.object({
   quality: qualitySchema,
-  target: z.enum(['original', 'jpg', 'webp'])
+  target: z.enum(['original', 'jpg', 'png', 'webp', 'avif'])
 })
 
 /** 转换参数：目标格式 + 质量（png 忽略质量，前端置灰） */
@@ -194,3 +195,9 @@ export type ProcessResult = z.infer<typeof processResultSchema>
 
 export const configResultSchema = z.object({ outputDir: z.string() })
 export type ConfigResult = z.infer<typeof configResultSchema>
+
+// —— set-output-dir（sync，输出目录记忆） ——
+
+/** 保存输出目录记忆（renderer 选择目录后即时落盘） */
+export const setOutputDirPayloadSchema = z.object({ outputDir: z.string().min(1) })
+export type SetOutputDirPayload = z.infer<typeof setOutputDirPayloadSchema>

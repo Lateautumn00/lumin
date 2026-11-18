@@ -20,20 +20,34 @@ import { FolderOpen, Images, X } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
-import { config, process, probe, revealPath } from './client'
+import { config, process, probe, revealPath, saveOutputDir } from './client'
 import { extensionOf } from '../schema'
 import type { OutputItem, ProbeItem, TargetFormat } from '../schema'
 
 /** Tab 标识（spec §2） */
 type TabId = 'compress' | 'convert' | 'resize'
 
-/** 支持的输出目标格式选项（转换/缩放共用；avif 标注慢） */
+/** 支持的输出目标格式选项（转换/缩放共用；avif 标注慢，bmp/tiff 无损） */
 const FORMAT_OPTIONS = [
-  { label: 'JPG', value: 'jpg' },
+  { label: 'JPG（JPEG）', value: 'jpg' },
+  { label: 'PNG', value: 'png' },
+  { label: 'WebP', value: 'webp' },
+  { label: 'AVIF（较慢，5–30s/张）', value: 'avif' },
+  { label: 'BMP（无损，体积大）', value: 'bmp' },
+  { label: 'TIFF（无损，体积大）', value: 'tiff' }
+] as const
+
+/** 压缩 Tab 的目标格式（保持原格式 + 常用输出格式） */
+const COMPRESS_TARGET_OPTIONS = [
+  { label: '保持原格式', value: 'original' },
+  { label: 'JPG（JPEG）', value: 'jpg' },
   { label: 'PNG', value: 'png' },
   { label: 'WebP', value: 'webp' },
   { label: 'AVIF（较慢，5–30s/张）', value: 'avif' }
 ] as const
+
+/** 无质量参数的目标格式（无损编码，质量滑杆置灰） */
+const LOSSLESS_FORMATS = new Set<string>(['png', 'bmp', 'tiff'])
 
 /** DropZone accept 串（与 schema 白名单一致） */
 const ACCEPT = '.jpg,.jpeg,.png,.webp,.avif,.gif,.bmp,.tiff'
@@ -41,7 +55,7 @@ const ACCEPT = '.jpg,.jpeg,.png,.webp,.avif,.gif,.bmp,.tiff'
 // —— Tab 与参数（spec §2 默认值） ——
 const tab = ref<TabId>('compress')
 const compressQuality = ref(75)
-const compressTarget = ref<'original' | 'jpg' | 'webp'>('original')
+const compressTarget = ref<'original' | 'jpg' | 'png' | 'webp' | 'avif'>('original')
 const convertFormat = ref<TargetFormat>('jpg')
 const convertQuality = ref(75)
 const resizeMode = ref<'percent' | 'width' | 'height' | 'fit'>('percent')
@@ -77,9 +91,10 @@ const errorDetail = ref('')
 let unsubscribe: (() => void) | null = null
 let currentTaskId = ''
 
-/** png 忽略质量：转换/缩放目标 png 时质量滑杆置灰（spec §2.2） */
-const convertIsPng = computed(() => convertFormat.value === 'png')
-const resizeIsPng = computed(() => resizeFormat.value === 'png')
+/** 无损格式忽略质量：对应 Tab 的质量滑杆置灰（spec §2.2） */
+const compressIsLossless = computed(() => LOSSLESS_FORMATS.has(compressTarget.value))
+const convertIsLossless = computed(() => LOSSLESS_FORMATS.has(convertFormat.value))
+const resizeIsLossless = computed(() => LOSSLESS_FORMATS.has(resizeFormat.value))
 
 function detach(): void {
   if (unsubscribe) {
@@ -278,6 +293,18 @@ function revealAll(): void {
   if (first !== undefined) void revealPath(first.output)
 }
 
+/** 系统目录选择（壳通用能力）：选中回填并记忆，取消保持原值 */
+async function chooseDir(): Promise<void> {
+  try {
+    const dir = await window.lumin.pickDirectory('选择输出目录')
+    if (dir === null) return
+    outputDir.value = dir
+    await saveOutputDir(dir)
+  } catch (err) {
+    showError(err)
+  }
+}
+
 onMounted(() => {
   void config()
     .then((result) => {
@@ -373,7 +400,7 @@ onUnmounted(detach)
             v-model:value="compressQuality"
             :min="1"
             :max="100"
-            :disabled="phase === 'running'"
+            :disabled="phase === 'running' || compressIsLossless"
             class="flex-1"
           />
           <span class="w-10 text-right text-sm">{{ compressQuality }}</span>
@@ -385,9 +412,9 @@ onUnmounted(detach)
             :disabled="phase === 'running'"
             class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
           >
-            <option value="original">保持原格式</option>
-            <option value="jpg">统一 JPG</option>
-            <option value="webp">统一 WebP</option>
+            <option v-for="opt in COMPRESS_TARGET_OPTIONS" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
           </select>
           <NText v-if="compressTarget === 'original'" depth="3" class="text-xs"
             >gif 将转 WebP 保留动画</NText
@@ -413,7 +440,7 @@ onUnmounted(detach)
             v-model:value="convertQuality"
             :min="1"
             :max="100"
-            :disabled="phase === 'running' || convertIsPng"
+            :disabled="phase === 'running' || convertIsLossless"
             class="flex-1"
           />
           <span class="w-10 text-right text-sm">{{ convertQuality }}</span>
@@ -502,7 +529,7 @@ onUnmounted(detach)
             v-model:value="resizeQuality"
             :min="1"
             :max="100"
-            :disabled="phase === 'running' || resizeIsPng"
+            :disabled="phase === 'running' || resizeIsLossless"
             class="flex-1"
           />
           <span class="w-10 text-right text-sm">{{ resizeQuality }}</span>
@@ -516,6 +543,9 @@ onUnmounted(detach)
           placeholder="输出目录"
           class="flex-1"
         />
+        <NButton :disabled="phase === 'running'" @click="chooseDir">
+          <FolderOpen class="mr-1 h-3.5 w-3.5" />选择
+        </NButton>
       </div>
     </NSpace>
 

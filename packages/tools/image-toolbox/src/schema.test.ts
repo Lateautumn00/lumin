@@ -94,7 +94,17 @@ describe('compressOptionsSchema', () => {
   })
 
   it('target 枚举外的值拒绝', () => {
-    expect(() => compressOptionsSchema.parse({ quality: 75, target: 'avif' })).toThrow()
+    expect(() => compressOptionsSchema.parse({ quality: 75, target: 'gif' })).toThrow()
+    expect(() => compressOptionsSchema.parse({ quality: 75, target: 'bmp' })).toThrow()
+  })
+
+  it('常用目标格式（png/jpeg 归一的 jpg/avif）合法', () => {
+    for (const target of ['original', 'jpg', 'png', 'webp', 'avif']) {
+      expect(compressOptionsSchema.parse({ quality: 75, target })).toEqual({
+        quality: 75,
+        target
+      })
+    }
   })
 })
 

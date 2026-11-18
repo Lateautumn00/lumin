@@ -6,7 +6,7 @@
  *              锁定 probe/process/config 通道拼写与 revealPath 壳通道复用
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { config, process, probe, revealPath } from './client'
+import { config, process, probe, revealPath, saveOutputDir } from './client'
 
 const invoke = vi.fn(async () => ({ echoed: true }))
 const reveal = vi.fn(async () => undefined)
@@ -47,6 +47,12 @@ describe('client 通道封装（AGENTS §6 白名单 bridge）', () => {
     stubBridge()
     await expect(config()).resolves.toEqual({ echoed: true })
     expect(invoke).toHaveBeenCalledWith('image-toolbox:config', {})
+  })
+
+  it('saveOutputDir sync：目录记忆落盘', async () => {
+    stubBridge()
+    await expect(saveOutputDir('E:\\out')).resolves.toEqual({ echoed: true })
+    expect(invoke).toHaveBeenCalledWith('image-toolbox:set-output-dir', { outputDir: 'E:\\out' })
   })
 
   it('revealPath 复用壳通道', async () => {

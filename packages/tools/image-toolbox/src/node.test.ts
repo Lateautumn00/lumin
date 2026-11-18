@@ -286,6 +286,24 @@ describe('config', () => {
   })
 })
 
+describe('set-output-dir', () => {
+  it('选择目录后即时记忆（config 可读）', async () => {
+    const picked = mkdtempSync(join(tmpdir(), 'lumin-it-pick-'))
+    roots.push(picked)
+    const harness = createHarness()
+    await invokeIpc(harness, 'set-output-dir', { outputDir: picked })
+    const config = (await invokeIpc(harness, 'config', {})) as { outputDir: string }
+    expect(config.outputDir).toBe(picked)
+  })
+
+  it('空目录 → INVALID_PAYLOAD', async () => {
+    const harness = createHarness()
+    await expect(invokeIpc(harness, 'set-output-dir', { outputDir: '' })).rejects.toMatchObject({
+      code: 'INVALID_PAYLOAD'
+    })
+  })
+})
+
 describe('process', () => {
   const compressPayload = (files: string[], outputDir: string) => ({
     mode: 'compress' as const,

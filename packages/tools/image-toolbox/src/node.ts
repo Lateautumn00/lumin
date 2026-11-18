@@ -20,6 +20,7 @@ import {
   probeResultSchema,
   processPayloadSchema,
   processResultSchema,
+  setOutputDirPayloadSchema,
   type ProcessFailure,
   type ProcessPayload,
   type ProcessResult,
@@ -177,6 +178,13 @@ export function registerWith(ctx: MainPluginContext, deps: ImageToolboxDeps): vo
   ctx.registerIpc('config', async () => {
     const saved = await ctx.settings.get<string | null>('outputDir', null)
     return configResultSchema.parse({ outputDir: saved ?? defaultOutputDir })
+  })
+
+  // —— set-output-dir（sync）：目录选择后即时记忆（spec §4） ——
+  ctx.registerIpc('set-output-dir', async ({ payload }) => {
+    const parsed = setOutputDirPayloadSchema.safeParse(payload)
+    if (!parsed.success) throw makeError('INVALID_PAYLOAD', '参数无效')
+    await ctx.settings.set('outputDir', parsed.data.outputDir)
   })
 
   // —— process（task）：批量串行 + 可取消，done 返回逐文件结果（spec §4/§7） ——

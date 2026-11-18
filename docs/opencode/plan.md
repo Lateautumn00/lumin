@@ -231,6 +231,7 @@ lumin/
 
 - **决策（用户拍板 2026-11-18）**：下一个功能 = 图片批量压缩/格式转换/缩放（一工具三 Tab）；引擎 = **复用 M4 的 ffmpeg.exe/ffprobe.exe**（零新增依赖与二进制）；格式矩阵**含 AVIF**（libaom-av1 单张 5–30s，UI 标注）；输出冲突**自动重命名**；GIF **转 webp 保留动画**（其他格式取首帧并标注）
 - 通道：`image-toolbox:probe`（sync，ffprobe 元信息）+ `image-toolbox:process`（task，批量串行 + 可取消）；编码参数映射/缩放求解/输出命名/冲突重命名全部纯函数（≥80% 覆盖）
+- **2026-11-18 增补（用户反馈）**：输出目录支持系统选择器（新增壳通用通道 `lumin:shell:pick-directory` + bridge `pickDirectory`，工具 `set-output-dir` 即时记忆）；目标格式补全常用项——压缩 Tab `原格式/jpg/png/webp/avif`，转换/缩放 Tab `jpg(JPEG)/png/webp/avif/bmp/tiff`（png/bmp/tiff 为无损，质量滑杆置灰）
 - 字段级清单：`docs/spec/image-toolbox.md`（已定稿）；错误码 `IT_*`；settings 仅记忆输出目录，一期无历史列表
 - 依据实测：gyan.dev essentials 6.1.1 编码器 libwebp/png/mjpeg/libaom-av1 与 muxer avif/webp/image2 全部可用
 - **验收**：gif→webp 帧数一致、缩放四模式尺寸断言、冲突重命名、单张 jpg < 1s（avif 除外）、R2 八类 smoke、gate 全绿

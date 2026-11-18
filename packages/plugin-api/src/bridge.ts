@@ -24,6 +24,8 @@ export interface LuminBridge {
   getPathForFile(file: File): string
   /** 在资源管理器中定位文件/目录（shell.showItemInFolder） */
   revealPath(path: string): Promise<void>
+  /** 系统目录选择对话框；用户取消返回 null（壳通用能力，多工具复用） */
+  pickDirectory(title?: string): Promise<string | null>
   readonly settings: {
     get<T>(key: string, defaultValue: T): Promise<T>
     set<T>(key: string, value: T): Promise<void>

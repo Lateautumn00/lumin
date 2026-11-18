@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { shell } from 'electron'
+import { shell, dialog } from 'electron'
 import type { IpcHandler } from '@lumin/plugin-api'
 import { registerShellChannels } from './shell-channels'
 import type { IpcBus } from './ipc-bus'
@@ -8,7 +8,10 @@ import type { TaskQueue } from './task-queue'
 
 vi.mock('electron', () => ({
   app: { getVersion: () => '1.2.3', getLocale: () => 'zh-CN' },
-  shell: { openPath: vi.fn(async () => ''), showItemInFolder: vi.fn() }
+  shell: { openPath: vi.fn(async () => ''), showItemInFolder: vi.fn() },
+  dialog: {
+    showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:\\out'] }))
+  }
 }))
 
 function createHarness(): {
@@ -124,6 +127,24 @@ describe('registerShellChannels', () => {
       code: 'INVALID_PAYLOAD'
     })
     await expect(call('lumin:shell:reveal', undefined)).rejects.toMatchObject({
+      code: 'INVALID_PAYLOAD'
+    })
+  })
+
+  it('shell:pick-directory 返回选中目录；取消 → null；非法参数 → INVALID_PAYLOAD', async () => {
+    const { call } = createHarness()
+    await expect(call('lumin:shell:pick-directory', { title: '选择输出目录' })).resolves.toBe(
+      'C:\\out'
+    )
+    expect(dialog.showOpenDialog).toHaveBeenCalledWith({
+      title: '选择输出目录',
+      properties: ['openDirectory', 'createDirectory']
+    })
+
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] })
+    await expect(call('lumin:shell:pick-directory', {})).resolves.toBeNull()
+
+    await expect(call('lumin:shell:pick-directory', { title: '' })).rejects.toMatchObject({
       code: 'INVALID_PAYLOAD'
     })
   })

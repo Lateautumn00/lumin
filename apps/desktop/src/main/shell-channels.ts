@@ -1,4 +1,4 @@
-import { app, shell } from 'electron'
+import { app, dialog, shell } from 'electron'
 import { z } from 'zod'
 import { makeError } from '@lumin/shared'
 import type { IpcBus } from './ipc-bus'
@@ -22,6 +22,10 @@ const cancelSchema = z.object({
 
 const revealPathSchema = z.object({
   path: z.string().min(1)
+})
+
+const pickDirectorySchema = z.object({
+  title: z.string().min(1).optional()
 })
 
 export interface ShellChannelDeps {
@@ -64,6 +68,21 @@ export function registerShellChannels(bus: IpcBus, deps: ShellChannelDeps): void
     if (!parsed.success) throw makeError('INVALID_PAYLOAD', '定位路径参数无效')
     shell.showItemInFolder(parsed.data.path)
   })
+
+  bus.registerSync(
+    'lumin:shell:pick-directory',
+    'lumin',
+    'shell:pick-directory',
+    async ({ payload }) => {
+      const parsed = pickDirectorySchema.safeParse(payload)
+      if (!parsed.success) throw makeError('INVALID_PAYLOAD', '目录选择参数无效')
+      const result = await dialog.showOpenDialog({
+        title: parsed.data.title ?? '选择文件夹',
+        properties: ['openDirectory', 'createDirectory']
+      })
+      return result.canceled ? null : (result.filePaths[0] ?? null)
+    }
+  )
 
   bus.registerSync('lumin:task:cancel', 'lumin', 'task:cancel', ({ payload }) => {
     const parsed = cancelSchema.safeParse(payload)

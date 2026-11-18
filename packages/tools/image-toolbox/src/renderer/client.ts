@@ -21,6 +21,11 @@ export function config(): Promise<ConfigResult> {
   return window.lumin.invoke('image-toolbox:config', {})
 }
 
+/** 保存输出目录记忆（选择目录后即时落盘，下次打开回填） */
+export function saveOutputDir(outputDir: string): Promise<void> {
+  return window.lumin.invoke('image-toolbox:set-output-dir', { outputDir })
+}
+
 /** 打开输出文件所在文件夹（复用壳通道，壳侧 zod 校验非空） */
 export function revealPath(path: string): Promise<void> {
   return window.lumin.revealPath(path)
