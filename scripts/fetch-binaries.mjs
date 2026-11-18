@@ -14,9 +14,11 @@
  * 模型源：RapidOCR 官方托管（modelscope），SHA256 与其上游 default_models.yaml 一致；
  * cls 与字典以上游不可达时的本机实测值钉死（2026-11-16，见 plan §4.4 M3b 记录）。
  * 下载引擎：yt-dlp 2026.10.26 官方 Release（SHA256 本机实测钉死）；ffmpeg/ffprobe 来自
- * ffmpeg-static b6.1.1 Release（win32-x64）。
+ * ffmpeg-static b6.1.1 Release（win32-x64，.gz 压缩变体，SHA256 为解压后本机实测钉死，
+ * 2026-11-18，见 docs/smoke/video-download.md）。
  */
 import { createHash } from 'node:crypto'
+import { gunzipSync } from 'node:zlib'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -25,8 +27,9 @@ import { fileURLToPath } from 'node:url'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 /**
- * @typedef {{ id: string, url: string, sha256: string, bytes?: number }} Asset
- * bytes 可省略（省略时只校验 SHA256）：yt-dlp 单文件 Release 无稳定体积参照
+ * @typedef {{ id: string, url: string, sha256: string, bytes?: number, gunzip?: boolean }} Asset
+ * bytes 可省略（省略时只校验 SHA256）：yt-dlp 单文件 Release 无稳定体积参照；
+ * gunzip=true 表示下载的是 .gz 压缩文件，需解压后落盘并按解压产物校验 SHA256/bytes
  */
 
 /** @type {Readonly<Record<string, { outDir: string, assets: ReadonlyArray<Asset> }>>} */
@@ -70,13 +73,17 @@ const GROUPS = {
       },
       {
         id: 'ffmpeg',
-        url: 'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/win32-x64',
-        sha256: 'PENDING_SHA256'
+        url: 'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-win32-x64.gz',
+        sha256: '04e1307997530f9cf2fe35cba2ca7e8875ca91da02f89d6c7243df819c94ad00',
+        bytes: 82797568,
+        gunzip: true
       },
       {
         id: 'ffprobe',
-        url: 'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-win32-x64',
-        sha256: 'PENDING_SHA256'
+        url: 'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-win32-x64.gz',
+        sha256: '3a7e2dc003dc2cd1472827e4c7c4f056ae1ae0ae7c5bbc580c99b49827351ba4',
+        bytes: 82668032,
+        gunzip: true
       }
     ]
   }
@@ -108,7 +115,8 @@ async function verify(asset, path) {
 async function download(asset, path) {
   const res = await fetch(asset.url, { redirect: 'follow' })
   if (!res.ok) throw new Error(`${asset.id}: HTTP ${res.status} (${asset.url})`)
-  const buf = Buffer.from(await res.arrayBuffer())
+  let buf = Buffer.from(await res.arrayBuffer())
+  if (asset.gunzip === true) buf = gunzipSync(buf)
   const actual = createHash('sha256').update(buf).digest('hex')
   if (actual !== asset.sha256) {
     throw new Error(`${asset.id}: SHA256 不匹配，期望 ${asset.sha256}，实得 ${actual}`)
@@ -135,11 +143,6 @@ async function main() {
       const state = await verify(asset, path)
       if (state === 'ok') {
         console.log(`OK      ${asset.id}  ${path}`)
-        continue
-      }
-      if (asset.sha256 === 'PENDING_SHA256') {
-        console.error(`SKIP    ${asset.id}  SHA256 未钉死（先实测后回填本脚本），跳过`)
-        failed += 1
         continue
       }
       if (checkOnly) {
