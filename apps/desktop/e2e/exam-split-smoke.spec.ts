@@ -425,3 +425,237 @@ test.describe('exam-split（试卷切割 · PDF 操作）冒烟', () => {
     }
   })
 })
+
+/* ─── M3b OCR 切题（真实模型；fixtures 缺失时跳过） ─── */
+
+/** 1×1 PNG 头（导出校验：spec §10.7.3） */
+function pngHead(filePath: string): string {
+  return fs.readFileSync(filePath).subarray(0, 4).toString('latin1')
+}
+
+/** 合成样卷图片（1200×1600，印刷体 3 题；R2.4 用大图尺寸） */
+async function makeSampleImage(filePath: string): Promise<void> {
+  const { createCanvas, GlobalFonts } = await import('@napi-rs/canvas')
+  if (fs.existsSync('C:\\Windows\\Fonts\\msyh.ttc')) {
+    GlobalFonts.registerFromPath('C:\\Windows\\Fonts\\msyh.ttc', 'Microsoft YaHei')
+  }
+  const canvas = createCanvas(1200, 1600)
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, 1200, 1600)
+  ctx.fillStyle = '#111111'
+  const font = (size: number): string => `${size}px "Microsoft YaHei", sans-serif`
+  ctx.font = font(46)
+  ctx.fillText('一、选择题（每题 5 分）', 80, 150)
+  const lines = [
+    '1、下列各数中，最小的数是（  ）',
+    'A．-2    B．-1    C．0    D．1',
+    '2、计算 3+5 的结果是（  ）',
+    'A．6    B．7    C．8    D．9',
+    '3、下列图形中，是轴对称图形的是（  ）',
+    'A．圆    B．平行四边形    C．三角形    D．梯形'
+  ]
+  lines.forEach((text, index) => {
+    ctx.font = font(index % 2 === 0 ? 44 : 40)
+    ctx.fillText(text, 80, 280 + index * 170)
+  })
+  fs.writeFileSync(filePath, await canvas.encode('png'))
+}
+
+/** IPC 单任务（done/error 二选一） */
+async function runTask(
+  page: Awaited<ReturnType<ElectronApplication['firstWindow']>>,
+  channel: string,
+  payload: unknown
+): Promise<{ result?: unknown; error?: { code: string; message: string } }> {
+  return page.evaluate(
+    ([ch, data]) =>
+      new Promise<{ result?: unknown; error?: { code: string; message: string } }>(
+        (resolve, reject) => {
+          let taskId = ''
+          const off = window.lumin.onTaskEvent((ev) => {
+            if (taskId !== '' && ev.taskId !== taskId) return
+            if (ev.kind === 'done') {
+              off()
+              resolve({ result: ev.result })
+            } else if (ev.kind === 'error') {
+              off()
+              resolve({ error: ev.error })
+            }
+          })
+          window.lumin
+            .invoke<{ taskId: string }>(ch, data)
+            .then(({ taskId: id }) => {
+              taskId = id
+            })
+            .catch((err: unknown) => {
+              off()
+              reject(err)
+            })
+        }
+      ),
+    [channel, payload] as const
+  )
+}
+
+test.describe('exam-split（OCR 切题 · M3b）冒烟', () => {
+  test('图片识别 → 键盘微调 → 导出 PNG+PDF（真实模型，R2.4 大图）', async () => {
+    test.setTimeout(240_000)
+    const { app, page } = await launch()
+    const workDir = makeWorkDir('lumin ocr image')
+    try {
+      const input = path.join(workDir, '样卷 图片.png')
+      await makeSampleImage(input)
+
+      await page.getByRole('link', { name: '试卷切割' }).click()
+      await page.getByRole('tab', { name: 'OCR 切题' }).click()
+      const panel = page.locator('section[aria-label="OCR 切题"]')
+      await panel.locator('input[type="file"]').setInputFiles(input)
+
+      // 预览出图（renderer 直读 File，不经 IPC）
+      await expect(page.locator('img[alt="当前页预览"]')).toBeVisible({ timeout: 20_000 })
+      await expect(panel.getByRole('button', { name: '开始识别' })).toBeEnabled()
+
+      await panel.getByRole('button', { name: '开始识别' }).click()
+      // 阶段进度可见（加载识别模型… / 识别第 1/1 页…）
+      await expect(panel.getByText(/识别|渲染|切分|加载/).first()).toBeVisible({ timeout: 30_000 })
+      await expect(panel.getByText(/共 \d+ 题/)).toBeVisible({ timeout: 120_000 })
+
+      // 键盘微调：选中首条分界线 → ↓ 下移，aria-valuenow 变化（spec §10.2）
+      const slider = page.getByRole('slider', { name: /题下边界/ }).first()
+      await expect(slider).toBeVisible()
+      const before = Number(await slider.getAttribute('aria-valuenow'))
+      await slider.focus()
+      for (let index = 0; index < 4; index++) await page.keyboard.press('ArrowDown')
+      await expect
+        .poll(async () => Number(await slider.getAttribute('aria-valuenow')))
+        .toBeGreaterThan(before)
+
+      await panel.getByRole('button', { name: /^导出/ }).click()
+      await expect(panel.getByText(/导出完成/)).toBeVisible({ timeout: 120_000 })
+
+      const files = fs.readdirSync(workDir)
+      const pngs = files.filter((name) => name.includes('_题') && name.endsWith('.png'))
+      expect(pngs.length).toBeGreaterThanOrEqual(2)
+      expect(pngHead(path.join(workDir, pngs[0] as string))).toBe('\x89PNG')
+      expect(pngs).toContain('样卷 图片_题1.png')
+      const pdf = path.join(workDir, '样卷 图片_切题.pdf')
+      expect(fs.existsSync(pdf)).toBe(true)
+      expect(pdfHead(pdf)).toBe('%PDF-')
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('PDF 识别（三页卷）：每页 ≥1 题区且题号连续（真实模型）', async () => {
+    test.setTimeout(180_000)
+    const { app, page } = await launch()
+    try {
+      test.skip(!fs.existsSync(threePageFixture), '缺少三页 fixture')
+      const outcome = await runTask(page, 'exam-split:ocr-detect', {
+        inputPath: threePageFixture
+      })
+      expect(outcome.error).toBeUndefined()
+      const result = outcome.result as {
+        pages: { pageNumber: number; regions: { start: number; end: number }[] }[]
+      }
+      expect(result.pages.map((item) => item.pageNumber)).toEqual([1, 2, 3])
+      for (const item of result.pages) {
+        expect(item.regions.length).toBeGreaterThanOrEqual(1)
+        for (const region of item.regions) expect(region.start).toBeLessThan(region.end)
+      }
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('OCR 输入异常：损坏图片 → OCR_INPUT_INVALID；加密 PDF → PDF_ENCRYPTED', async () => {
+    test.setTimeout(120_000)
+    const { app, page } = await launch()
+    const workDir = makeWorkDir('lumin ocr bad input')
+    try {
+      const broken = path.join(workDir, '坏图.png')
+      fs.writeFileSync(broken, Buffer.from('not a png', 'utf8'))
+      const imageOutcome = await runTask(page, 'exam-split:ocr-detect', { inputPath: broken })
+      expect(imageOutcome.error?.code).toBe('OCR_INPUT_INVALID')
+      expect(imageOutcome.error?.message).toContain('图片')
+
+      test.skip(!fs.existsSync(encryptedFixture), '缺少加密 fixture')
+      const pdfOutcome = await runTask(page, 'exam-split:ocr-detect', {
+        inputPath: encryptedFixture
+      })
+      expect(pdfOutcome.error?.code).toBe('PDF_ENCRYPTED')
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('R2.7 模型缺失：临时移走 det.onnx → MODEL_MISSING（真实模型文件原位恢复）', async () => {
+    test.setTimeout(120_000)
+    const { app, page } = await launch()
+    const workDir = makeWorkDir('lumin ocr model')
+    const model = path.resolve(fixturesDir, '../../../../binaries/ocr/det.onnx')
+    const backup = `${model}.bak`
+    try {
+      test.skip(!fs.existsSync(model), '缺少 OCR 模型（先跑 scripts/fetch-binaries.mjs）')
+      const input = path.join(workDir, '模型卷.png')
+      await makeSampleImage(input)
+      fs.renameSync(model, backup)
+      const outcome = await runTask(page, 'exam-split:ocr-detect', { inputPath: input })
+      expect(outcome.error?.code).toBe('MODEL_MISSING')
+      expect(outcome.error?.message).toContain('模型')
+    } finally {
+      if (fs.existsSync(backup)) fs.renameSync(backup, model)
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('R2.5 取消：百页 PDF detect 中断 → CANCELLED', async () => {
+    test.setTimeout(180_000)
+    const { app, page } = await launch()
+    try {
+      test.skip(!fs.existsSync(hundredPageFixture), '缺少百页 fixture')
+      const error = await page.evaluate(
+        (file: string) =>
+          new Promise<{ code: string }>((resolve, reject) => {
+            let taskId = ''
+            let cancelRequested = false
+            const off = window.lumin.onTaskEvent((ev) => {
+              if (taskId !== '' && ev.taskId !== taskId) return
+              if (ev.kind === 'progress') {
+                // 首个进度即取消（渲染阶段先到）；保持监听等待 CANCELLED
+                if (!cancelRequested) {
+                  cancelRequested = true
+                  void window.lumin.invoke<boolean>('lumin:task:cancel', { taskId })
+                }
+                return
+              }
+              if (ev.kind === 'done') {
+                off()
+                reject(new Error('百页 OCR 竟然在取消前完成'))
+              } else if (ev.kind === 'error') {
+                off()
+                resolve({ code: ev.error.code })
+              }
+            })
+            window.lumin
+              .invoke<{ taskId: string }>('exam-split:ocr-detect', { inputPath: file })
+              .then(({ taskId: id }) => {
+                taskId = id
+              })
+              .catch((err: unknown) => {
+                off()
+                reject(err)
+              })
+          }),
+        hundredPageFixture
+      )
+      expect(error.code).toBe('CANCELLED')
+    } finally {
+      await app.close()
+    }
+  })
+})

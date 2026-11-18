@@ -5,6 +5,8 @@ import {
   submitCrop,
   submitDelete,
   submitMerge,
+  submitOcrDetect,
+  submitOcrExport,
   submitRotate,
   submitSplit
 } from './client'
@@ -69,6 +71,26 @@ describe('renderer client（exam-split:* 通道，spec §4）', () => {
   it('cancelTask 走通用取消通道', async () => {
     await cancelTask('task-9')
     expect(calls).toEqual([{ channel: 'lumin:task:cancel', payload: { taskId: 'task-9' } }])
+  })
+
+  it('OCR 两段式（spec §10.4）：detect 只带 inputPath，export 带最终边界', async () => {
+    await expect(submitOcrDetect({ inputPath: 'C:/试卷/卷1.pdf' })).resolves.toEqual({
+      taskId: 'task-9'
+    })
+    await submitOcrExport({
+      inputPath: 'C:/试卷/卷1.pdf',
+      startNumber: 3,
+      exportPdf: true,
+      pages: [
+        { pageNumber: 1, width: 893, height: 1263, regions: [{ start: 0, end: 1, lines: [] }] }
+      ]
+    })
+    expect(calls.map((call) => call.channel)).toEqual([
+      'exam-split:ocr-detect',
+      'exam-split:ocr-export'
+    ])
+    expect(calls[0]?.payload).toEqual({ inputPath: 'C:/试卷/卷1.pdf' })
+    expect(calls[1]?.payload).toMatchObject({ startNumber: 3, exportPdf: true })
   })
 
   it('revealPath 委托桥的资源管理器定位', async () => {
