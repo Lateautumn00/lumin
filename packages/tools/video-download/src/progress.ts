@@ -109,6 +109,8 @@ export function buildStartArgs(input: {
   preset: Preset
   outputDir: string
   engineDir: string
+  /** 目标平台 cookie 的临时 Netscape 文件路径（可选，spec §9.4） */
+  cookieFile?: string
 }): string[] {
   const args = [
     '--no-playlist',
@@ -130,7 +132,9 @@ export function buildStartArgs(input: {
     args.push('-f', formatArgFor(input.preset))
   }
   // after_move 不触发 simulate 模式：下载完成后输出最终文件路径（裸路径行）
-  args.push('--print', 'after_move:filepath', input.url)
+  args.push('--print', 'after_move:filepath')
+  if (input.cookieFile !== undefined) args.push('--cookies', input.cookieFile)
+  args.push(input.url)
   return args
 }
 
@@ -138,6 +142,9 @@ export function buildStartArgs(input: {
  * 组装 probe 参数（-J 输出单 JSON；20s 超时由调用方 runProcess timeoutMs 控制）
  * @param url 视频链接
  */
-export function buildProbeArgs(url: string): string[] {
-  return ['-J', '--no-playlist', url]
+export function buildProbeArgs(url: string, cookieFile?: string): string[] {
+  const args = ['-J', '--no-playlist']
+  if (cookieFile !== undefined) args.push('--cookies', cookieFile)
+  args.push(url)
+  return args
 }

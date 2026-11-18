@@ -2,6 +2,7 @@ import type {
   IpcHandler,
   MainPluginContext,
   RegisterMain,
+  SecureStorage,
   TaskHandler,
   ToolLogger,
   ToolManifest,
@@ -23,6 +24,8 @@ export interface LoadToolsDeps {
   createLogger: (toolId: string) => ToolLogger
   logger: ToolLogger
   paths: ToolPaths
+  /** 壳级加密存储（electron safeStorage；缺省时工具需自行禁用相关功能） */
+  secure?: SecureStorage
 }
 
 export interface LoadToolsResult {
@@ -78,7 +81,8 @@ export async function loadTools(
         },
         settings: deps.createSettings(manifest.id),
         log: deps.createLogger(manifest.id),
-        paths: deps.paths
+        paths: deps.paths,
+        ...(deps.secure !== undefined ? { secure: deps.secure } : {})
       }
       await reg.registerMain(ctx)
       loaded.push(manifest)

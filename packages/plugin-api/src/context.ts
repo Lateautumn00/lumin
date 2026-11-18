@@ -43,6 +43,17 @@ export interface ToolPaths {
   readonly binaries: string
 }
 
+/**
+ * 壳级加密存储能力（Electron safeStorage，OS keyring）——工具不得以任何形式
+ * 明文持久化敏感凭证（cookie/token），一律经此加解密后落盘。
+ */
+export interface SecureStorage {
+  /** 当前环境是否支持加密（false 时工具必须禁用相关功能，禁止降级明文） */
+  isEncryptionAvailable(): boolean
+  encryptString(plainText: string): string
+  decryptString(encrypted: string): string
+}
+
 /** 主进程插件上下文：工具 node.ts 的 `registerMain(ctx)` 入参 */
 export interface MainPluginContext {
   readonly toolId: string
@@ -52,6 +63,8 @@ export interface MainPluginContext {
   readonly settings: ToolSettings
   readonly log: ToolLogger
   readonly paths: ToolPaths
+  /** 加密存储（可选：壳未提供时工具禁用相关功能） */
+  readonly secure?: SecureStorage
 }
 
 export type RegisterMain = (ctx: MainPluginContext) => void | Promise<void>

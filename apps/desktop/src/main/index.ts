@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session } from 'electron'
+import { app, BrowserWindow, ipcMain, safeStorage, session } from 'electron'
 import log from 'electron-log'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -117,6 +117,12 @@ async function bootstrap(): Promise<void> {
       binaries: existsSync(join(process.resourcesPath, 'binaries'))
         ? join(process.resourcesPath, 'binaries')
         : join(__dirname, '../../../../binaries')
+    },
+    // 壳级加密存储：工具敏感凭证（cookie 等）经 OS keyring 加密落盘，禁止明文
+    secure: {
+      isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+      encryptString: (plain) => safeStorage.encryptString(plain).toString('base64'),
+      decryptString: (cipher) => safeStorage.decryptString(Buffer.from(cipher, 'base64'))
     }
   })
   for (const failure of result.failed) {

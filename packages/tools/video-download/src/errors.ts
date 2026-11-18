@@ -18,7 +18,10 @@ export const VIDEO_DOWNLOAD_ERROR_CODES = [
   'VD_UNSUPPORTED_PLATFORM',
   'VD_OUTPUT_WRITE_FAILED',
   'VD_DOWNLOAD_FAILED',
-  'VD_HISTORY_FAILED'
+  'VD_HISTORY_FAILED',
+  'VD_COOKIE_FORMAT_INVALID',
+  'VD_COOKIE_IMPORT_FAILED',
+  'VD_COOKIE_STORE_UNAVAILABLE'
 ] as const
 
 export type VideoDownloadErrorCode = (typeof VIDEO_DOWNLOAD_ERROR_CODES)[number]
@@ -31,7 +34,10 @@ const MESSAGES: Record<VideoDownloadErrorCode, string> = {
   VD_UNSUPPORTED_PLATFORM: '暂不支持该平台链接',
   VD_OUTPUT_WRITE_FAILED: '输出目录不可写或磁盘空间不足',
   VD_DOWNLOAD_FAILED: '下载失败，请查看详情或稍后重试',
-  VD_HISTORY_FAILED: '历史记录读写失败'
+  VD_HISTORY_FAILED: '历史记录读写失败',
+  VD_COOKIE_FORMAT_INVALID: 'Cookie 格式无法识别，请粘贴浏览器导出的 Cookie',
+  VD_COOKIE_IMPORT_FAILED: '从浏览器读取 Cookie 失败，请改用手动粘贴',
+  VD_COOKIE_STORE_UNAVAILABLE: '系统不支持加密存储，Cookie 功能不可用'
 }
 
 /** 可重试错误码（renderer 据此显示 [重试]） */

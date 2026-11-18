@@ -137,7 +137,9 @@ describe('buildStartArgs', () => {
     expect(args).toContain('--continue')
     expect(args).toContain('--no-overwrites')
     expect(args).toContain('--no-playlist')
-    const templateIdx = args.indexOf('download:PROGRESS|%(progress.downloaded_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s')
+    const templateIdx = args.indexOf(
+      'download:PROGRESS|%(progress.downloaded_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s'
+    )
     expect(templateIdx).toBeGreaterThan(-1)
     expect(args[templateIdx - 1]).toBe('--progress-template')
     expect(args).toContain('--ffmpeg-location')

@@ -50,7 +50,15 @@ describe('normalizeHistory', () => {
 
   it('可选字段缺失通过校验（platform/outputName/endedAt 等）', () => {
     const result = normalizeHistory([
-      { id: 't', url: 'https://example.com/v/1', title: '', preset: '1080p', outputDir: 'E:\\o', status: 'FAILED', startedAt: 0 }
+      {
+        id: 't',
+        url: 'https://example.com/v/1',
+        title: '',
+        preset: '1080p',
+        outputDir: 'E:\\o',
+        status: 'FAILED',
+        startedAt: 0
+      }
     ])
     expect(result).toHaveLength(1)
   })

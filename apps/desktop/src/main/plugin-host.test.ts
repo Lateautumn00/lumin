@@ -112,4 +112,43 @@ describe('loadTools', () => {
     expect(result.failed[0]?.id).toBe('demo')
     expect(result.failed[0]?.message).toContain('非法 action')
   })
+
+  it('deps.secure 缺省 → ctx.secure 为 undefined；提供 → 原样注入', async () => {
+    // 缺省分支
+    const { deps: depsNoSecure } = createDeps()
+    let seenSecure: unknown = 'unset'
+    await loadTools(
+      [
+        {
+          manifest: validManifest,
+          registerMain: (ctx) => {
+            seenSecure = ctx.secure
+          }
+        }
+      ],
+      depsNoSecure
+    )
+    expect(seenSecure).toBeUndefined()
+
+    // 注入分支：secure 原样透传给 ctx
+    const { deps: depsWithSecure } = createDeps()
+    const secure = {
+      isEncryptionAvailable: () => true,
+      encryptString: (plain: string) => Buffer.from(plain).toString('base64'),
+      decryptString: (cipher: string) => Buffer.from(cipher, 'base64').toString()
+    }
+    let seen: unknown = 'unset'
+    await loadTools(
+      [
+        {
+          manifest: validManifest,
+          registerMain: (ctx) => {
+            seen = ctx.secure
+          }
+        }
+      ],
+      { ...depsWithSecure, secure }
+    )
+    expect(seen).toBe(secure)
+  })
 })

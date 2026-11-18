@@ -105,3 +105,43 @@ export const markPausePayloadSchema = z.object({
   taskId: z.string().min(1)
 })
 export type MarkPausePayload = z.infer<typeof markPausePayloadSchema>
+
+// —— Cookie 支持（二期，spec §9） ——
+
+/** cookie 平台枚举（与 cookies.ts COOKIE_PLATFORMS 同源；zod 侧独立定义避免循环依赖） */
+export const COOKIE_PLATFORM_VALUES = ['douyin', 'bilibili', 'youtube'] as const
+export const cookiePlatformSchema = z.enum(COOKIE_PLATFORM_VALUES)
+export type CookiePlatformSchema = z.infer<typeof cookiePlatformSchema>
+
+/** `video-download:cookie:list` 入参（无参） */
+export const cookieListPayloadSchema = z.object({})
+
+/** cookie list 条目（脱敏：仅条数与时间，不含任何 cookie 内容） */
+export const cookieListItemSchema = z.object({
+  platform: cookiePlatformSchema,
+  cookieCount: z.number().min(0),
+  updatedAt: z.number().min(0).optional()
+})
+export type CookieListItem = z.infer<typeof cookieListItemSchema>
+
+/** `video-download:cookie:set` 入参（raw ≤ 64KB，三种粘贴形态） */
+export const cookieSetPayloadSchema = z.object({
+  platform: cookiePlatformSchema,
+  raw: z
+    .string()
+    .min(1)
+    .max(64 * 1024)
+})
+export type CookieSetPayload = z.infer<typeof cookieSetPayloadSchema>
+
+/** `video-download:cookie:remove` 入参 */
+export const cookieRemovePayloadSchema = z.object({
+  platform: cookiePlatformSchema
+})
+
+/** `video-download:cookie:import-browser` 入参（长任务） */
+export const cookieImportBrowserPayloadSchema = z.object({
+  platform: cookiePlatformSchema,
+  browser: z.enum(['firefox', 'chromium-legacy'])
+})
+export type CookieImportBrowserPayload = z.infer<typeof cookieImportBrowserPayloadSchema>
