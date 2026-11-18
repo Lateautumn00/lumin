@@ -1,7 +1,7 @@
-# 试卷切割冒烟记录（M3a）
+# 试卷切割冒烟记录（M3a PDF 操作 + M3b OCR 切题）
 
 > 环境：Windows · Electron 45.3.1 · 分支：`feature/m0-skeleton`
-> 日期：2026-11-15 · 工具：`@lumin/tool-exam-split` v0.0.0（PDF 操作五算子：拆分/合并/删除/旋转/裁剪）
+> 日期：2026-11-15（M3a）/ 2026-11-18（M3b P3）· 工具：`@lumin/tool-exam-split` v0.0.0
 
 ## 1. 冒烟总览
 
@@ -51,8 +51,53 @@
 ## 4. R5 体积记录
 
 - 口径：gzip（2026-11-13 M1 决策：工具 chunk + 独占依赖 chunk；运行时资产单列不计入）。
-- `exam-split-*.js`：raw **843.6KB** / **gzip 189.5KB** < 200KB 基线 ✅（对照：计算器 214.3KB、单位换算 37.9KB）。
+- `exam-split-*.js`：**M3b P3 复测 raw 712.0KB / gzip 177.6KB < 200KB 基线 ✅**（P3 起 renderer 侧 pdfjs 改用官方压缩入口 `build/pdf.min.mjs`；M3a 历史值 raw 843.6KB / gzip 189.5KB 保留不改写）。对照：计算器 214.3KB、单位换算 37.9KB（同一未压缩构建口径，未复测）。
 - 运行时资产单列（按需加载，不计入上限）：
   - renderer `pdf.worker.min-*.mjs` raw 1,242.1KB / **gzip 370.4KB**
-  - 主进程 `out/main/chunks/pdf.worker-5011d310.js`（pdf-lib worker，不属 R5 口径）
+  - 主进程 `out/main/chunks/ocr.worker-*.js` raw 1,089.9KB / gzip 297.4KB（推理 + pdfjs 渲染，worker 内按需）
+  - 主进程 `out/main/chunks/pdf.worker-*.js`（pdf-lib worker，不属 R5 口径）raw 1,067.4KB / gzip 288.9KB
+  - OCR 模型 `binaries/ocr/` 16.2MB（det 4.7 + rec 10.9 + cls 0.6 + dict 0.03，gitignore，fetch 脚本 SHA256 钉死）
 - 依赖方向核对：pdfjs-dist（renderer）与 pdf-lib（主进程 worker）为 exam-split 独占依赖，已分仓隔离。
+
+## 5. M3b OCR 切题冒烟（2026-11-18，P3）
+
+> 口径：真实模型（`binaries/ocr/` 四件套）+ 真实 Electron 构建产物；e2e 套件 `e2e/exam-split-smoke.spec.ts`（11 用例，workers=1 串行）。
+
+### 5.1 总览
+
+| #   | 冒烟项                            | 方式                            | 结果                                                                                                                                  |
+| --- | --------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 单测（OCR schema/编排/编辑模型）  | `pnpm test`                     | ✅ exam-split **237 tests / 22 文件**（`ocr-edit` 24 + `ocr-workspace` 3 + `pdf-open` 3 + 既有组）；全仓 **526 tests / 51 文件** 全绿 |
+| 2   | 覆盖率（R1 核心 ≥80%、全仓 ≥60%） | `pnpm coverage`                 | ✅ exam-split 分组 **lines 97.90% / branches 83.74%**；全仓 93.65/85.37/91.52/95.83                                                   |
+| 3   | 质量门禁                          | `pnpm gate`                     | ✅ lint / typecheck(10/10) / test / dependency-cruiser 绿；⚠️ audit 新增外部 high advisory（无修复版，见 5.4）                        |
+| 4   | e2e（真实模型 + 真实构建）        | `pnpm test:e2e` exam-split 套件 | ✅ **11/11 passed**（PDF 6 + OCR 5）                                                                                                  |
+| 5   | chunk 体积（R5 <200KB gzip）      | 构建产物实测                    | ✅ `exam-split-*.js` raw 712.0KB / **gzip 177.6KB**（见 §4）                                                                          |
+| 6   | 单页 OCR ≤3s（R1，合成卷）        | 构建产物真实 spawn（三页卷）    | ✅ 2.25s / 3 页 ≈ **750ms/页**（A4@1.5 893×1263，regions 1/1/1）；真实样卷口径待 P4                                                   |
+
+### 5.2 R2 八类异常（OCR 侧）
+
+| 类别             | 验证级别 | 记录                                                                                                                                                     |
+| ---------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. 中文/空格路径 | e2e      | ✅ 临时目录 `lumin ocr image` + 输入 `样卷 图片.png`（中文+空格）→ 识别/导出成功，产物 `样卷 图片_题1.png`（`\x89PNG`）、`样卷 图片_切题.pdf`（`%PDF-`） |
+| 2. 文件被占用    | 复用 M3a | ✅ PDF 输入占用 → `PDF_LOCKED`（OCR detect 走同一 readFile 分类，§10.5 分界已覆盖；e2e 占用用例在 PDF 套件）                                             |
+| 3. 加密文件      | e2e      | ✅ `encrypted.pdf` → `ocr-detect` 回 `PDF_ENCRYPTED` /「PDF 已加密，请先解除密码再操作」，无读数、无产物                                                 |
+| 4. 超大文件      | e2e + P2 | ✅ 1200×1600 合成大图（R2.4 大图口径）识别 + 导出通过；百页 PDF 取消路径见第 5 类；74.7MB 超大 PDF 已在 M3a 验证不超时                                   |
+| 5. 任务取消      | e2e      | ✅ 百页卷 `ocr-detect` 首个进度即 `lumin:task:cancel` → `CANCELLED`，无残留产物、队列可继续                                                              |
+| 6. 并发溢出      | 复用 M3a | ✅ OCR 走同一壳队列（OCR 档位=2），M3a 并发用例已验证排队不丢事件；OCR 侧合并提交并发无跨任务状态（会话按 Tab 单实例）                                   |
+| 7. 磁盘满        | 复用 M3a | ✅ 导出走同 `writeFile` + `OUTPUT_WRITE_FAILED` 分类，M3a VHD ENOSPC 实测覆盖截断清理；OCR 导出失败清理本批全部已写文件（spec §10.9）                    |
+| 8. 断电恢复      | 复用 M3a | ✅ 同进程队列/冲突递增兜底；M3a `taskkill /F /T` 重启后重处理成功用例覆盖                                                                                |
+| 9. 模型缺失      | e2e      | ✅ 临时移走 `binaries/ocr/det.onnx` → `ocr-detect` 回 `MODEL_MISSING` /「识别模型缺失，请在设置中下载后重试」；`finally` 原位恢复模型文件                |
+| 10. 输入损坏     | e2e      | ✅ 非图片字节 `坏图.png` → `OCR_INPUT_INVALID` /「图片无法读取，请换一张清晰的图片」                                                                     |
+
+### 5.3 交互与三态核对（R4）
+
+- 空态：OCR Tab 首次激活 → DropZone（accept PDF+PNG/JPG/JPEG/WebP）+ 左侧预览占位引导，无白屏。
+- 加载态：detect 显示阶段进度（`加载识别模型…`/`识别第 n/N 页…`）+ [取消]；export 无 message → 显示「正在导出…」。
+- 报错态：结构化码 → 中文文案卡 + [重试]（可重试码）/ [重新选择]；`NO_REGIONS` 额外 [手动添加边界] → 手动模式（预览 meta 建页、当前页整页题区、点击插入分界线）。
+- 微调：分界线 `role="slider"` 拖拽/键盘（↑/↓ 0.005、Delete、Esc）；[添加边界] 拆分命中列题区；[重置本页] 仅当前页（自动页恢复、手动页清空）；题目列表点击定位预览。
+- e2e 已覆盖：图片识别 → 键盘微调（aria-valuenow 变化）→ 导出 PNG+PDF；三页卷 PDF 每页 ≥1 题区。
+
+### 5.4 已知外部风险与 P4 待办
+
+- ⚠️ `pnpm audit` 新增 high advisory **GHSA-fc5q-39xc-vjpf**（picomatch ≤4.0.7 ReDoS，`first_patched_version: null`）：命中 vite/eslint 构建期依赖，不进应用运行时产物；上游无修复版，升级后清零（plan §4.4 已记，不放宽规则）。
+- P4 待办：10 份真实样卷（手写/印刷/双栏/带图混合）入库 `fixtures/ocr/`，逐卷记录边界命中率/人工微调次数/单页耗时，关闭 spec §10.10 R1 量化验收。
