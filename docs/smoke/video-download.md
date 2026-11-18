@@ -85,7 +85,7 @@
 
 ### 4.3 待真实环境人工验证（用户自备账号）
 
-- [ ] Firefox 真实 profile 导入抖音 cookie → 登录可见内容下载成功
+- [x] Firefox 真实 profile 导入抖音 cookie → **2026-11-19 用户实测：Cookie 配置后抖音非公开视频仍无法下载**。初步判断：抖音取流除 cookies 外还需请求签名（a_bogus/verify_fp 等动态参数），yt-dlp 内置 Douyin extractor 不自动生成；按守免责文案 ④（不内置签名逆向），此项记录为**已知限制**，后续评估方向 = 用户手动导出含签名的完整请求或依赖 yt-dlp 上游更新。工具本体链路（存储/注入/透传）功能保留
 - [ ] B站大会员 cookie → probe 返回会员高码率画质
 - [ ] 旧版 Chromium/Edge（v10）DPAPI+AES-GCM 解密成功（新版 Chrome 预期报「App-Bound」）
 - [ ] cookie 过期后引擎报错 detail 透出（如「login required」）
