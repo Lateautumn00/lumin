@@ -29,6 +29,12 @@ export interface PageSize {
 /** 1pt → mm */
 export const MM_PER_PT = 25.4 / 72
 
+/**
+ * OCR 渲染倍率（A4 → 893×1263；归一化坐标与倍率无关，导出按实际像素换算）。
+ * worker 渲染与 renderer 预览共用同一倍率（spec §10.9/§10.7）。
+ */
+export const PDF_RENDER_SCALE = 1.5
+
 /** 区间数组 → 规范化区间文本（点选回写文本框；spec §2 双向同步） */
 export function rangesToText(ranges: readonly PdfRange[]): string {
   return ranges

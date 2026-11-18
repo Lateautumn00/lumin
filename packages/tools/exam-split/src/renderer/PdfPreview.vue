@@ -3,12 +3,10 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { NButton, NText } from 'naive-ui'
 import { FileUp } from '@lucide/vue'
 import type { StructuredError } from '@lumin/shared'
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import * as pdfjs from 'pdfjs-dist'
 import { toolError } from '../errors'
 import { rangesToText, type CropBox, type PageSize, type PdfRange } from '../preview'
-
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+import { classifyPdfOpenError } from './pdf-open'
+import { pdfjs } from './pdfjs'
 
 const props = withDefaults(
   defineProps<{
@@ -87,7 +85,7 @@ async function openFile(file: File | null): Promise<void> {
     await renderVisible()
   } catch (err) {
     if (seq !== openSeq) return
-    const code = classifyOpenError(err)
+    const code = classifyPdfOpenError(err)
     errorText.value = code
     emit('error', toolError(code, err instanceof Error ? err.message : undefined))
   } finally {
@@ -100,14 +98,7 @@ function setThumb(pageNumber: number, el: unknown): void {
   thumbs.value[pageNumber - 1] = el as HTMLElement | null
 }
 
-/** 打开失败分类（spec §5：pdfjs PasswordException → PDF_ENCRYPTED） */
-function classifyOpenError(err: unknown): 'PDF_ENCRYPTED' | 'PDF_INVALID' | 'PDF_NOT_FOUND' {
-  const name = err instanceof Error ? err.name : ''
-  if (name === 'PasswordException') return 'PDF_ENCRYPTED'
-  if (name === 'InvalidPDFException' || name === 'MissingPDFException') return 'PDF_INVALID'
-  return 'PDF_NOT_FOUND'
-}
-
+/** 当前页信息（页数 + 当前页尺寸，供区间初校与裁剪 mm 换算） */
 async function emitMeta(pageNumber: number): Promise<void> {
   const currentDoc = doc
   if (currentDoc === null || pageNumber < 1 || pageNumber > currentDoc.numPages) return

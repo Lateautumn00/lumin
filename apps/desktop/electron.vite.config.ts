@@ -87,7 +87,14 @@ export default defineConfig({
     resolve: { alias: workspaceAlias }
   },
   renderer: {
-    resolve: { alias: workspaceAlias },
+    resolve: {
+      alias: [
+        ...workspaceAlias,
+        // pdfjs 根入口是未压缩构建（electron-vite 默认 minify=false）；renderer 只消费
+        // 浏览器 API，改用官方压缩入口以控制工具 chunk 体积（R5 gzip 基线）。
+        { find: /^pdfjs-dist$/, replacement: r('./node_modules/pdfjs-dist/build/pdf.min.mjs') }
+      ]
+    },
     plugins: [vue(), tailwindcss(), prodCspMeta]
   }
 })

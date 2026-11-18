@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, provide, ref, watch } from 'vue'
 import { NButton, NInput, NInputNumber, NRadioButton, NRadioGroup, NText } from 'naive-ui'
-import { FileText, FolderOpen, RotateCcw } from '@lucide/vue'
+import { FileText } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
@@ -17,6 +17,11 @@ import {
   type PdfRange
 } from '../preview'
 import PdfPreview from './PdfPreview.vue'
+import OcrPreview from './OcrPreview.vue'
+import OcrPanel from './OcrPanel.vue'
+import ErrorCard from './ErrorCard.vue'
+import ResultCard from './ResultCard.vue'
+import { createOcrWorkspace, OCR_WORKSPACE } from './ocr-workspace'
 import {
   cancelTask,
   revealPath,
@@ -47,6 +52,19 @@ const REREINPUT_CODES = new Set(['RANGE_INVALID', 'NO_PAGES_LEFT'])
 const tab = ref<'pdf' | 'ocr'>('pdf')
 const op = ref<Op>('split')
 const phase = ref<Phase>('idle')
+
+// OCR Tab 会话（左右两栏共享；首次激活后挂载并 v-show 保留状态）
+const ocr = createOcrWorkspace()
+provide(OCR_WORKSPACE, ocr)
+const { inputFile: ocrInputFile } = ocr
+const ocrMounted = ref(false)
+watch(
+  tab,
+  (value) => {
+    if (value === 'ocr') ocrMounted.value = true
+  },
+  { immediate: true }
+)
 
 // 单文件输入（拆分/删页/旋转/裁剪共用）
 const inputFile = ref<File | null>(null)
@@ -85,7 +103,6 @@ const mmH = ref(0)
 // 任务态（spec §6 三态）
 const progress = ref<{ current?: number; total?: number; message: string } | null>(null)
 const error = ref<StructuredError | null>(null)
-const detailOpen = ref(false)
 const outputPaths = ref<string[]>([])
 
 let unsubscribe: (() => void) | null = null
@@ -93,7 +110,6 @@ let currentTaskId = ''
 
 const busy = computed(() => phase.value === 'running')
 const retryable = computed(() => error.value !== null && isRetryable(error.value.code))
-const hasDetail = computed(() => (error.value?.detail ?? '') !== '')
 const canSubmit = computed(() => {
   if (busy.value) return false
   switch (op.value) {
@@ -117,7 +133,6 @@ function detach(): void {
 
 function setError(err: unknown): void {
   error.value = toStructuredError(err)
-  detailOpen.value = false
   phase.value = 'error'
   progress.value = null
   detach()
@@ -148,7 +163,6 @@ function onEvent(event: TaskEvent): void {
     return
   }
   error.value = event.error
-  detailOpen.value = false
   phase.value = 'error'
   progress.value = null
 }
@@ -208,7 +222,6 @@ function validateRanges(): boolean {
 async function start(): Promise<void> {
   if (!canSubmit.value || !validateRanges()) return
   error.value = null
-  detailOpen.value = false
   outputPaths.value = []
   phase.value = 'running'
   progress.value = { message: '提交中…' }
@@ -242,7 +255,6 @@ function focusRanges(): void {
 function resetForResult(): void {
   outputPaths.value = []
   error.value = null
-  detailOpen.value = false
   progress.value = null
   phase.value = 'idle'
   rangesText.value = ''
@@ -268,7 +280,6 @@ function resetInput(): void {
   pageSize.value = null
   outputPaths.value = []
   error.value = null
-  detailOpen.value = false
   progress.value = null
   phase.value = 'idle'
 }
@@ -353,7 +364,6 @@ function onDocMeta(meta: { pageCount: number; pageSize: PageSize }): void {
 
 function onPreviewError(err: StructuredError): void {
   error.value = err
-  detailOpen.value = false
   phase.value = 'error'
 }
 
@@ -422,7 +432,7 @@ onUnmounted(detach)
 
 <template>
   <div class="flex h-full min-h-0 flex-col gap-3 p-4">
-    <!-- Tab 栏（spec §2：OCR 置灰占位） -->
+    <!-- Tab 栏（spec §2/§10.2：双 Tab 均激活，互不挤占） -->
     <div
       class="flex shrink-0 gap-2 border-b border-[var(--lumin-color-border)] pb-3"
       role="tablist"
@@ -436,76 +446,95 @@ onUnmounted(detach)
       >
         PDF 操作
       </NButton>
-      <NButton size="small" disabled role="tab" aria-selected="false" title="OCR 切题 · 敬请期待">
-        OCR 切题 · 敬请期待
+      <NButton
+        size="small"
+        :type="tab === 'ocr' ? 'primary' : 'default'"
+        role="tab"
+        :aria-selected="tab === 'ocr'"
+        @click="tab = 'ocr'"
+      >
+        OCR 切题
       </NButton>
     </div>
 
     <div class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
       <!-- 左：预览 / 合并文件列表（spec §2） -->
       <section class="flex min-h-0 flex-col overflow-hidden">
-        <div v-if="op === 'merge'" class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-          <NText depth="3" class="text-xs">
-            已选 {{ mergeItems.length }} 个（至少 2 个，最多 100 个）· 拖拽或按钮排序
-          </NText>
-          <div
-            v-for="(item, index) in mergeItems"
-            :key="item.path"
-            class="flex items-center gap-2 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-3 py-2"
-            draggable="true"
-            @dragstart="dragIndex = index"
-            @dragend="dragIndex = -1"
-            @dragover.prevent
-            @drop.prevent="onDropItem(index)"
-          >
-            <span class="w-6 shrink-0 text-center text-xs text-[var(--lumin-color-text-secondary)]">
-              {{ index + 1 }}
-            </span>
-            <FileText
-              :size="16"
-              class="shrink-0 text-[var(--lumin-color-text-secondary)]"
-              aria-hidden="true"
-            />
-            <div class="min-w-0 flex-1">
-              <p class="truncate text-sm" :title="item.name">{{ item.name }}</p>
-              <p
-                class="truncate text-xs text-[var(--lumin-color-text-secondary)]"
-                :title="item.path"
+        <div v-show="tab === 'pdf'" class="flex min-h-0 flex-1 flex-col">
+          <div v-if="op === 'merge'" class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+            <NText depth="3" class="text-xs">
+              已选 {{ mergeItems.length }} 个（至少 2 个，最多 100 个）· 拖拽或按钮排序
+            </NText>
+            <div
+              v-for="(item, index) in mergeItems"
+              :key="item.path"
+              class="flex items-center gap-2 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-3 py-2"
+              draggable="true"
+              @dragstart="dragIndex = index"
+              @dragend="dragIndex = -1"
+              @dragover.prevent
+              @drop.prevent="onDropItem(index)"
+            >
+              <span
+                class="w-6 shrink-0 text-center text-xs text-[var(--lumin-color-text-secondary)]"
               >
-                {{ item.path }}
-              </p>
+                {{ index + 1 }}
+              </span>
+              <FileText
+                :size="16"
+                class="shrink-0 text-[var(--lumin-color-text-secondary)]"
+                aria-hidden="true"
+              />
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm" :title="item.name">{{ item.name }}</p>
+                <p
+                  class="truncate text-xs text-[var(--lumin-color-text-secondary)]"
+                  :title="item.path"
+                >
+                  {{ item.path }}
+                </p>
+              </div>
+              <NButton size="tiny" quaternary :disabled="busy" @click="moveItem(index, -1)">
+                上移
+              </NButton>
+              <NButton size="tiny" quaternary :disabled="busy" @click="moveItem(index, 1)">
+                下移
+              </NButton>
+              <NButton size="tiny" quaternary :disabled="busy" @click="removeItem(index)">
+                移除
+              </NButton>
             </div>
-            <NButton size="tiny" quaternary :disabled="busy" @click="moveItem(index, -1)">
-              上移
-            </NButton>
-            <NButton size="tiny" quaternary :disabled="busy" @click="moveItem(index, 1)">
-              下移
-            </NButton>
-            <NButton size="tiny" quaternary :disabled="busy" @click="removeItem(index)">
-              移除
-            </NButton>
+            <div
+              v-if="mergeItems.length === 0"
+              class="flex min-h-32 items-center justify-center rounded-[var(--lumin-radius-md)] border-2 border-dashed border-[var(--lumin-color-border)]"
+            >
+              <NText depth="3">在右侧选择多个 PDF 后在此排序</NText>
+            </div>
           </div>
-          <div
-            v-if="mergeItems.length === 0"
-            class="flex min-h-32 items-center justify-center rounded-[var(--lumin-radius-md)] border-2 border-dashed border-[var(--lumin-color-border)]"
-          >
-            <NText depth="3">在右侧选择多个 PDF 后在此排序</NText>
-          </div>
+          <PdfPreview
+            v-else
+            v-model:range="previewRange"
+            v-model:crop="cropRatio"
+            :file="inputFile"
+            :disabled="busy"
+            @range-text="onRangeText"
+            @doc-meta="onDocMeta"
+            @error="onPreviewError"
+          />
         </div>
-        <PdfPreview
-          v-else
-          v-model:range="previewRange"
-          v-model:crop="cropRatio"
-          :file="inputFile"
-          :disabled="busy"
-          @range-text="onRangeText"
-          @doc-meta="onDocMeta"
-          @error="onPreviewError"
-        />
+
+        <!-- OCR 左侧预览（首次激活后挂载，v-show 保留状态） -->
+        <div v-show="tab === 'ocr'" class="flex min-h-0 flex-1 flex-col">
+          <OcrPreview v-if="ocrMounted" :file="ocrInputFile" />
+        </div>
       </section>
 
-      <!-- 右：操作选择器 + 字段区 + 主按钮 + 结果卡（spec §2） -->
-      <section class="flex min-h-0 flex-col gap-3 overflow-y-auto">
+      <!-- 右：PDF 操作 / OCR 面板（spec §2/§10.2） -->
+      <section
+        v-show="tab === 'pdf'"
+        class="flex min-h-0 flex-col gap-3 overflow-y-auto"
+        aria-label="PDF 操作"
+      >
         <DropZone
           v-if="op !== 'merge' && inputPath === ''"
           accept=".pdf"
@@ -655,67 +684,35 @@ onUnmounted(detach)
         />
 
         <!-- 成功结果卡 -->
-        <div
+        <ResultCard
           v-if="outputPaths.length > 0"
-          class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-4 py-3"
-        >
-          <NText type="success" class="text-sm font-medium">
-            处理完成（{{ outputPaths.length }} 个文件）
-          </NText>
-          <ul class="mt-1 max-h-40 overflow-auto">
-            <li
-              v-for="path in outputPaths"
-              :key="path"
-              class="break-all text-xs text-[var(--lumin-color-text-secondary)]"
-              :title="path"
-            >
-              {{ path }}
-            </li>
-          </ul>
-          <div class="mt-3 flex gap-2">
-            <NButton size="small" type="primary" @click="openFolder">
-              <template #icon><FolderOpen :size="14" /></template>
-              打开文件夹
-            </NButton>
-            <NButton size="small" @click="resetForResult">
-              <template #icon><RotateCcw :size="14" /></template>
-              再处理一个
-            </NButton>
-          </div>
-        </div>
+          :title="`处理完成（${outputPaths.length} 个文件）`"
+          :paths="outputPaths"
+          reset-label="再处理一个"
+          @open="openFolder"
+          @reset="resetForResult"
+        />
 
         <!-- 报错态（spec §5/§6：结构化码 → 中文文案 + 操作入口） -->
-        <div
+        <ErrorCard
           v-if="phase === 'error' && error !== null"
-          class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-danger)] px-4 py-3"
-          role="alert"
+          :error="error"
+          :retryable="retryable"
+          @retry="retry"
         >
-          <NText type="error" class="text-sm font-medium">{{ error.message }}</NText>
-          <p class="mt-1 text-xs text-[var(--lumin-color-text-secondary)]">
-            错误码：{{ error.code }}
-          </p>
-          <div v-if="hasDetail" class="mt-2">
-            <NButton size="small" quaternary @click="detailOpen = !detailOpen">
-              {{ detailOpen ? '收起详情' : '查看详情' }}
-            </NButton>
-            <p
-              v-if="detailOpen"
-              class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-[var(--lumin-color-text-secondary)]"
-            >
-              {{ error.detail }}
-            </p>
-          </div>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <NButton v-if="retryable" size="small" type="primary" @click="retry">重试</NButton>
+          <template #actions>
             <NButton v-if="RESELECT_CODES.has(error.code)" size="small" @click="resetInput">
               重新选择
             </NButton>
             <NButton v-if="REREINPUT_CODES.has(error.code)" size="small" @click="focusRanges">
               重新输入
             </NButton>
-          </div>
-        </div>
+          </template>
+        </ErrorCard>
       </section>
+
+      <!-- OCR 右栏面板（首次激活后挂载，v-show 保留状态） -->
+      <OcrPanel v-if="ocrMounted" v-show="tab === 'ocr'" />
     </div>
   </div>
 </template>

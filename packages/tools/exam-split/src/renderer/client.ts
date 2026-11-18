@@ -2,6 +2,8 @@ import type {
   CropPayload,
   DeletePayload,
   MergePayload,
+  OcrDetectPayload,
+  OcrExportPayload,
   OpResult,
   RotatePayload,
   SplitPayload
@@ -30,6 +32,16 @@ export function submitRotate(payload: RotatePayload): Promise<SubmitResult> {
 
 export function submitCrop(payload: CropPayload): Promise<SubmitResult> {
   return window.lumin.invoke('exam-split:crop', payload)
+}
+
+/** OCR 识别（spec §10.4；done 回包含识别页与自动题区） */
+export function submitOcrDetect(payload: OcrDetectPayload): Promise<SubmitResult> {
+  return window.lumin.invoke('exam-split:ocr-detect', payload)
+}
+
+/** OCR 导出（spec §10.4；pages = 渲染端微调后的最终边界） */
+export function submitOcrExport(payload: OcrExportPayload): Promise<SubmitResult> {
+  return window.lumin.invoke('exam-split:ocr-export', payload)
 }
 
 export function cancelTask(taskId: string): Promise<void> {

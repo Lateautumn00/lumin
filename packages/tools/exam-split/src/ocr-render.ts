@@ -16,6 +16,7 @@ import { tail } from '@lumin/node-kit'
 import { errnoCode, type StructuredError } from '@lumin/shared'
 import { toolError } from './errors'
 import type { RgbaImage } from './ocr-preproc'
+import { PDF_RENDER_SCALE } from './preview'
 
 /** pdfjs 的 DOM 画布类型（结构兼容别名；工具包不引 DOM lib，主进程 typecheck 才通过） */
 type PdfCanvasTarget = Parameters<import('pdfjs-dist').PDFPageProxy['render']>[0]['canvas']
@@ -23,8 +24,8 @@ type PdfRenderContext = NonNullable<
   Parameters<import('pdfjs-dist').PDFPageProxy['render']>[0]['canvasContext']
 >
 
-/** 渲染倍率（A4 → 1191×1684；坐标归一化后与倍率无关，导出按实际像素换算） */
-export const PDF_RENDER_SCALE = 1.5
+/** 渲染倍率单源在 `preview.ts`（renderer 预览换算同源，spec §10.9） */
+export { PDF_RENDER_SCALE }
 
 /** OCR 输入扩展白名单中的 PDF 判断（与 schema.OCR_INPUT_RE 一致；zod 不进 worker 预期） */
 const PDF_EXT_RE = /\.pdf$/i
