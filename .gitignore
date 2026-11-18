@@ -12,3 +12,8 @@ release/
 playwright-report/
 test-results/
 .DS_Store
+.workbuddy/*
+.claude/*
+.gitee/*
+# opencode session 导出（UTF-16 大文件，不入库）
+e317.json

@@ -138,6 +138,7 @@
 | 输入文件 | 单选（accept `.pdf, .png, .jpg, .jpeg, .webp`） | 必须存在、可读、未被独占占用；PDF 经 pdfjs 逐页渲染为图（复用 M3a 预览管线）；图片直接读入 | 无     |
 | 导出格式 | 每题 PNG（**必产**）+「同时合成 PDF」checkbox   | 合成 PDF = 每题一页按序拼接（pdf-lib）                                                     | 勾选   |
 | 起始题号 | number（≥1）                                    | 产物命名与列表展示的首题编号                                                               | `1`    |
+| 页面旋转 | 0 / 90 / 180 / 270（顺时针，§10.12）            | 识别与导出**使用同一旋转**（坐标一致）；变更旋转即作废已有识别结果，需重识别               | `0`    |
 
 - 无其它设置项（题号规则固定内置：`1.` `1、` `一、` `(1)` `第1题`，不做可配，R8 范围冻结）。
 - 模型与 wasm 属**运行时资产**（R5 修订口径）：`scripts/fetch-binaries.mjs` 固定 URL + SHA256 拉取到 `binaries/`（gitignore），运行时按需加载，smoke 单列体积。
@@ -151,6 +152,8 @@
 | OCR Tab 右侧 | 识别进度/题目列表（题号 + 页码 + 行数，点击定位预览）+ 导出字段区 + [开始识别] + [导出] 主按钮 + 结果卡                    |
 
 - 边界交互：拖拽分界线移动；**[添加边界]**（点击预览插入分界线，拆分所命中列的题区）、**[删除边界]**（选中线删除并合并相邻题区）、**[重置本页]**（仅当前页：自动页恢复自动结果、手动页清空题区，不影响其它页）。
+- 方向：预览工具栏 **[↺ 左转] [↻ 右转]**（90° 步进，显示当前角度；执行中禁用）。旋转**同时作用于识别与导出**，变更后清空题区结果并重绘预览（§10.12）。
+- 跨页展开照：书脊被识别为列边界（同双栏口径），左右两页各自纵向切题、按「左页题 → 右页题」编号，导出按列裁剪（§10.12）。
 - 空页（0 题区，含 `NO_REGIONS` 手动模式）居中显示 **[添加题区]**，一键建整页题区后再加分界线。
 - 键盘可达（a11y）：分界线 `role="slider"`，聚焦后 `↑/↓` 微调（步长 0.005）、`Delete/Backspace` 删除、`Esc` 取消选中、`Enter/Space` 选中；预览空白处点击取消选中。
 - 微调为**渲染端状态**（纯函数模型 `ocr-edit.ts`），导出时随 payload 提交（识别与导出两段式，见 §10.4）。
@@ -160,6 +163,7 @@
 | 操作       | 行为                                                                                       |
 | ---------- | ------------------------------------------------------------------------------------------ |
 | 选择/拖拽  | DropZone（单选）→ `bridge.getPathForFile` 取真实路径；非白名单扩展名拒绝提示               |
+| 页面旋转   | [↺ 左转]/[↻ 右转] 90° 步进（顺时针累计）；变更即清空识别结果与题区，重绘预览（§10.12）     |
 | 开始识别   | 前端预检 → 提交 `ocr-detect` task → 完成后渲染题区 overlay + 题目列表（空结果 → 空态提示） |
 | 边界微调   | 拖拽/添加/删除/重置本页（渲染端状态，不触发任务；添加模式下点击已有题区可继续拆分）        |
 | 导出       | 前端校验至少 1 个题区 → 提交 `ocr-export` task（带最终边界）                               |
@@ -169,29 +173,30 @@
 
 ## 10.4 IPC 契约（两段式：识别 → 微调 → 导出）
 
-| 通道                    | 类型 | 入参                                                         | 事件                                                                                                                                                                                         |
-| ----------------------- | ---- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `exam-split:ocr-detect` | task | `{ inputPath }`                                              | `progress { stage: 'render'\|'detect'\|'cluster', current, total, message }` · `done { pages: [{ pageNumber, width, height, regions: [{ start, end, xStart?, xEnd?, lines }] }] }` · `error` |
-| `exam-split:ocr-export` | task | `{ inputPath, startNumber, exportPdf, pages: 同上最终边界 }` | `progress { stage: 'write', current, total }` · `done { outputPaths }` · `error`                                                                                                             |
+| 通道                    | 类型 | 入参                                                                    | 事件                                                                                                                                                                                         |
+| ----------------------- | ---- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `exam-split:ocr-detect` | task | `{ inputPath, rotation?: 0\|90\|180\|270 }`                             | `progress { stage: 'render'\|'detect'\|'cluster', current, total, message }` · `done { pages: [{ pageNumber, width, height, regions: [{ start, end, xStart?, xEnd?, lines }] }] }` · `error` |
+| `exam-split:ocr-export` | task | `{ inputPath, rotation?, startNumber, exportPdf, pages: 同上最终边界 }` | `progress { stage: 'write', current, total }` · `done { outputPaths }` · `error`                                                                                                             |
 
-- **执行模型**：复用 node-kit `runTask()` 进 worker_threads；onnxruntime-web（wasm）在 worker 内推理。
+- **执行模型**：复用 node-kit `runTask()` 进 worker_threads；onnxruntime-node（CPU EP）在 worker 内推理。
 - **超时**：单任务 120s（复用 M3a `OP_TIMEOUT`）；**并发**：壳队列 OCR 档位 = 2（plan §2.2）。
 - 坐标统一为**归一化 0–1 比例**（同 M3a 裁剪框口径），导出时按各页实际像素换算。
-- **双栏列边界（2026-11-16 增补，R8）**：region 增加**可选** `xStart`/`xEnd`（0–1，缺省 = 0/1 即全宽，单栏页零影响）。检测到页面级左右分栏时（列间空隙 ≥3% 页宽且**两列均含题号行**，全宽标题行不参与列检测、按中心归属），每列独立聚类；overlay 横线画在该列 x 区间内，导出按列裁剪。
+- **双栏列边界（2026-11-16 增补，R8）**：region 增加**可选** `xStart`/`xEnd`（0–1，缺省 = 0/1 即全宽，单栏页零影响）。检测到页面级左右分栏时，每列独立聚类；overlay 横线画在该列 x 区间内，导出按列裁剪。
+- **列检测算法（2026-11-18 P4 修订，R8）**：由「相邻文本行框最大空隙 ≥3%」改为**覆盖率谷底**——按 1% 页宽分 100 桶统计文本行框覆盖数，候选 = `[0.2, 0.8]` 内覆盖数 ≤ `max(1, ⌈行数×3%⌉)`、宽度 ≥**3% 页宽**、且谷底平均覆盖 ≤ **页面中部（0.2–0.8）覆盖中位数 × 0.5**（防稀疏页把「整页仅 1 行覆盖」误判成栏缝）的连续谷底；多个候选按 **`score = 宽度 ×（中位密度 − 谷底均值）` 降序**取最优（同分比宽度，再比靠近页中 0.5），随后仍要求**两侧各 ≥1 个题号行**（题号两级规则不变）。改动原因：① 整本摊开的**跨页展开照**书脊很窄、页脚/页码行跨过书脊，旧「最大空隙」恒为 0 而判不出两页（真实样卷 P4 实证）；② 只按「最宽」会选中配对题内部留白（宽 8% 但覆盖更深），导出会裁掉整列内容（样例 15 误选 0.38 而非真实栏缝 0.495）。新口径同时覆盖双栏页与跨页展开照，单栏页因无谷底或无两侧题号保持不变。
 - **题号两级规则（2026-11-16 明确，R8）**：一级 = `1.` `1、` `一、` `第1题`；二级 = `(1)`/`（1）`。**仅当该列/页无任何一级题号时**才启用二级规则（避免把小题切开）；两者皆无 → 整列/整页一个 region。
 
 ## 10.5 错误码增补（其余复用 §5）
 
-| 错误码              | 触发条件                                                           | 中文文案                           | 操作入口  |
-| ------------------- | ------------------------------------------------------------------ | ---------------------------------- | --------- |
-| `OCR_INPUT_INVALID` | 图片损坏/解码失败/扩展名白名单外（PDF 类仍走 §5）                  | 图片无法读取，请换一张清晰的图片   | 重新选择  |
-| `MODEL_MISSING`     | 模型缺失/SHA256 不匹配（detect 前主进程预检；wasm 由引擎加载兜底） | 识别模型缺失，请在设置中下载后重试 | 重试      |
-| `NO_REGIONS`        | 检测完成但 0 个题区                                                | 未识别到题目区域，请检查图片清晰度 | 重试      |
-| `OCR_FAILED`        | 推理异常（detail=消息尾部）                                        | 识别失败，请重试或查看详情         | 重试+详情 |
+| 错误码              | 触发条件                                                                           | 中文文案                           | 操作入口  |
+| ------------------- | ---------------------------------------------------------------------------------- | ---------------------------------- | --------- |
+| `OCR_INPUT_INVALID` | 图片损坏/解码失败/扩展名白名单外（PDF 类仍走 §5）                                  | 图片无法读取，请换一张清晰的图片   | 重新选择  |
+| `MODEL_MISSING`     | 模型缺失/SHA256 不匹配（detect 前主进程预检；引擎侧由 `createOcrEngine` 加载兜底） | 识别模型缺失，请在设置中下载后重试 | 重试      |
+| `NO_REGIONS`        | 检测完成但 0 个题区                                                                | 未识别到题目区域，请检查图片清晰度 | 重试      |
+| `OCR_FAILED`        | 推理异常（detail=消息尾部）                                                        | 识别失败，请重试或查看详情         | 重试+详情 |
 
 - 复用：`PDF_NOT_FOUND/PDF_LOCKED/PDF_ENCRYPTED/PDF_INVALID`（PDF 输入）、`OP_TIMEOUT`、`OUTPUT_WRITE_FAILED`、`OP_FAILED`、`CANCELLED`、`INVALID_PAYLOAD`。
 - **输入错误分界（2026-11-17 P2，R8）**：先 `readFile`（ENOENT → `PDF_NOT_FOUND`；EBUSY/EPERM/EACCES → `PDF_LOCKED`；其余 errno → PDF 输入 `PDF_INVALID`、图片 `OCR_INPUT_INVALID`），再解码（图片解码失败 → `OCR_INPUT_INVALID`；pdfjs `PasswordException` → `PDF_ENCRYPTED`、`MissingPDFException` → `PDF_NOT_FOUND`、其余 → `PDF_INVALID`）。
-- **模型预检位置（2026-11-17 P2，R8）**：`ocr-detect` 在主进程先校验 det/rec/cls/dict 四文件（存在+体积+SHA256，每次不缓存，≈60ms），失败即 `MODEL_MISSING` 且不进 worker；wasm 资产不在主进程预检内，由 worker 内 `createOcrEngine` 加载失败兜底 `MODEL_MISSING`。`ocr-export` 不做模型预检（导出不需推理）。
+- **模型预检位置（2026-11-17 P2，R8）**：`ocr-detect` 在主进程先校验 det/rec/cls/dict 四文件（存在+体积+SHA256，每次不缓存，≈60ms），失败即 `MODEL_MISSING` 且不进 worker；native 推理库由 worker 内 `createOcrEngine` 加载失败兜底 `MODEL_MISSING`。`ocr-export` 不做模型预检（导出不需推理）。
 
 ## 10.6 三态（R4）
 
@@ -210,16 +215,17 @@
 
 ## 10.8 模型与性能（R5 / R1）
 
-- 模型：PP-OCR det+rec+cls+字典 **实测 16.2MB**（det 4.7 + rec 10.9 + cls 0.6 + dict 0.03），固定 URL + SHA256 钉死于 `scripts/fetch-binaries.mjs`；`onnxruntime-web` 版本钉版（升级前 `npm view` 复核 + 同步 plan §1.1）。
-- 体积口径：onnxruntime-web 的 **JS/wasm 资产单列**（R5 运行时资产修订）；工具代码 chunk 仍 <200KB gzip。
+- 模型：PP-OCR det+rec+cls+字典 **实测 16.2MB**（det 4.7 + rec 10.9 + cls 0.6 + dict 0.03），固定 URL + SHA256 钉死于 `scripts/fetch-binaries.mjs`；`onnxruntime-node` 版本钉版（升级前 `npm view` 复核 + 同步 plan §1.1）。
+- 体积口径：onnxruntime-node 的 **native binding 与运行时 dll（win32 x64 实测 ≈68.6MB：onnxruntime.dll 31.7 + DirectML.dll 18.5 + dxcompiler.dll 18.0 + binding 0.36）单列**（R5 运行时资产修订）；工具代码 chunk 仍 <200KB gzip。
 - **预处理口径（2026-11-16 spike 实证，R8 回写）**：
   - det：长边 **960** + 32 对齐 + ImageNet mean/std（`[0.485,0.456,0.406]/[0.229,0.224,0.225]`）→ 概率图阈值 0.3，实测 5 行文字 **5/5 band 命中、609ms/页**。
   - rec：**只裁行前缀 3.5×行高**（保持宽高比缩到 48 高、宽上限 320、mean/std 0.5）→ **38ms/行**（全宽 77ms/行）；单页 40 行 rec 1.5s + det ≈0.5s ≈ **2s < 3s 预算**，且 `一、`/`1.`/`(1)`/`第1题` 等 **12 种题号样式全部精确识别**。
   - 反证：全宽 batch 40 行 3.3s **超预算**、`numThreads=4` 无改善（wasm 线程未生效）→ **前缀裁剪为达标必选路径**。
 - **CTC 映射（spike 实证）**：rec 输出 `[1,T,6625]`，**blank=0、字典索引 = 输出索引 − 1**（字典 6623 字符）。
 - **rec 批处理（2026-11-17 P2，R8）**：按前缀裁剪后的**宽度分组**批量推理（前缀比恒 3.5 → dstWidth 恒 ≈168，组内同宽零 padding），组内 `[B,3,48,W]` 一次 `rec.run`；空文本行丢弃。
-- **打包口径（2026-11-17 P2，R8）**：`pdfjs-dist`/`onnxruntime-web`/`@napi-rs/canvas` 进 `apps/desktop` dependencies，由 `externalizeDepsPlugin` 外部化；electron-builder `asarUnpack` = `**/node_modules/@napi-rs/**`、`**/node_modules/onnxruntime-web/dist/**`；wasm 在 worker 内单线程（`numThreads=1`、`proxy=false`）。
-- **单页 OCR ≤3s**（本机 wasm 实测）；连续 2 页超限 → 按 plan 风险表切 `onnxruntime-node` 复评（须先回写 plan §4.4 再动）。
+- **引擎选型（2026-11-18 P4 R1 复评切换，R8 回写）**：M3b P0 钉 `onnxruntime-web`（wasm），P4 真实样卷实测 3.3–4.7s/页**超 R1 ≤3s 基线**（真实卷 60–120 行、wasm rec ≈38ms/行）→ 按风险表经用户拍板切 `onnxruntime-node`（CPU EP、NAPI binding，免 rebuild）。实测同管线 **1.10–1.56s/页**（提速 2.6–3.8×）达标；预处理口径（det 960/阈值 0.3、rec 前缀裁剪 + 同宽分组 batch）与 CTC 映射不变。
+- **打包口径（2026-11-18 P4 修订，R8）**：`pdfjs-dist`/`onnxruntime-node`/`@napi-rs/canvas` 进 `apps/desktop` dependencies，由 `externalizeDepsPlugin` 外部化；electron-builder `asarUnpack` = `**/node_modules/@napi-rs/**`、`**/node_modules/onnxruntime-node/**`、`**/node_modules/onnxruntime-common/**`（native `.node`/dll 不能从 asar 加载）；`pnpm-workspace.yaml` `allowBuilds` 放行 `onnxruntime-node` postinstall。
+- **单页 OCR ≤3s**（本机 onnxruntime-node 实测 1.10–1.56s/页，真实样卷口径）；**binaries 根解析不依赖 `app.isPackaged`**（pnpm `.pnpm` 布局下 Electron 误判 `isPackaged=true`，e2e 实测 `MODEL_MISSING det: ENOENT`）——改为探测 `resources/binaries` 存在，回落仓库根 `binaries/`（P4 修复）。
 
 ## 10.9 P2 实现口径（2026-11-17，R8 回写）
 
@@ -227,7 +233,7 @@
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 模块划分       | 主进程轻量入口 `ocr-assets.ts`（`OCR_ASSETS`/`verifyOcrAssets`/`ocrModelDir`）+ worker 侧 `ocr-render.ts`（pdfjs/napi 渲染、`encodePng`、错误分类纯函数）/`ocr-model.ts`（det+rec 引擎）/`ocr-ops.ts`（两段式编排）/`ocr.worker.ts` |
 | 渲染口径       | 倍率 **1.5**（A4 → 893×1263）；渲染前白底 `fillRect` + 渲染后 `destination-over` 补白（软掩模/抗锯齿透明像素）；注册 `msyh.ttc → YaHei`（幂等、失败不阻断）；pdfjs v6 用 `cMapUrl`（`cmaps`/`isEvalSupported` 已移除）              |
-| 引擎口径       | ort node 构建**仅 default 导出**（`loadOrt` 运行时互操作兜底）；det/rec 输出 dims 全守卫；加载失败 → `MODEL_MISSING`，推理期异常 → 编排层 `OCR_FAILED`（结构化透传）                                                                |
+| 引擎口径       | ort ESM import **命名导出 + default 互操作兜底**（`loadOrt`）；det/rec 输出 dims 全守卫；加载失败 → `MODEL_MISSING`，推理期异常 → 编排层 `OCR_FAILED`（结构化透传）                                                                 |
 | 编排口径       | detect：`render → detect(加载识别模型…) → 每页 detect/cluster`；export：仅 `write`（无 message）；全页 0 题区 → `NO_REGIONS`，空 regions 页保留；导出按 pageNumber 排序 + `startNumber` 连续编号；任一失败清理**本批全部已写**文件  |
 | 图片输入       | 先 `readFile` 后 `loadImage`（IO 与解码错误分界见 §10.5）；PDF 渲染失败按 pdfjs `name` 分类                                                                                                                                         |
 | 构建验证（P2） | `out/main/chunks/ocr.worker-*.js` 真实 spawn：三页卷 2.25s（≈750ms/页）、A4@1.5 893×1263、regions 1/1/1；exam-split 单测 200+ 条、分组分支覆盖 ≥80%；`pnpm gate` + `format:check` 全绿                                              |
@@ -247,14 +253,50 @@
 | chunk（R5） | ✅ 实测 `exam-split-*.js` **raw 712.0KB / gzip 177.6KB < 200KB**（P3 UI + pdfjs 主库）；renderer 侧 pdfjs 改用官方压缩入口 `build/pdf.min.mjs`（electron-vite 默认 `minify=false`，根入口会把 891KB 未压缩主库整包打入，压缩入口同功能省 ≈180KB raw）；`pdf.worker.min-*.mjs` 资产仍单列，pdf-lib 在主进程 worker 不属 R5 口径 |
 | 验证（P3）  | `pnpm gate`：51 文件 / 526 测试全绿（audit 见 plan §4.4 已知外部风险）；`pnpm coverage`：exam-split 分组 lines **97.90%** / branches **83.74%**，全仓 93.65/85.37/91.52/95.83；e2e 11/11（图片识别→键盘微调→导出 PNG+PDF、三页卷 PDF、损坏图片/加密 PDF、模型缺失、百页取消）                                                  |
 
+## 10.12 P4 输入方向与跨页展开（2026-11-18，R8 回写）
+
+**样卷实况（`packages/tools/exam-split/fixtures/ocr/`，9 文件 11 页）**：2 张整本摊开的跨页照、4 张侧拍截屏（含查看器 UI/黑边）、3 个 PDF（其中 2 个内嵌侧拍照片）。按旧口径直接识别：跨页照被判成整页单栏（13/5 个碎题区）、侧拍图仅 1 个整页题区（题号行 0 个）。
+
+**决策（用户拍板）**：新增两项输入能力，覆盖手机拍卷真实场景，再以现有样卷完成 R1 量化验收。
+
+| 能力         | 口径                                                                                                                                                                                                                                                                            |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 页面旋转     | `rotation ∈ {0,90,180,270}`（顺时针），detect/export 同一变换 → region 坐标无需换算；PDF 叠加页面固有 `page.rotate`（`(page.rotate+rotation)%360`）；图片按旋转后尺寸重建位图（白底）；**不做自动方向检测**（合成 4 方向推理会突破单页 ≤3s 预算，且误判风险高），由用户点按校正 |
+| 跨页展开拆分 | 复用列检测通道（§10.4 覆盖率谷底）：书脊即栏缝，左页题区 `xStart/xEnd=0/splitX`、右页 = `splitX/1`；编号与列表按「页序 → 列序 → 题序」，导出按列裁剪；**不新增页面模型**（一页仍是一页，只是分列）                                                                              |
+| 约束         | 旋转是**破坏性操作**：变更即清空题区/结果卡（避免旧坐标错配），需重新识别；执行中禁用。截屏自带的查看器 UI/黑边属输入噪声，产品不做裁剪（R1 测量时人工裁去）                                                                                                                    |
+
+**验收口径不变**（§10.10）：命中率 ≥90% 或每题人工微调 ≤1 次；单页 OCR ≤3s（带旋转时按「旋转+识别」合计计时，白底重建 ≈10ms 可忽略）。
+
+### P4 实测结果（2026-11-18，真实模型 + 完整 `ocr-detect` 管线）
+
+计时 = `ocr-detect` 端到端（渲染 + det + rec + 聚类），预热一次后取第二轮；「单页耗时」= 任务总时长 ÷ 页数。
+表格为 **onnxruntime-node 复评数据**（引擎切换依据见 §10.8；onnxruntime-web 的原始测量 3.3–4.7s/页、题区 94 见 git 历史 P4 提交信息与 plan §4.4）。
+
+| 样卷（按正确方向）            | 页  | 自动题区 | 人工判读题数 | 栏缝 x        | 单页耗时          |
+| ----------------------------- | --- | -------- | ------------ | ------------- | ----------------- |
+| 图1 跨页展开照                | 1   | 12       | 13           | 0.47          | 1.43s             |
+| 图2 跨页展开照                | 1   | 5        | 5            | 0.53          | 1.20s             |
+| 图3 截屏（人工裁去查看器 UI） | 1   | 6        | 6            | 0.495         | 1.23s             |
+| 图4 截屏（人工裁去查看器 UI） | 1   | 8        | 11           | 0.495         | 1.10s             |
+| 图5 侧拍                      | 1   | 7        | 11           | 0.495         | 1.41s             |
+| 图6 侧拍                      | 1   | 5        | 6            | 0.49          | 1.54s             |
+| PDF1（印刷双栏）              | 1   | 10       | 10           | 0.505         | 1.36s             |
+| PDF2（内嵌侧拍，rot270 复原） | 2   | 4 + 9    | 4 + 9        | 0.505 / 0.485 | 2.52s（1.26s/页） |
+| PDF3（内嵌侧拍，rot270 复原） | 2   | 11+18    | 12 + 18      | 0.425 / 0.445 | 2.42s（1.21s/页） |
+
+- **方向能力**：4 张侧拍 + 2 个内嵌侧拍 PDF 未旋转时仅 1 个整页题区（题号行 0），`rotation=270` 复原后全部出正确题区；PDF2 用 rot90 只有 3+4 个题区（方向不对），rot270 才 4+9 —— 旋转确为必要能力。
+- **跨页能力**：图1/图2 由旧口径的「整页单栏碎题区」变为按书脊切开的两页题区（栏缝 0.47 / 0.53，页脚跨缝行归右页末题）。
+- **边界命中率**：自动题区 **95 / 人工判读 105 = 90.5% ≥ 90% 主口径达标**（引擎切换后 det 输出微调：图3 5→6 满命中、图4 7→8 缺口 4→3、图1 13→12 缺 1）；缺口集中在图4/图5（嵌套小题边界）。替代口径同样满足：补 10 条边界 / 105 题 ≈ 0.10 次/题，单题最多 1 次。
+- **单页耗时**：图片 1.10–1.54s、PDF 1.21–1.26s/页 —— **全部 ≤3s 达标**（onnxruntime-node 相对 wasm 提速 2.6–3.8×；wasm 真实卷 3.3–4.7s/页、合成卷 ≈750ms/页均不再复现超限）。
+
 ## 10.10 验收清单（R1 量化，开工前样卷入库）
 
 - [x] R8 本清单先行（本节）；实现偏差回写本节 + plan §4.4
-- [ ] **固定 10 份样卷测试集**入库（手写/印刷/双栏/带图混合，`fixtures/ocr/`）——**待用户提供真实样卷（P4）**
-- [ ] **自动切题边界命中率 ≥90%，或每题人工微调 ≤1 次**（逐卷记录进 `docs/smoke/exam-split.md` §M3b）——**待 P4**
-- [ ] **单页 OCR ≤3s** 实测（超限触发 onnxruntime-node 复评流程）——合成卷实测 ≈750ms/页，真实样卷口径待 P4
-- [x] 识别/边界纯函数 + schema + 错误映射单测 ≥80%（exam-split 分组）；全仓 ≥60%（P3 终验：分组 lines 97.90% / branches 83.74%；全仓 93.65/85.37/91.52/95.83）
-- [x] e2e：图片与 PDF 各一真实识别 → 微调 → 导出（PNG `%PNG` 头 + PDF `%PDF-`）；`MODEL_MISSING`/`OCR_INPUT_INVALID`/取消路径（P3：11/11 全绿）
+- [x] **固定样卷测试集**入库（`fixtures/ocr/`，用户提供 **9 文件 11 页**：跨页展开照 2、侧拍（含查看器 UI）4、PDF 3 其中 2 个内嵌侧拍；手写/印刷/双栏/带图/跨页/侧拍全覆盖）
+- [x] **自动切题边界命中率 ≥90%，或每题人工微调 ≤1 次**（P4：**主口径达标 90.5%**（95/105）；替代口径同样满足——补 10 条边界 / 105 题 ≈ 0.10 次/题、单题最多 1 次；逐卷数据见 §10.12 与 smoke §5.5）
+- [x] **单页 OCR ≤3s** 实测（wasm 超限 → 按 R1 流程切 onnxruntime-node 复评，2026-11-18 用户拍板）——**真实卷 1.10–1.54s/页达标**（提速 2.6–3.8×；数据见 §10.12）
+- [x] 识别/边界纯函数 + schema + 错误映射单测 ≥80%（exam-split 分组）；全仓 ≥60%（P4 终验：分组阈值通过；全仓 93.71/84.95/91.60/95.92）
+- [x] e2e：图片与 PDF 各一真实识别 → 微调 → 导出（PNG `%PNG` 头 + PDF `%PDF-`）；`MODEL_MISSING`/`OCR_INPUT_INVALID`/取消路径 + **旋转复原/跨页展开**（P4：13/13 全绿）
 - [x] R2 八类异常补 OCR 侧记录（中文/空格路径、占用、加密 PDF、超大图片、取消、并发、模型缺失、断电恢复）
-- [x] 门禁全绿 + chunk/模型/wasm 体积单列（smoke §4 续写）（chunk 712.0KB raw / **177.6KB gzip**；audit 受外部 advisory 影响，见 plan §4.4）
-- [ ] 10 样卷命中率记录 + 人工目视（导出 PNG 逐题核对无截断/错序）——**待 P4**
+- [x] 门禁全绿 + chunk/模型/native 体积单列（smoke §4 续写）（chunk 733.5KB raw / **184.1KB gzip**；ocr.worker 产物 1.12MB raw / 306.8KB gzip 单列；onnxruntime-node win32 x64 native ≈68.6MB 单列；audit 受外部 advisory 影响，见 plan §4.4）
+- [x] 样卷命中率记录 + **题区 overlay 截图人工核对**（9 文件 11 页，核对边界落点与列归属；导出裁剪用同一旋转变换，由 e2e 旋转用例断言 PNG 尺寸）

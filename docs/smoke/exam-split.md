@@ -51,12 +51,13 @@
 ## 4. R5 体积记录
 
 - 口径：gzip（2026-11-13 M1 决策：工具 chunk + 独占依赖 chunk；运行时资产单列不计入）。
-- `exam-split-*.js`：**M3b P3 复测 raw 712.0KB / gzip 177.6KB < 200KB 基线 ✅**（P3 起 renderer 侧 pdfjs 改用官方压缩入口 `build/pdf.min.mjs`；M3a 历史值 raw 843.6KB / gzip 189.5KB 保留不改写）。对照：计算器 214.3KB、单位换算 37.9KB（同一未压缩构建口径，未复测）。
+- `exam-split-*.js`：**M3b P4 复测 raw 733.5KB / gzip 184.1KB < 200KB 基线 ✅**（P4 增加旋转/跨页 UI 后较 P3 177.6KB +6.5KB；M3a 历史值 raw 843.6KB / gzip 189.5KB、P3 值 712.0KB / 177.6KB 保留不改写）。对照：计算器 214.3KB、单位换算 37.9KB（同一未压缩构建口径，未复测）。
 - 运行时资产单列（按需加载，不计入上限）：
   - renderer `pdf.worker.min-*.mjs` raw 1,242.1KB / **gzip 370.4KB**
-  - 主进程 `out/main/chunks/ocr.worker-*.js` raw 1,089.9KB / gzip 297.4KB（推理 + pdfjs 渲染，worker 内按需）
+  - 主进程 `out/main/chunks/ocr.worker-*.js` raw 1,119.6KB / gzip 306.8KB（推理 + pdfjs 渲染，worker 内按需；P4 切 onnxruntime-node 后较 wasm 版 +30KB）
   - 主进程 `out/main/chunks/pdf.worker-*.js`（pdf-lib worker，不属 R5 口径）raw 1,067.4KB / gzip 288.9KB
   - OCR 模型 `binaries/ocr/` 16.2MB（det 4.7 + rec 10.9 + cls 0.6 + dict 0.03，gitignore，fetch 脚本 SHA256 钉死）
+  - onnxruntime-node native（win32 x64，P4 起随包，asarUnpack）：**≈68.6MB**（onnxruntime.dll 31.7 + DirectML.dll 18.5 + dxcompiler.dll 18.0 + binding 0.36；打包态走 extraResources 同级随包）
 - 依赖方向核对：pdfjs-dist（renderer）与 pdf-lib（主进程 worker）为 exam-split 独占依赖，已分仓隔离。
 
 ## 5. M3b OCR 切题冒烟（2026-11-18，P3）
@@ -100,4 +101,22 @@
 ### 5.4 已知外部风险与 P4 待办
 
 - ⚠️ `pnpm audit` 新增 high advisory **GHSA-fc5q-39xc-vjpf**（picomatch ≤4.0.7 ReDoS，`first_patched_version: null`）：命中 vite/eslint 构建期依赖，不进应用运行时产物；上游无修复版，升级后清零（plan §4.4 已记，不放宽规则）。
-- P4 待办：10 份真实样卷（手写/印刷/双栏/带图混合）入库 `fixtures/ocr/`，逐卷记录边界命中率/人工微调次数/单页耗时，关闭 spec §10.10 R1 量化验收。
+- ~~P4 待办~~：✅ 已完成（9 文件 11 页真实样卷入库 `fixtures/ocr/`，逐卷命中率/耗时见 §5.5，R1 量化验收关闭——spec §10.10 全勾）。
+
+### 5.5 P4 真实样卷量化验收（2026-11-18，R1 收口）
+
+> 口径：真实模型（`binaries/ocr/`）+ 真实 `ocr-detect` 完整管线（渲染 + det + rec + 聚类），临时 vitest 基准（跑完即删）计时，预热一轮取第二轮；逐卷数据与引擎切换决策见 spec §10.12 / plan §4.4。
+
+| #   | 验收项（spec §10.10）                | 方式                                        | 结果                                                                                                                                                 |
+| --- | ------------------------------------ | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 样卷测试集入库                       | `fixtures/ocr/` 9 文件 11 页（git 跟踪）    | ✅ 跨页展开照 2 + 截屏 2 + 侧拍 2 + PDF 3（2 个内嵌侧拍）——手写/印刷/双栏/带图/跨页/侧拍全覆盖                                                       |
+| 2   | 页面旋转（0/90/180/270）             | 真实样卷（4 侧拍 + 2 内嵌侧拍 PDF 无 EXIF） | ✅ rot270 复原全部出正确题区；未旋转时整页 1 题区（题号行 0）；PDF2 rot90 仅 3+4 → rot270 4+9 佐证方向必要性                                         |
+| 3   | 跨页展开拆分                         | 图1/图2 书脊栏缝                            | ✅ 覆盖率谷底切分（0.47/0.53），页脚跨缝行归右页末题                                                                                                 |
+| 4   | 命中率 ≥90% 或每题微调 ≤1 次         | 自动题区 vs 人工判读（105 题）              | ✅ **90.5%（95/105）主口径达标**；替代口径 ≈0.10 次/题（单题 ≤1）同样满足；缺口集中在嵌套小题（图4/图5）                                             |
+| 5   | 单页 OCR ≤3s（R1 硬性）              | 端到端计时                                  | ✅ **1.10–1.54s/页**（onnxruntime-node；wasm 3.3–4.7s/页超限 → R1 流程切换，提速 2.6–3.8×）                                                          |
+| 6   | 单测/覆盖率/门禁                     | `pnpm test` / `pnpm coverage` / `pnpm gate` | ✅ 全仓 **539 tests / 52 文件**；coverage 分组阈值通过、全仓 93.71/84.95/91.60/95.92；lint/typecheck/boundary/format 绿；audit 仅已知 picomatch 例外 |
+| 7   | e2e（真实模型 + 真实构建，含新能力） | `pnpm test:e2e` exam-split 套件             | ✅ **13/13 passed**（PDF 6 + OCR 7：新增旋转 e2e 用例 + 模型缺失用例改用真实模型文件移走/恢复）                                                      |
+| 8   | chunk/资产体积（R5）                 | 构建产物实测                                | ✅ renderer chunk 184.1KB gzip（<200KB）；ocr.worker 306.8KB gzip 单列；onnxruntime-node native ≈68.6MB 单列（§4）                                   |
+
+- **引擎切换记录（R1 流程闭环）**：M3b P0 钉 onnxruntime-web（wasm）→ P4 真实卷 3.3–4.7s/页超 ≤3s → 用户拍板切 **onnxruntime-node 1.31.1**（CPU EP、NAPI binding）：依赖换钉（exam-split + desktop 双包）、`asarUnpack` 改 native 目录、`allowBuilds` 放行 postinstall、`loadOrt` 去 wasm env。同管线复测 2.6–3.8× 提速；预处理/CTC 口径不变，题区数受 det 浮点差异微调（图3 5→6、图4 7→8、图1 13→12）→ 命中率 89.5%→90.5% 转达标。
+- **binaries 根修复（P4 e2e 发现）**：pnpm `.pnpm` 目录布局使 Electron 误判 `app.isPackaged=true`（execPath 为 `.pnpm/.../electron/dist/electron.exe`），e2e 下模型路径错指向 `electron/dist/resources/binaries` → `MODEL_MISSING det: ENOENT`（6 用例红）。修复：`ToolPaths.binaries` 改为探测 `resources/binaries` 存在，回落仓库根 `binaries/`，不再依赖 `isPackaged`（CSP/updater 语义不受影响）。修复后 13/13 全绿。
