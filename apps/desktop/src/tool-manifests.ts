@@ -3,6 +3,7 @@ import { manifest as calculatorManifest } from '@lumin/tool-calculator/manifest'
 import { manifest as docx2pdfManifest } from '@lumin/tool-docx2pdf/manifest'
 import { manifest as exampleManifest } from '@lumin/tool-example/manifest'
 import { manifest as examSplitManifest } from '@lumin/tool-exam-split/manifest'
+import { manifest as fileRenamerManifest } from '@lumin/tool-file-renamer/manifest'
 import { manifest as imageToolboxManifest } from '@lumin/tool-image-toolbox/manifest'
 import { manifest as unitConverterManifest } from '@lumin/tool-unit-converter/manifest'
 import { manifest as videoDownloadManifest } from '@lumin/tool-video-download/manifest'
@@ -14,6 +15,7 @@ export const toolManifests: readonly ToolManifest[] = [
   docx2pdfManifest,
   examSplitManifest,
   imageToolboxManifest,
+  fileRenamerManifest,
   videoDownloadManifest,
   exampleManifest
 ]

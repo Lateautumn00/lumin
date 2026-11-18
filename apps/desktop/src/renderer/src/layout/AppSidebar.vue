@@ -5,6 +5,7 @@ import {
   Calculator,
   Download,
   FileOutput,
+  FilePen,
   FlaskConical,
   Image,
   Info,
@@ -28,6 +29,7 @@ const iconMap: Record<string, LucideIcon> = {
   scissors: Scissors,
   download: Download,
   image: Image,
+  'file-pen': FilePen,
   wrench: Wrench
 }
 

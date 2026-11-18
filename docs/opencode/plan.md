@@ -236,6 +236,16 @@ lumin/
 - 依据实测：gyan.dev essentials 6.1.1 编码器 libwebp/png/mjpeg/libaom-av1 与 muxer avif/webp/image2 全部可用
 - **验收**：gif→webp 帧数一致、缩放四模式尺寸断言、冲突重命名、单张 jpg < 1s（avif 除外）、R2 八类 smoke、gate 全绿
 
+### 4.7 批量重命名（M7，2026-11-18 R8 登记）
+
+- **决策（用户拍板 2026-11-18）**：下一个功能 = 文件批量重命名（`file-renamer`）。范围锁定：**单目录、非递归、只改普通文件**；不做文件夹改名/跨目录/跨会话撤销；不做临时中转改名（交换/成环在预览期判冲突），保证断电无残留
+- 通道：`file-renamer:scan`（sync，仅普通文件 + `localeCompare` 排序 + 5000 条截断）、`apply`/`undo`（task，逐条原子 rename，单条失败不中断）、`config`/`set-dir`（sync，settings `lastDir` 记忆）
+- 规则六项（作用顺序）：删除字符 → 查找替换（正则支持 `$1`–`$9`）→ 大小写 → 序号 → 日期 → 扩展名；「序号」按勾选列表顺序编号，「日期」支持 mtime/统一 now
+- 名称校验：Windows 保留字符、保留设备名（CON/PRN/AUX/NUL/COM1-9/LPT1-9）、≤255 UTF-8 字节、不以空格/点结尾；冲突判定含批内重复、未勾选占用、链式/交换
+- 错误码 `FR_*`（DIR_NOT_FOUND / NO_FILES / NAME_INVALID / NAME_RESERVED / CONFLICT / RENAME_FAILED / TOO_MANY / CANCELLED）；无新增第三方依赖
+- 字段级清单：`docs/spec/file-renamer.md`；冒烟：`docs/smoke/file-renamer.md`（R2 八类真实记录 + chunk 11.8KB gzip）
+- **验收**：预览与执行一致（勾选/规则实时重算）、冲突不可执行、撤销可回退最近一次、R2 八类 smoke、gate 全绿
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -285,6 +295,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M4 v0.4**   | 短视频下载（fetch-binaries+队列+进度/暂停/历史+自更新+免责）                                                                                                                                                       | B站/YouTube 真实下载成功；**免责文案定稿（R8）**                     | 5–8 天 |
 | **M5 发布**   | 更新端到端验证；Gitee Release 首发；README/许可/SmartScreen 指引                                                                                                                                                   | 旧版自动升新版                                                       | 2–3 天 |
 | **M6 v0.5**   | 图片工具箱（ffmpeg 复用：压缩/转换/缩放三 Tab，含 AVIF，gif→webp 动画）                                                                                                                                            | §4.6 验收；smoke 8 类全过（R2）；**字段级清单先行（R8）**            | 3–5 天 |
+| **M7 v0.6**   | 批量重命名（单目录非递归、六规则叠加、预览/冲突/撤销、5000 条截断）                                                                                                                                                | §4.7 验收；smoke 8 类全过（R2）；字段级清单先行（R8）                | 2–3 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
