@@ -51,10 +51,13 @@ test.describe('视频下载（假引擎）', () => {
     installFakeEngine()
     app = await electron.launch({ args: ['.'], cwd: appDir })
     const page = await app.firstWindow()
-    // 测试隔离：清空工具历史与免责状态
+    // 测试隔离：清空工具历史、免责状态与三平台 Cookie（残留会让「未配置」断言失效）
     await page.evaluate(() => {
       void window.lumin.settings.set('tools.video-download.history', [])
       void window.lumin.settings.set('tools.video-download.disclaimerAccepted', false)
+      void window.lumin.settings.set('tools.video-download.cookies.douyin', null)
+      void window.lumin.settings.set('tools.video-download.cookies.bilibili', null)
+      void window.lumin.settings.set('tools.video-download.cookies.youtube', null)
     })
   })
 
@@ -151,5 +154,37 @@ test.describe('视频下载（假引擎）', () => {
     await page.getByRole('button', { name: '确认' }).click()
     await expect(page.getByText('历史样例')).toBeHidden()
     await expect(page.getByText('粘贴视频链接开始下载')).toBeVisible()
+  })
+
+  test('Cookie 管理：粘贴保存 → 平台独立 → 删除（spec §9.5）', async () => {
+    const page = await app.firstWindow()
+    await page.getByRole('link', { name: '视频下载' }).click()
+    await page.getByRole('button', { name: '同意并继续' }).click()
+    await page.getByRole('button', { name: 'Cookie 管理' }).click()
+    await expect(page.getByText(/配置浏览器 Cookie 后可下载登录可见内容/)).toBeVisible()
+    await expect(page.getByText('未配置').first()).toBeVisible()
+
+    // B站 Tab：粘贴保存（Header 行形态，两对键值）
+    // 切到 B站：粘贴保存（Header 行形态，两对键值）
+    await page.getByRole('button', { name: 'B站' }).click()
+    await page.getByPlaceholder(/粘贴浏览器导出的 Cookie/).fill('SESSDATA=xyz; buvid3=abc-def')
+    await page.getByRole('button', { name: '保存', exact: true }).click()
+    await expect(page.getByText('已保存 2 条', { exact: true })).toBeVisible()
+    await expect(page.getByText(/^已存 2 条/)).toBeVisible()
+
+    // 平台独立：切回抖音按钮，仍为未配置
+    await page.getByRole('button', { name: '抖音' }).click()
+    await expect(page.getByText('未配置').first()).toBeVisible()
+
+    // 删除 B站（二次确认）→ 回到未配置
+    await page.getByRole('button', { name: 'B站' }).click()
+    await page.getByRole('button', { name: '删除' }).click()
+    await page.getByRole('button', { name: '确认' }).click()
+    await expect(page.getByText('未配置').first()).toBeVisible()
+
+    // 非法输入 → 结构化报错态
+    await page.getByPlaceholder(/粘贴浏览器导出的 Cookie/).fill('没有等号的垃圾内容')
+    await page.getByRole('button', { name: '保存', exact: true }).click()
+    await expect(page.getByText('Cookie 格式无法识别，请粘贴浏览器导出的 Cookie')).toBeVisible()
   })
 })

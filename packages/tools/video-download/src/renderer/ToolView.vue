@@ -15,10 +15,11 @@ import {
   NTag,
   NText
 } from 'naive-ui'
-import { FolderOpen, RotateCcw, ShieldCheck } from '@lucide/vue'
+import { FolderOpen, KeyRound, RotateCcw, ShieldCheck } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
 import { clearHistory, history, markPause, probe, revealPath, start } from './client'
+import CookieDialog from './CookieDialog.vue'
 import type { HistoryEntry, Preset, ProbeResult } from '../schema'
 
 /** 免责文案正文（plan §4.5 / spec §0 同源，修改须重走 R8） */
@@ -45,6 +46,8 @@ const STATUS_LABELS: Record<HistoryEntry['status'], string> = {
 // —— 免责声明（未同意时主功能区置灰） ——
 const disclaimerAccepted = ref(false)
 const disclaimerVisible = ref(false)
+/** Cookie 管理弹窗显隐（二期 spec §9.5） */
+const cookieDialogVisible = ref(false)
 const dontShowAgain = ref(true)
 
 // —— 输入与 probe ——
@@ -267,10 +270,24 @@ onUnmounted(detach)
       </button>
     </div>
 
-    <div>
-      <h1 class="text-base font-semibold">视频下载</h1>
-      <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">粘贴视频链接，下载到本地</p>
+    <div class="flex items-start justify-between">
+      <div>
+        <h1 class="text-base font-semibold">视频下载</h1>
+        <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
+          粘贴视频链接，下载到本地
+        </p>
+      </div>
+      <!-- Cookie 管理（二期 spec §9.5）：登录可见内容下载 -->
+      <NButton
+        size="small"
+        quaternary
+        :disabled="phase === 'running'"
+        @click="cookieDialogVisible = true"
+      >
+        <KeyRound class="mr-1 h-3.5 w-3.5" />Cookie 管理
+      </NButton>
     </div>
+    <CookieDialog v-model:show="cookieDialogVisible" />
 
     <!-- 输入区（未同意免责时置灰） -->
     <NSpace vertical :class="{ 'pointer-events-none opacity-50': mainDisabled }">
@@ -295,14 +312,14 @@ onUnmounted(detach)
         />
       </NSpace>
       <NSpace>
-        <NButton :loading="phase === 'probing'" :disabled="url === '' || phase === 'running'" @click="runProbe">
+        <NButton
+          :loading="phase === 'probing'"
+          :disabled="url === '' || phase === 'running'"
+          @click="runProbe"
+        >
           获取信息
         </NButton>
-        <NButton
-          type="primary"
-          :disabled="phase !== 'idle' || url === ''"
-          @click="runDownload"
-        >
+        <NButton type="primary" :disabled="phase !== 'idle' || url === ''" @click="runDownload">
           下载
         </NButton>
       </NSpace>
@@ -335,7 +352,10 @@ onUnmounted(detach)
     </div>
 
     <!-- 空态：引导 + 无白屏 -->
-    <NEmpty v-if="isEmpty && phase === 'idle' && error === null" description="粘贴视频链接开始下载" />
+    <NEmpty
+      v-if="isEmpty && phase === 'idle' && error === null"
+      description="粘贴视频链接开始下载"
+    />
 
     <!-- 历史列表 -->
     <div v-if="entries.length > 0" class="flex flex-col gap-2">
@@ -357,10 +377,14 @@ onUnmounted(detach)
           <div class="truncate text-sm">
             {{ entry.title !== '' ? entry.title : entry.url }}
           </div>
-          <div class="mt-0.5 flex items-center gap-2 text-xs text-[var(--lumin-color-text-secondary)]">
+          <div
+            class="mt-0.5 flex items-center gap-2 text-xs text-[var(--lumin-color-text-secondary)]"
+          >
             <NTag size="tiny" :bordered="false">{{ statusLabel(entry.status) }}</NTag>
             <span v-if="entry.outputName !== undefined">{{ entry.outputName }}</span>
-            <span v-if="entry.downloadedBytes !== undefined">{{ formatBytes(entry.downloadedBytes) }}</span>
+            <span v-if="entry.downloadedBytes !== undefined">{{
+              formatBytes(entry.downloadedBytes)
+            }}</span>
           </div>
         </div>
         <NSpace :size="4">
@@ -389,7 +413,9 @@ onUnmounted(detach)
     <div v-if="error !== null" class="flex flex-col gap-1">
       <NText type="error" class="text-sm">{{ error.message }}</NText>
       <details v-if="errorDetail !== ''">
-        <summary class="cursor-pointer text-xs text-[var(--lumin-color-text-secondary)]">详情</summary>
+        <summary class="cursor-pointer text-xs text-[var(--lumin-color-text-secondary)]">
+          详情
+        </summary>
         <NText depth="3" class="block break-all text-xs">{{ errorDetail }}</NText>
       </details>
       <NButton size="small" class="w-fit" @click="retry">重试</NButton>
