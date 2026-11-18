@@ -17,6 +17,13 @@ export interface RunProcessOptions {
    * 须显式指定 'gbk' 才能得到正确文本（Electron/Node 全量 ICU 支持）。
    */
   encoding?: 'utf8' | 'gbk'
+  /**
+   * 流式行回调（可选）：解码后按换行切分逐行推送（含行内容、不含换行符）。
+   * 进度类外部程序（如 yt-dlp）需要边跑边解析输出时使用；
+   * 回调抛错不中断进程捕获，异常仅透传给 close 后的 resolve 流程外。
+   */
+  onStdoutLine?: (line: string) => void
+  onStderrLine?: (line: string) => void
 }
 
 export interface RunProcessResult {
@@ -77,7 +84,9 @@ export function runProcess(options: RunProcessOptions): Promise<RunProcessResult
     signal,
     env,
     maxOutputChars = DEFAULT_MAX_OUTPUT_CHARS,
-    encoding = 'utf8'
+    encoding = 'utf8',
+    onStdoutLine,
+    onStderrLine
   } = options
 
   return new Promise((resolve, reject) => {
@@ -128,11 +137,34 @@ export function runProcess(options: RunProcessOptions): Promise<RunProcessResult
       return current + text
     }
 
+    // 流式行切分：按 \r?\n 分段，尾部残行缓存到下一 chunk（\r\n 分隔符按行尾处理）
+    const makeLineSplitter = (onLine: (line: string) => void): ((text: string) => void) => {
+      let rest = ''
+      return (text: string): void => {
+        const combined = rest + text
+        const parts = combined.split(/\r\n|\n|\r/)
+        rest = parts.pop() ?? ''
+        for (const line of parts) onLine(line)
+      }
+    }
+    const splitOut = onStdoutLine === undefined ? null : makeLineSplitter(onStdoutLine)
+    const splitErr = onStderrLine === undefined ? null : makeLineSplitter(onStderrLine)
+
+    const flushLine = (
+      split: ((text: string) => void) | null,
+      decoder: typeof outDecoder,
+      chunk: Buffer
+    ): string => {
+      const text = decodeChunk(decoder, chunk)
+      if (split !== null) split(text)
+      return text
+    }
+
     child.stdout?.on('data', (chunk: Buffer) => {
-      stdout = append(stdout, decodeChunk(outDecoder, chunk))
+      stdout = append(stdout, flushLine(splitOut, outDecoder, chunk))
     })
     child.stderr?.on('data', (chunk: Buffer) => {
-      stderr = append(stderr, decodeChunk(errDecoder, chunk))
+      stderr = append(stderr, flushLine(splitErr, errDecoder, chunk))
     })
 
     let timer: NodeJS.Timeout | undefined
