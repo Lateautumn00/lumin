@@ -29,6 +29,7 @@
     "@lumin/tool-example": "workspace:*",
     "@lumin/tool-file-renamer": "workspace:*",
     "@lumin/tool-image-toolbox": "workspace:*",
+    "@lumin/tool-text-toolbox": "workspace:*",
     "@lumin/tool-unit-converter": "workspace:*",
     "@lumin/tool-video-download": "workspace:*",
     "@playwright/test": "1.65.0",

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
+  Braces,
   Calculator,
   Download,
   FileOutput,
@@ -30,6 +31,7 @@ const iconMap: Record<string, LucideIcon> = {
   download: Download,
   image: Image,
   'file-pen': FilePen,
+  braces: Braces,
   wrench: Wrench
 }
 

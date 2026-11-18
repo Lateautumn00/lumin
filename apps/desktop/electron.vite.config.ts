@@ -61,6 +61,14 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/file-renamer/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-text-toolbox\/manifest$/,
+    replacement: r('../../packages/tools/text-toolbox/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-text-toolbox\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/text-toolbox/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-video-download\/manifest$/,
     replacement: r('../../packages/tools/video-download/src/manifest.ts')
   },
