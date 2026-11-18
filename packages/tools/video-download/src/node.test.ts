@@ -28,10 +28,11 @@ const okResult = (overrides: Partial<RunProcessResult> = {}): RunProcessResult =
   ...overrides
 })
 
-/** 假 runProcess 行为定义：按序消费脚本，每项 = 结果 + 可选的 stdout 行流 */
+/** 假 runProcess 行为定义：按序消费脚本，每项 = 结果 + 可选的 stdout/stderr 行流 */
 interface RunScript {
   result: Partial<RunProcessResult>
   stdoutLines?: string[]
+  stderrLines?: string[]
 }
 
 interface Harness {
@@ -68,9 +69,17 @@ function createHarness(scripts: RunScript[], initialSettings: Record<string, unk
       calls.push(options)
       const script = scripts[Math.min(scriptIndex, scripts.length - 1)]
       scriptIndex++
-      const lines = script?.stdoutLines ?? []
-      for (const line of lines) options.onStdoutLine?.(line)
-      return Promise.resolve(okResult({ stdout: lines.join('\n'), ...script?.result }))
+      const stdoutLines = script?.stdoutLines ?? []
+      const stderrLines = script?.stderrLines ?? []
+      for (const line of stdoutLines) options.onStdoutLine?.(line)
+      for (const line of stderrLines) options.onStderrLine?.(line)
+      return Promise.resolve(
+        okResult({
+          stdout: stdoutLines.join('\n'),
+          stderr: stderrLines.join('\n'),
+          ...script?.result
+        })
+      )
     },
     now: () => 1700000000000 + calls.length * 1000
   }
@@ -289,6 +298,27 @@ describe('start', () => {
     const args = harness.calls[0]?.args ?? []
     expect(args).toContain('after_move:filepath')
     expect(args).toContain('--continue')
+  })
+
+  it('成功：进度行走 stderr（真实引擎主路径）也能推送进度并计入历史', async () => {
+    const finalPath = join(outputDir, 'stderr 产物.mp4')
+    const harness = createHarness([
+      {
+        result: {},
+        stderrLines: ['PROGRESS|4096|8192|1024|4'],
+        stdoutLines: [finalPath]
+      }
+    ])
+    mkdirSync(outputDir, { recursive: true })
+    writeFileSync(finalPath, 'stub')
+    const { updates, error } = await runTask(harness, startPayload)
+    expect(error).toBeUndefined()
+    expect(updates).toEqual([
+      expect.objectContaining({ kind: 'progress', current: 4096, total: 8192, stage: 'download' }),
+      expect.objectContaining({ kind: 'progress', current: 1, total: 1, stage: 'finish' })
+    ])
+    const history = harness.settings.get('history') as HistoryEntry[]
+    expect(history[0]).toMatchObject({ status: 'DONE', downloadedBytes: 4096 })
   })
 
   it('abort 无 mark-pause → 历史 CANCELLED', async () => {

@@ -63,14 +63,17 @@ function diagnose(result: RunProcessResult): string {
 }
 
 /**
- * 从进程终态 stdout 回推最后进度字节数（尾搜 PROGRESS 行；abort 后流已停，取捕获缓存）
+ * 从进程终态回推最后进度字节数（尾搜 PROGRESS 行；abort 后流已停，取捕获缓存）。
+ * yt-dlp 进度模板行走 stderr，after_move 等 --print 输出走 stdout，两端都搜。
  * @param result runProcess 终态结果
  */
 function lastProgressBytes(result: RunProcessResult): number | undefined {
-  const lines = result.stdout.split(/\r\n|\n|\r/)
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const snapshot = parseProgressLine(lines[i] ?? '')
-    if (snapshot !== null && snapshot.downloadedBytes !== null) return snapshot.downloadedBytes
+  for (const captured of [result.stderr, result.stdout]) {
+    const lines = captured.split(/\r\n|\n|\r/)
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const snapshot = parseProgressLine(lines[i] ?? '')
+      if (snapshot !== null && snapshot.downloadedBytes !== null) return snapshot.downloadedBytes
+    }
   }
   return undefined
 }
@@ -225,6 +228,26 @@ async function runStart(
   })
 
   let lastOutputPath = ''
+  /**
+   * 进度/路径行统一处理：PROGRESS 前缀 → 进度事件；其余非空行若为已存在文件路径
+   * → 记为最终输出路径（--print after_move:filepath 的裸路径行）。
+   * yt-dlp 的进度模板行走 stderr，--print 输出走 stdout，两端都挂同一处理。
+   */
+  const handleLine = (line: string): void => {
+    const snapshot = parseProgressLine(line)
+    if (snapshot !== null) {
+      taskCtx.emit({
+        kind: 'progress',
+        current: snapshot.downloadedBytes ?? 0,
+        total: snapshot.totalBytes ?? undefined,
+        message: progressMessage(snapshot),
+        stage: PROGRESS_STAGE
+      })
+      return
+    }
+    const trimmed = line.trim()
+    if (trimmed !== '' && existsSync(trimmed)) lastOutputPath = trimmed
+  }
   const result = await env.deps.runProcess({
     command: env.enginePath,
     args: buildStartArgs({
@@ -236,22 +259,9 @@ async function runStart(
     signal: taskCtx.signal,
     // 长任务不限时（用户可取消/暂停）；进度行数多，捕获上限放宽到 1MB
     maxOutputChars: 1024 * 1024,
-    // --print after_move:filepath 输出最终文件路径（裸路径行，非 PROGRESS 前缀）
-    onStdoutLine: (line) => {
-      const snapshot = parseProgressLine(line)
-      if (snapshot !== null) {
-        taskCtx.emit({
-          kind: 'progress',
-          current: snapshot.downloadedBytes ?? 0,
-          total: snapshot.totalBytes ?? undefined,
-          message: progressMessage(snapshot),
-          stage: PROGRESS_STAGE
-        })
-        return
-      }
-      const trimmed = line.trim()
-      if (trimmed !== '' && existsSync(trimmed)) lastOutputPath = trimmed
-    }
+    onStdoutLine: handleLine,
+    // 真实引擎进度行走 stderr（PowerShell 重定向实测验证，见 docs/smoke/video-download.md）
+    onStderrLine: handleLine
   })
 
   const wasPause = env.pausePending.delete(taskId)

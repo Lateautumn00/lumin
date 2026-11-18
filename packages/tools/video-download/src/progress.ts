@@ -20,8 +20,9 @@ export interface ProgressSnapshot {
 const PROGRESS_PREFIX = 'PROGRESS|'
 
 /**
- * 解析 progress-template 输出行；非 PROGRESS 行（如 [download]、[Merger]）返回 null
- * @param line yt-dlp --newline 的一行 stdout
+ * 解析 progress-template 输出行；非 PROGRESS 行（如 [download]、[Merger]）返回 null。
+ * 真实引擎实测：进度模板行走 stderr，`NA` 段（如 B站 total 估算缺失）→ null 字段
+ * @param line yt-dlp --newline 的一行输出（stdout/stderr 任一）
  */
 export function parseProgressLine(line: string): ProgressSnapshot | null {
   if (!line.startsWith(PROGRESS_PREFIX)) return null
