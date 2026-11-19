@@ -8,7 +8,11 @@ import type { TaskQueue } from './task-queue'
 
 vi.mock('electron', () => ({
   app: { getVersion: () => '1.2.3', getLocale: () => 'zh-CN' },
-  shell: { openPath: vi.fn(async () => ''), showItemInFolder: vi.fn() },
+  shell: {
+    openPath: vi.fn(async () => ''),
+    showItemInFolder: vi.fn(),
+    trashItem: vi.fn(async () => undefined)
+  },
   dialog: {
     showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:\\out'] }))
   }
@@ -145,6 +149,29 @@ describe('registerShellChannels', () => {
     await expect(call('lumin:shell:pick-directory', {})).resolves.toBeNull()
 
     await expect(call('lumin:shell:pick-directory', { title: '' })).rejects.toMatchObject({
+      code: 'INVALID_PAYLOAD'
+    })
+  })
+
+  it('shell:trash 逐条移入回收站，失败项返回原因；非法参数 → INVALID_PAYLOAD', async () => {
+    const { call } = createHarness()
+    vi.mocked(shell.trashItem).mockClear()
+    vi.mocked(shell.trashItem).mockImplementation(async (path: string) => {
+      if (path === 'C:\\bad.txt') throw new Error('拒绝访问')
+    })
+
+    await expect(
+      call('lumin:shell:trash', { paths: ['C:\\a.txt', 'C:\\bad.txt', 'C:\\c.txt'] })
+    ).resolves.toEqual({
+      trashed: ['C:\\a.txt', 'C:\\c.txt'],
+      failed: [{ path: 'C:\\bad.txt', message: '拒绝访问' }]
+    })
+    expect(vi.mocked(shell.trashItem)).toHaveBeenCalledTimes(3)
+
+    await expect(call('lumin:shell:trash', { paths: [] })).rejects.toMatchObject({
+      code: 'INVALID_PAYLOAD'
+    })
+    await expect(call('lumin:shell:trash', { paths: [''] })).rejects.toMatchObject({
       code: 'INVALID_PAYLOAD'
     })
   })
