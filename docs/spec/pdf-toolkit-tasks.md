@@ -50,7 +50,7 @@
   - `pnpm gate`
   - 修复直到全绿
 
-- [ ] 9. **提交（3 个，中文正文）**
+- [x] 9. **提交（3 个，中文正文）**
   - `feat(pdf-toolkit): PDF 工具集——合并/拆分/删页/旋转/重排/元数据`
   - `feat(pdf-toolkit): 壳注册（清单/主进程/别名/侧边栏/路由包装）与包覆盖率阈值`
   - `test(pdf-toolkit): e2e 用例 + spec/smoke 与 plan §4.15/M15 登记`
