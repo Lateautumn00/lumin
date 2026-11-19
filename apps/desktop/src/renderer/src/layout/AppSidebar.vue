@@ -14,6 +14,7 @@ import {
   Hash,
   Image,
   Info,
+  QrCode,
   Ruler,
   Scissors,
   Settings,
@@ -40,6 +41,7 @@ const iconMap: Record<string, LucideIcon> = {
   film: Film,
   hash: Hash,
   braces: Braces,
+  'qr-code': QrCode,
   wrench: Wrench
 }
 

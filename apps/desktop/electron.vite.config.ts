@@ -77,6 +77,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/pdf-toolkit/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-qr-code\/manifest$/,
+    replacement: r('../../packages/tools/qr-code/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-qr-code\/node$/,
+    replacement: r('../../packages/tools/qr-code/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-qr-code\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/qr-code/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-file-renamer\/manifest$/,
     replacement: r('../../packages/tools/file-renamer/src/manifest.ts')
   },
