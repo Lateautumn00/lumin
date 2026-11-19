@@ -16,6 +16,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | PDF images       | PDF pages → PNG/JPG (range/DPI), images → PDF in order (auto/A4 page size)                                        |
 | PDF toolkit      | Merge, split, delete, rotate, reorder pages, edit metadata, add watermarks and page numbers — output beside the source |
 | File hasher      | Batch MD5/SHA-1/SHA-256 with paste-to-verify against an expected digest, TSV copy                                 |
+| Duplicate finder | Scan a folder, confirm duplicate groups with two-stage SHA-256, keep the oldest and trash the rest                |
 | Media converter  | Transcode (MP4/WebM/MKV), trim clips, extract audio, compress — reuses the bundled ffmpeg, fully offline          |
 | QR code tool     | Generate text/URL/WiFi/vCard QR codes (PNG/SVG) or decode content from local images                                |
 | Video downloader | Bilibili/Douyin/YouTube presets (online, local parsing only; respect platform terms and copyright)                |

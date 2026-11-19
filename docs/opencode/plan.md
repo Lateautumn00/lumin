@@ -32,6 +32,7 @@
 | Q19 | PDF 工具集 | **新增通用 PDF 页面整理工具**（`pdf-toolkit`，2026-11-19 用户选定）：合并 / 拆分 / 删页 / 旋转 / 重排 / 元数据；不复做加密解密、裁剪与 OCR（exam-split）、PDF↔图片（pdf-images）；产物写源文件同目录；详见 §4.15                                             |
 | Q20 | 二维码工具 | **新增二维码生成与识别工具**（`qr-code`，2026-11-19 用户选定）：生成（文本/网址/WiFi/vCard，PNG/SVG）/ 识别（本地图片）；生成与解码在 renderer（`qrcode` + `jsqr`），主进程只做目录记忆与原子写盘，无长任务；详见 §4.16 |
 | Q21 | PDF 水印/页码 | **在 `pdf-toolkit` 扩展两个 Tab**（2026-11-19 用户选定）：水印（文字支持中文，renderer Canvas 栅格化；PNG/JPG 图片；透明度/角度/大小/平铺/页码范围）、页码（6 向位置、起始页、4 预设 + 自定义 ASCII 模板 `{n}`/`{total}`、字号/颜色/边距/页码范围）；复用 pdf-lib 与既有 worker/错误码，零新增依赖；详见 §4.17 |
+| Q22 | 重复文件查找 | **新增 `duplicate-finder` 工具**（2026-11-19 用户选定）：单目录（可含子目录）扫描 → 大小分组 + 64KB 前缀预筛 + 全量 SHA-256 确认 → 重复组展示与默认勾选 → 定位 / 移入回收站；新增壳通用能力 `lumin:shell:trash`（Electron `shell.trashItem`）；零新增第三方依赖；详见 §4.18 |
 | —   | 硬约束     | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                       |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -340,6 +341,16 @@ lumin/
 - 字段级清单：`docs/spec/pdf-toolkit.md`；任务单：`docs/spec/pdf-toolkit-m17-tasks.md`；冒烟：`docs/smoke/pdf-toolkit.md`（chunk **55,864 B raw / 12,198 B gzip**）；e2e `apps/desktop/e2e/pdf-toolkit-smoke.spec.ts`（8 用例）
 - **验收**：本包覆盖率 ≥80%；e2e 覆盖水印文字/平铺/冲突递增/图片缺失与损坏、页码模板/起始页/中文模板拦截；R2 八类映射；gate 全绿
 
+### 4.18 重复文件查找（M18，2026-11-19 R8 登记）
+
+- **决策（用户拍板 2026-11-19）**：新增 `duplicate-finder` 工具，单页面 —— 选择目录（可含子目录）+ 最小文件大小（1KB/100KB/1MB/10MB，默认 1MB）→ 扫描 → 重复组（路径/大小/修改时间/可释放空间）→ 默认每组保留最早一份 → 定位 / 移入回收站；不做多根扫描、扩展名过滤、永久删除、文件内容对比
+- 形态：`packages/tools/duplicate-finder` + `src/schema.ts`/`errors.ts`/`contract.ts`/`scan.worker.ts`/`node.ts` + `renderer/`；**零新增第三方依赖**（`node:fs` + `node:crypto`）
+- 通道：`config` / `set-config` 同步（记忆目录与选项）；`scan` 走 worker 三段式任务（`?modulePath` + `runTask`，15 分钟超时，取消 terminate）；壳新增通用通道 `lumin:shell:trash`（`shell.trashItem`，单批 ≤200，逐条容错）与 bridge `trashPaths`
+- 语义：大小分组 → 仅同 size ≥2 的组做 64KB 前缀 SHA-256 预筛（`size ≤64KB` 时前缀即全量）→ 全量 SHA-256 确认；单文件 stat/读取失败计入 `skipped` 不中断；单次扫描上限 20 万文件；结果按 `wastedBytes` 降序
+- 边界：跳过符号链接；回收站删除不可恢复（二次确认）；错误码 `DF_INVALID_PAYLOAD` / `DF_ROOT_INVALID` / `DF_TOO_MANY_FILES` / `DF_SCAN_FAILED`（可重试：ROOT_INVALID / SCAN_FAILED）
+- 字段级清单：`docs/spec/duplicate-finder.md`；冒烟：`docs/smoke/duplicate-finder.md`；e2e `apps/desktop/e2e/duplicate-finder-smoke.spec.ts`
+- **验收**：本包覆盖率 ≥80%；e2e 覆盖页面三态/扫描分组/阈值/非递归/根目录非法/取消/并发/强杀恢复；R2 八类映射；chunk < 200KB gzip；gate 全绿
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -399,6 +410,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M15 v1.4**  | PDF 工具集（§4.15，2026-11-19）：合并 / 拆分 / 删页 / 旋转 / 重排 / 元数据，pdf-lib 复用、产物写源目录                                                                                                                                                                                                                                          | §4.15 验收；e2e 覆盖六操作；R2 八类；chunk <200KB gzip；gate 全绿                       | 1–2 天   |
 | **M16 v1.5**  | 二维码工具（§4.16，2026-11-19）：生成（文本/网址/WiFi/vCard + 样式 + PNG/SVG）/ 识别（本地图片 jsQR），renderer 计算、主进程原子写盘                                                                                                                                                                                                            | §4.16 验收；e2e 5/5；R2 八类；chunk 88,831 B gzip；gate 全绿                            | 0.5–1 天 |
 | **M17 v1.6**  | PDF 水印与页码（§4.17，2026-11-19）：`pdf-toolkit` 扩展两 Tab —— 水印（文字中文栅格化/图片、透明度/角度/大小/平铺/区间）+ 页码（6 向/起始页/4 预设+自定义模板/字号/颜色/边距）                                                                                                                                                                   | §4.17 验收；e2e 8/8；R2 八类；chunk 12,198 B gzip；gate 全绿                            | 0.5–1 天 |
+| **M18 v1.7**  | 重复文件查找（§4.18，2026-11-19）：`duplicate-finder` —— 目录扫描（可递归）+ 大小分组 + 64KB 前缀预筛 + 全量 SHA-256 + 重复组默认勾选 + 定位/移入回收站；壳新增 `shell:trash` 通用能力                                                                                                                                                          | §4.18 验收；e2e 覆盖三态与扫描/取消/并发；R2 八类；chunk < 200KB gzip；gate 全绿        | 1–2 天   |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
