@@ -15,6 +15,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | Text toolbox     | JSON format/minify/validate, Base64/URL encode-decode, regex test & replace preview                               |
 | PDF images       | PDF pages → PNG/JPG (range/DPI), images → PDF in order (auto/A4 page size)                                        |
 | File hasher      | Batch MD5/SHA-1/SHA-256 with paste-to-verify against an expected digest, TSV copy                                 |
+| Media converter  | Transcode (MP4/WebM/MKV), trim clips, extract audio, compress — reuses the bundled ffmpeg, fully offline          |
 | Video downloader | Bilibili/Douyin/YouTube presets (online, local parsing only; respect platform terms and copyright)                |
 
 ## Requirements

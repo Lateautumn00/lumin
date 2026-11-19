@@ -298,6 +298,17 @@ lumin/
 - 字段级清单：`docs/spec/file-hasher.md`；冒烟：`docs/smoke/file-hasher.md`（R2 八类真实记录 + chunk **8,854 B gzip**）；e2e `apps/desktop/e2e/file-hasher-smoke.spec.ts` **7/7**
 - **验收**：单测 36/36（含 80% 包覆盖率阈值）；e2e 覆盖三算法向量/中文空格路径/逐项失败/取消/并发/强杀恢复；R2 八类全过；chunk < 200KB gzip；gate 全绿
 
+### 4.14 音视频处理（M14，2026-11-19 R8 登记）
+
+- **决策（用户拍板 2026-11-19）**：新增 `media-convert` 工具，四 Tab —— **转码（mp4/webm/mkv）**、**片段截取（精确重编码 / 快速流复制）**、**提取音频（mp3/m4a/wav/flac/ogg）**、**压缩（高中低三档 + 分辨率上限）**；不做视频剪辑拼接、字幕、GIF、批量并发（同批次串行）
+- 形态：复用 `binaries/download/ffmpeg.exe`（fetcher 固定 URL + SHA256），**零新增第三方依赖**；工具包 `manifest.ts` + `src/schema.ts`/`errors.ts`/`media.ts`/`encode.ts`/`naming.ts`/`node.ts` + `renderer/`
+- 通道：`probe` / `config` / `set-output-dir` 同步（`ffmpeg -hide_banner -i` stderr 解析时长与首条音视频流，不依赖 ffprobe）；`process` 走壳三段式任务（`-progress pipe:1 -nostats` 解析 `out_time_us`，单文件超时 30 分钟，取消杀进程树）
+- 批量语义：单批 1–50 文件、单文件 ≤ 4GB；任务内**串行**逐文件处理，单文件失败记入 `failures` 不中断批次；取消不记失败项，已完成文件保留
+- 命名：`{stem}.{ext}` / `{stem}.cut_HHMMSS-HHMMSS.mp4` / `{stem}.audio.{ext}` / `{stem}.c{high|medium|low}.mp4`，冲突经 `shared.uniqueFileName` 递增；输出目录记忆 `settings.outputDir`（默认 `userData/media`）
+- 错误码 `MC_*` 10 个（ENGINE_MISSING / FILE_UNSUPPORTED / FILE_CORRUPT / PROBE_FAILED / NO_STREAM / PARAM_INVALID / OUTPUT_WRITE_FAILED / TIMEOUT / NO_FILES / CANCELLED）；可重试：CORRUPT / PROBE_FAILED / OUTPUT_WRITE_FAILED / TIMEOUT
+- 字段级清单：`docs/spec/media-convert.md`；冒烟：`docs/smoke/media-convert.md`（R2 八类映射 + chunk **37,526 B raw / 9,962 B gzip**）；e2e `apps/desktop/e2e/media-convert-smoke.spec.ts`（7 用例，本机缺 ffmpeg 时整组 skip）
+- **验收**：单测 72/72（本包 80% 覆盖率阈值全绿）；四模式参数/命名/失败分类/取消/超时/磁盘满/进度节流单测覆盖；chunk < 200KB gzip；gate 全绿
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -353,6 +364,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M10 瘦身**  | 发布体积优化（§4.10，2026-11-19）：onnxruntime 仅 win32-x64 + Electron 语言包仅 zh-CN/en-US + 移除 ffprobe（改 `ffmpeg -i` 解析）                                                                                                                                                                                                               | §4.10 验收；`pnpm dist` 复测体积；打包版 OCR/图片工具可用            | 0.5 天   |
 | **M11 v1.1**  | PDF 图片转换（§4.11，2026-11-19）：PDF→图片（范围/DPI/PNG-JPG）+ 图片→PDF（200 张、auto/A4、边距）；`node-kit/pdf` 与 `shared/naming`、`ranges` 上提复用                                                                                                                                                                                        | §4.11 验收；e2e 5/5；R2 八类；chunk <200KB gzip；gate 全绿           | 1–2 天   |
 | **M13 v1.2**  | 文件哈希校验（§4.13，2026-11-19）：MD5/SHA-1/SHA-256 多选批算 + 期望哈希比对 + 复制 TSV + 失败项重试；`shared/number` 上提 `formatBytes`                                                                                                                                                                                                         | §4.13 验收；e2e 7/7；R2 八类；chunk 8,854 B gzip；gate 全绿           | 0.5–1 天 |
+| **M14 v1.3**  | 音视频处理（§4.14，2026-11-19）：转码（mp4/webm/mkv）/ 片段截取（精确+快速复制）/ 提取音频（5 格式）/ 压缩（三档 + 分辨率上限），ffmpeg 复用、四模式批量串行                                                                                                                                                                                     | §4.14 验收；e2e 7 用例（缺 ffmpeg 时 skip）；R2 八类映射；chunk 9,962 B gzip；gate 全绿 | 1–2 天   |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
