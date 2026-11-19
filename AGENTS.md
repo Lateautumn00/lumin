@@ -69,6 +69,7 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 - 色板 / 圆角 / 间距 / 字号经 **CSS 变量**同时供给 Naive UI 主题与 Tailwind，单一来源
 - tokens 定义位置：`apps/desktop/renderer` 主题层（M0 建立）
 - 改色/改主题只改 tokens，禁止逐组件改
+- 明暗切换只允许通过 `html[data-theme='dark']` 覆盖 tokens + Naive theme 配置层；禁止组件内按主题分支改样式，禁止散写 `dark:` 颜色类
 
 ### 5.3 三态强制（R4）
 

@@ -7,7 +7,7 @@
 
 ---
 
-## 1. 决策总表（Q1–Q21 锁定）
+## 1. 决策总表（Q1–Q23 锁定）
 
 | #   | 决策项     | 结论                                                                                                                                                                                                                                                         |
 | --- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -33,6 +33,7 @@
 | Q20 | 二维码工具 | **新增二维码生成与识别工具**（`qr-code`，2026-11-19 用户选定）：生成（文本/网址/WiFi/vCard，PNG/SVG）/ 识别（本地图片）；生成与解码在 renderer（`qrcode` + `jsqr`），主进程只做目录记忆与原子写盘，无长任务；详见 §4.16 |
 | Q21 | PDF 水印/页码 | **在 `pdf-toolkit` 扩展两个 Tab**（2026-11-19 用户选定）：水印（文字支持中文，renderer Canvas 栅格化；PNG/JPG 图片；透明度/角度/大小/平铺/页码范围）、页码（6 向位置、起始页、4 预设 + 自定义 ASCII 模板 `{n}`/`{total}`、字号/颜色/边距/页码范围）；复用 pdf-lib 与既有 worker/错误码，零新增依赖；详见 §4.17 |
 | Q22 | 重复文件查找 | **新增 `duplicate-finder` 工具**（2026-11-19 用户选定）：单目录（可含子目录）扫描 → 大小分组 + 64KB 前缀预筛 + 全量 SHA-256 确认 → 重复组展示与默认勾选 → 定位 / 移入回收站；新增壳通用能力 `lumin:shell:trash`（Electron `shell.trashItem`）；零新增第三方依赖；详见 §4.18 |
+| Q23 | 深色主题切换 | **壳级平台能力（2026-11-19 用户选定，无新工具包）**：跟随系统 / 浅色 / 深色三模式；tokens 单源新增暗色变量集（`html[data-theme='dark']` 覆盖），Naive UI 主题层切换 + 设置页持久化 `shell.theme.mode`；全工具零改动受益；零新增依赖、不新增 IPC；详见 §4.19 |
 | —   | 硬约束     | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                       |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -351,6 +352,16 @@ lumin/
 - 字段级清单：`docs/spec/duplicate-finder.md`；冒烟：`docs/smoke/duplicate-finder.md`；e2e `apps/desktop/e2e/duplicate-finder-smoke.spec.ts`
 - **验收**：本包覆盖率 ≥80%；e2e 覆盖页面三态/扫描分组/阈值/非递归/根目录非法/取消/并发/强杀恢复；R2 八类映射；chunk < 200KB gzip；gate 全绿
 
+### 4.19 深色主题切换（M19，2026-11-19 R8 登记）
+
+- **决策（用户拍板 2026-11-19）**：壳级平台能力，无新工具包；三模式 `system | light | dark`（默认跟随系统），设置页单选即时生效并持久化；不做单工具主题、自定义配色、`nativeTheme.themeSource` 强制改写
+- **tokens 单源**：`apps/desktop/src/renderer/src/assets/main.css` 新增 `:root[data-theme='dark']` 覆盖全部颜色变量（并补齐 `--lumin-color-warning/-error/-success/-primary-soft`）；圆角/间距/字号两主题共用；Naive 覆盖仍只在 theme 配置层，`buildThemeOverrides` 从 `getComputedStyle` 读取 token 计算值（Naive 内部无法解析 `var()`）
+- **状态链路**：新增 `theme/theme.ts`（`parseThemeMode`/`resolveTheme`/`applyThemeAttribute` 纯函数）、`theme/naive.ts`（token → overrides 映射）、`stores/theme.ts`（读取/持久化/`matchMedia('(prefers-color-scheme: dark)')` 监听）；`main.ts` 先 `load()` 再挂载防闪烁；主进程按持久化模式 + `nativeTheme.shouldUseDarkColors` 设 `backgroundColor`（暗 `#0b1220`/亮 `#f8fafc`）
+- **持久化**：复用既有 `lumin:settings:get/set`，键 `shell.theme.mode`；非法存量回落 `system`；写入失败回滚并就地提示；**不新增 IPC**
+- **边界**：PDF/图片预览画布保持白底（内容属性）；工具代码零改动；跟随系统仅在 `system` 模式响应 `change`
+- 字段级清单：`docs/spec/theme-dark.md` + `docs/spec/theme-dark-tasks.md`；冒烟：`docs/smoke/theme-dark.md`；e2e `apps/desktop/e2e/theme-smoke.spec.ts`
+- **验收**：theme 纯函数覆盖率 ≥80%；e2e 覆盖跟随系统一致性/深浅切换（`data-theme` + token 计算值）/重启持久化；R2 八类映射；零新增依赖；gate 全绿
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -411,6 +422,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M16 v1.5**  | 二维码工具（§4.16，2026-11-19）：生成（文本/网址/WiFi/vCard + 样式 + PNG/SVG）/ 识别（本地图片 jsQR），renderer 计算、主进程原子写盘                                                                                                                                                                                                            | §4.16 验收；e2e 5/5；R2 八类；chunk 88,831 B gzip；gate 全绿                            | 0.5–1 天 |
 | **M17 v1.6**  | PDF 水印与页码（§4.17，2026-11-19）：`pdf-toolkit` 扩展两 Tab —— 水印（文字中文栅格化/图片、透明度/角度/大小/平铺/区间）+ 页码（6 向/起始页/4 预设+自定义模板/字号/颜色/边距）                                                                                                                                                                   | §4.17 验收；e2e 8/8；R2 八类；chunk 12,198 B gzip；gate 全绿                            | 0.5–1 天 |
 | **M18 v1.7**  | 重复文件查找（§4.18，2026-11-19）：`duplicate-finder` —— 目录扫描（可递归）+ 大小分组 + 64KB 前缀预筛 + 全量 SHA-256 + 重复组默认勾选 + 定位/移入回收站；壳新增 `shell:trash` 通用能力                                                                                                                                                          | §4.18 验收；e2e 覆盖三态与扫描/取消/并发；R2 八类；chunk < 200KB gzip；gate 全绿        | 1–2 天   |
+| **M19 v1.8**  | 深色主题切换（§4.19，2026-11-19）：跟随系统/浅色/深色三模式、tokens 暗色变量集、Naive 主题层切换、设置页持久化、启动防白闪；全工具零改动                                                                                                                                                                                                         | §4.19 验收；e2e 3/3；R2 八类映射；纯函数覆盖率 ≥80%；gate 全绿                          | 0.5 天   |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

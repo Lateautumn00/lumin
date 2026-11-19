@@ -20,6 +20,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | Media converter  | Transcode (MP4/WebM/MKV), trim clips, extract audio, compress — reuses the bundled ffmpeg, fully offline          |
 | QR code tool     | Generate text/URL/WiFi/vCard QR codes (PNG/SVG) or decode content from local images                                |
 | Video downloader | Bilibili/Douyin/YouTube presets (online, local parsing only; respect platform terms and copyright)                |
+| Theme            | Follow system / light / dark, applied app-wide via design tokens with no per-tool overrides                       |
 
 ## Requirements
 
