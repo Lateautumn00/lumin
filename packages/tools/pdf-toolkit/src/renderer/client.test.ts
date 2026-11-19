@@ -1,0 +1,62 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  cancelTask,
+  deletePages,
+  info,
+  merge,
+  reorder,
+  revealPath,
+  rotate,
+  saveMetadata,
+  split
+} from './client'
+
+const invoke = vi.fn<(channel: string, payload?: unknown) => Promise<unknown>>(() =>
+  Promise.resolve({ taskId: 't1' })
+)
+const reveal = vi.fn(() => Promise.resolve())
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  invoke.mockClear()
+  reveal.mockClear()
+})
+
+function stubLumin(): void {
+  vi.stubGlobal('window', { lumin: { invoke, revealPath: reveal } })
+}
+
+describe('pdf-toolkit client（通道名与壳一致）', () => {
+  it('info 走同步通道', async () => {
+    stubLumin()
+    await info({ inputPath: 'C:/a.pdf' })
+    expect(invoke).toHaveBeenCalledWith('pdf-toolkit:info', { inputPath: 'C:/a.pdf' })
+  })
+
+  it('六个任务通道前缀正确', async () => {
+    stubLumin()
+    await merge({ inputPaths: ['C:/a.pdf', 'C:/b.pdf'] })
+    await split({ inputPath: 'C:/a.pdf', ranges: '1' })
+    await deletePages({ inputPath: 'C:/a.pdf', ranges: '1' })
+    await rotate({ inputPath: 'C:/a.pdf', degrees: 90 })
+    await reorder({ inputPath: 'C:/a.pdf', order: [1] })
+    await saveMetadata({ inputPath: 'C:/a.pdf', metadata: { title: 'T' } })
+    expect(invoke.mock.calls.map((call) => call[0])).toEqual([
+      'pdf-toolkit:merge',
+      'pdf-toolkit:split',
+      'pdf-toolkit:delete',
+      'pdf-toolkit:rotate',
+      'pdf-toolkit:reorder',
+      'pdf-toolkit:metadata'
+    ])
+  })
+
+  it('取消与打开目录复用壳通道', async () => {
+    stubLumin()
+    invoke.mockResolvedValueOnce(true)
+    await expect(cancelTask('t1')).resolves.toBe(true)
+    expect(invoke).toHaveBeenCalledWith('lumin:task:cancel', { taskId: 't1' })
+    await revealPath('C:/out/a.pdf')
+    expect(reveal).toHaveBeenCalledWith('C:/out/a.pdf')
+  })
+})
