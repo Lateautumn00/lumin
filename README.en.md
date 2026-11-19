@@ -14,7 +14,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | Batch renamer    | Six stacked rules in one directory, live preview, conflict detection, single-step undo                            |
 | Text toolbox     | JSON format/minify/validate, Base64/URL encode-decode, regex test & replace preview                               |
 | PDF images       | PDF pages → PNG/JPG (range/DPI), images → PDF in order (auto/A4 page size)                                        |
-| PDF toolkit      | Merge, split, delete, rotate, reorder pages and edit metadata — output beside the source                          |
+| PDF toolkit      | Merge, split, delete, rotate, reorder pages, edit metadata, add watermarks and page numbers — output beside the source |
 | File hasher      | Batch MD5/SHA-1/SHA-256 with paste-to-verify against an expected digest, TSV copy                                 |
 | Media converter  | Transcode (MP4/WebM/MKV), trim clips, extract audio, compress — reuses the bundled ffmpeg, fully offline          |
 | QR code tool     | Generate text/URL/WiFi/vCard QR codes (PNG/SVG) or decode content from local images                                |
