@@ -36,15 +36,17 @@
 
 ## 3. 安全基线确认
 
-| 项                                                                    | 结果                                                                                                       |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `contextIsolation: true` / `sandbox: true` / `nodeIntegration: false` | ✅ `apps/desktop/src/main/index.ts` BrowserWindow webPreferences                                           |
-| CSP 双保险                                                            | ✅ main `webRequest.onHeadersReceived`（DEV/PROD）+ 生产 `index.html` meta 注入（构建产物已验证含 CSP 头） |
-| 导航拦截                                                              | ✅ `will-navigate` preventDefault + `setWindowOpenHandler` deny（代码级；待 M1 工具含外链时补 e2e 断言）   |
-| preload 白名单                                                        | ✅ 仅 `contextBridge.exposeInMainWorld('lumin', bridge)`；invoke 响应经 zod 信封校验，错误为结构化 reject  |
-| 更新源单点配置                                                        | ✅ `electron-builder.yml` `publish.url`（当前占位，M5 替换为 Gitee raw 固定地址；失败换 OSS 只改一处）     |
+| 项                                                                    | 结果                                                                                                                 |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `contextIsolation: true` / `sandbox: true` / `nodeIntegration: false` | ✅ `apps/desktop/src/main/index.ts` BrowserWindow webPreferences                                                     |
+| CSP 双保险                                                            | ✅ main `webRequest.onHeadersReceived`（DEV/PROD）+ 生产 `index.html` meta 注入（构建产物已验证含 CSP 头）           |
+| 导航拦截                                                              | ✅ `will-navigate` preventDefault + `setWindowOpenHandler` deny（代码级；待 M1 工具含外链时补 e2e 断言）             |
+| preload 白名单                                                        | ✅ 仅 `contextBridge.exposeInMainWorld('lumin', bridge)`；invoke 响应经 zod 信封校验，错误为结构化 reject            |
+| 更新源单点配置                                                        | ✅ `electron-builder.yml` `publish.url`（M5 已落定 Gitee raw 固定地址：`.../Lateautumn00/lumin/raw/master/updates`） |
 
-## 4. 更新冒烟（M0 卡点）详细步骤与记录
+## 4. 更新冒烟（M0 卡点）历史记录
+
+> M0 阶段用 0.0.0 → 0.0.1 验证链路；M5 起改用真实发布版本重验，见 §5（本节仅保留历史步骤）。
 
 **结果：✅ 通过（33.3s）** —— 旧版 0.0.0 检测到 0.0.1 → 下载 → 静默安装 → 新版报告 `appVersion=0.0.1`。
 
@@ -78,9 +80,40 @@ pnpm --filter @lumin/desktop exec playwright test update-smoke
 
 注意：`release/` 内产物为**本地 localhost URL 冒烟产物**，不可作为发布资产；正式发布流程见 plan.md §5.2（M5）。
 
-## 5. 已知限制与待办
+## 5. M5 更新端到端验证（v0.8.0 → v0.9.0，2026-11-19）
 
-- **无代码签名**（Q10：一期不买证书）→ 安装时 SmartScreen 提示，M5 README 提供指引。
-- Gitee Release 更新源为占位 URL，M5 发布前替换（`apps/desktop/electron-builder.yml` `publish` 单点）。
+复现步骤（本地 generic 更新源）：
+
+```powershell
+# 0) 预备：二进制已拉取（binaries/ocr、binaries/download），并已 pnpm build
+# 1) 构建旧版 v0.8.0（更新源指向本地）
+#    apps/desktop/package.json version 临时改为 0.8.0，然后：
+pnpm --filter @lumin/desktop exec electron-builder --config electron-builder.yml --publish never `
+  "-c.publish.url=http://127.0.0.1:8787"
+Remove-Item -Recurse -Force apps/desktop/release/win-unpacked-old -ErrorAction SilentlyContinue
+Move-Item apps/desktop/release/win-unpacked apps/desktop/release/win-unpacked-old
+
+# 2) 恢复 version 为 0.9.0，构建新版（latest.yml 指向 0.9.0）
+pnpm --filter @lumin/desktop exec electron-builder --config electron-builder.yml --publish never `
+  "-c.publish.url=http://127.0.0.1:8787"
+
+# 3) 启动本地更新源（新终端）
+pnpm update:serve     # http://127.0.0.1:8787，根目录 apps/desktop/release
+
+# 4) 运行冒烟（缺产物/更新源未起时自动 skip）
+pnpm --filter @lumin/desktop exec playwright test update-smoke
+
+# 5) 清理：卸载 %LOCALAPPDATA%\Programs\Lumin（Uninstall Lumin.exe /S）、
+#    删除 %LOCALAPPDATA%\@lumindesktop-updater 缓存、停掉本地服务
+```
+
+断言链：`关于 → 检查更新 → 已下载新版本（120s）→ 安装并重启 → 安装目录出现 → 结束旧进程 → 启动已安装 exe → appVersion === apps/desktop/package.json.version`（M5 起不再硬编码版本号）。
+
+**结果：✅ 通过（40.7s，2026-11-19）** —— 旧版 0.8.0 检测到 0.9.0 → 下载 → 静默安装 → 新版报告 `appVersion=0.9.0`。安装包 setup 304.2MB（含随包 OCR 模型与 yt-dlp/ffmpeg）；`release/` 产物为 localhost 冒烟产物，**不可**作为发布资产。
+
+## 6. 已知限制与待办
+
+- **无代码签名**（Q10：一期不买证书）→ 安装时 SmartScreen 提示，README 已提供「更多信息 → 仍要运行」指引与 SHA256 校验方法。
+- 更新源已落定 Gitee raw 地址（`apps/desktop/electron-builder.yml` `publish` 单点）；发布新版本需同步安装包 + `.blockmap` + `latest.yml` 到仓库 `updates/`。
 - §2 中「M1 起按工具执行」的类别，随各工具 `docs/smoke/<tool>.md` 落地。
 - Gitee Go CI（`.gitee/workflows/mr-gate.yml`）需在仓库开启 Gitee Go 后验证首跑。

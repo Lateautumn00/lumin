@@ -1,9 +1,9 @@
 {
   "name": "lumin",
-  "version": "0.0.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Lumin — Windows 桌面实用工具箱",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@12.18.0",
   "engines": {
@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "test:e2e": "pnpm build && pnpm --filter @lumin/desktop test:e2e",
     "dist": "pnpm build && pnpm --filter @lumin/desktop dist",
+    "update:serve": "node scripts/serve-updates.mjs",
     "coverage": "vitest run --coverage --passWithNoTests",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

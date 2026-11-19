@@ -8,7 +8,7 @@ coverage/
 binaries/*
 !binaries/.gitkeep
 userData/
-release/
+/apps/desktop/release/
 playwright-report/
 test-results/
 .DS_Store

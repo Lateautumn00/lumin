@@ -46,7 +46,7 @@ portable:
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 
 # 更新源（§5.3）：generic provider，latest.yml + blockmap 放仓库 updates/ 固定目录
-# M5 前占位——替换为实际 Gitee 仓库 raw 地址（单点配置；失败换 OSS 只改此处）
+# M5（2026-11-19）落定实际 Gitee 仓库；换 OSS 只改此处
 publish:
   provider: generic
-  url: https://gitee.com/lumin-app/lumin/raw/master/updates
+  url: https://gitee.com/Lateautumn00/lumin/raw/master/updates

@@ -6,6 +6,10 @@ import { test, expect, _electron as electron } from '@playwright/test'
 const appDir = path.resolve(__dirname, '..')
 const oldExe = path.join(appDir, 'release', 'win-unpacked-old', 'Lumin.exe')
 const installedExe = path.join(process.env['LOCALAPPDATA'] ?? '', 'Programs', 'Lumin', 'Lumin.exe')
+// 新版版本号取仓库当前 package.json，避免版本升级后断言失配（M5）
+const currentVersion = (
+  JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8')) as { version: string }
+).version
 
 function killLumin(): void {
   try {
@@ -20,7 +24,7 @@ test('更新冒烟：检测新版本 → 下载 → 静默安装 → 新版本�
 
   test.skip(
     !fs.existsSync(oldExe) || !fs.existsSync(path.join(appDir, 'release', 'latest.yml')),
-    '需按 docs/smoke/shell.md §更新冒烟 准备新旧两版本产物'
+    '需按 docs/smoke/shell.md §5 更新冒烟 准备新旧两版本产物'
   )
   let serverUp = false
   try {
@@ -29,7 +33,7 @@ test('更新冒烟：检测新版本 → 下载 → 静默安装 → 新版本�
   } catch {
     serverUp = false
   }
-  test.skip(!serverUp, '需先启动本地更新源（见 docs/smoke/shell.md §更新冒烟）')
+  test.skip(!serverUp, '需先启动本地更新源（pnpm update:serve，见 docs/smoke/shell.md §5）')
 
   const app = await electron.launch({ executablePath: oldExe })
   try {
@@ -51,7 +55,7 @@ test('更新冒烟：检测新版本 → 下载 → 静默安装 → 新版本�
   try {
     const page = await fresh.firstWindow()
     const info = await page.evaluate(() => window.lumin.getAppInfo())
-    expect(info.appVersion).toBe('0.0.1')
+    expect(info.appVersion).toBe(currentVersion)
   } finally {
     await fresh.close()
     killLumin()
