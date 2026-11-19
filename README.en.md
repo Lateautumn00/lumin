@@ -19,6 +19,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | Duplicate finder | Scan a folder, confirm duplicate groups with two-stage SHA-256, keep the oldest and trash the rest                |
 | Media converter  | Transcode (MP4/WebM/MKV), trim clips, extract audio, compress — reuses the bundled ffmpeg, fully offline          |
 | QR code tool     | Generate text/URL/WiFi/vCard QR codes (PNG/SVG) or decode content from local images                                |
+| OCR text         | Offline PP-OCR text extraction from images, editable preview, copy and TXT export                                  |
 | Video downloader | Bilibili/Douyin/YouTube presets (online, local parsing only; respect platform terms and copyright)                |
 | Theme            | Follow system / light / dark, applied app-wide via design tokens with no per-tool overrides                       |
 

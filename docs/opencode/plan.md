@@ -7,7 +7,7 @@
 
 ---
 
-## 1. 决策总表（Q1–Q23 锁定）
+## 1. 决策总表（Q1–Q24 锁定）
 
 | #   | 决策项     | 结论                                                                                                                                                                                                                                                         |
 | --- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -34,6 +34,7 @@
 | Q21 | PDF 水印/页码 | **在 `pdf-toolkit` 扩展两个 Tab**（2026-11-19 用户选定）：水印（文字支持中文，renderer Canvas 栅格化；PNG/JPG 图片；透明度/角度/大小/平铺/页码范围）、页码（6 向位置、起始页、4 预设 + 自定义 ASCII 模板 `{n}`/`{total}`、字号/颜色/边距/页码范围）；复用 pdf-lib 与既有 worker/错误码，零新增依赖；详见 §4.17 |
 | Q22 | 重复文件查找 | **新增 `duplicate-finder` 工具**（2026-11-19 用户选定）：单目录（可含子目录）扫描 → 大小分组 + 64KB 前缀预筛 + 全量 SHA-256 确认 → 重复组展示与默认勾选 → 定位 / 移入回收站；新增壳通用能力 `lumin:shell:trash`（Electron `shell.trashItem`）；零新增第三方依赖；详见 §4.18 |
 | Q23 | 深色主题切换 | **壳级平台能力（2026-11-19 用户选定，无新工具包）**：跟随系统 / 浅色 / 深色三模式；tokens 单源新增暗色变量集（`html[data-theme='dark']` 覆盖），Naive UI 主题层切换 + 设置页持久化 `shell.theme.mode`；全工具零改动受益；零新增依赖、不新增 IPC；详见 §4.19 |
+| Q24 | 图片文字识别 | **新增 `ocr-text` 工具（2026-11-19 用户选定）**：单张图片（PNG/JPG/WebP，含截图）离线 PP-OCR 识别 → 可编辑文本预览 → 复制 / 导出 TXT（`{原名}-OCR.txt`，冲突递增）；引擎从 exam-split 上提为根 `packages/ocr-kit`（exam-split 薄壳零回归），`writeAtomic` 上提 `node-kit`；零新增第三方依赖；详见 §4.20 |
 | —   | 硬约束     | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                       |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -100,7 +101,7 @@ apps/desktop/src/main/          # 纯壳，不含任何工具专属代码
 
 ### 2.5 依赖规则（dependency-cruiser 进 CI 强制）
 
-1. `tools/*` → 仅可依赖 `plugin-api / shared / ui / node-kit`
+1. `tools/*` → 仅可依赖 `plugin-api / shared / ui / node-kit / ocr-kit`
 2. **`tools/*` 之间禁止互相 import**
 3. `tools/*` 禁止 import `apps/*`
 4. `apps/*` 内除 manifest 文件外禁止出现工具名
@@ -133,12 +134,14 @@ lumin/
 │   ├── plugin-api/              # ★ 唯一契约：ToolManifest / MainPluginContext / bridge 类型
 │   ├── shared/                  # IPC 信封、错误码、任务事件形状、i18n 规范
 │   ├── ui/                      # DropZone / TaskProgress / Empty 等跨工具组件（M2 后抽）
-│   ├── node-kit/                # spawn+进度解析、worker 封装、路径解析
+│   ├── node-kit/                # spawn+进度解析、worker 封装、路径解析、原子写盘
+│   ├── ocr-kit/                 # ★ PP-OCR 引擎共享包（预处理/CTC/模型/PDF 渲染/资产校验）
 │   └── tools/
 │       ├── calculator/          # manifest.ts + renderer/（+ node.ts 如需要）
 │       ├── unit-converter/
 │       ├── docx2pdf/
 │       ├── exam-split/          # PDF 操作 + OCR 切题同包两入口
+│       ├── ocr-text/            # 图片 OCR 文字提取（复用 ocr-kit）
 │       └── video-downloader/
 ├── binaries/                    # gitignore；fetch 脚本拉取
 ├── docs/opencode/               # 本方案
@@ -216,6 +219,7 @@ lumin/
 - 模型：PP-OCR det+rec+cls+字典 实测 **16.2MB** 随包（extraResources），**固定 URL + SHA256 钉死**
 - 不做结构化题库（c 未选）；Python sidecar 留作二期升级路径
 - **验收（R1 量化）**：固定样卷测试集（含手写/印刷/双栏/带图），**自动切题边界命中率 ≥90%，或每题人工微调 ≤1 次**；单页 OCR **≤3s**（超则切 onnxruntime-node 复评）——**P4 已关闭：90.5% + 1.10–1.54s/页双达标**
+- **M20 引擎上提（2026-11-19，R8）**：OCR 引擎（预处理/CTC 解码/模型加载/PDF 渲染/资产校验）原样搬移至根 `packages/ocr-kit`，`exam-split` 原 `ocr-*.ts` 改为薄壳 re-export（行为零回归，250 测试通过），供 `ocr-text` 复用；`writeAtomic` 上提 `node-kit`（qr-code 同步改为 re-export）
 
 ### 4.5 短视频下载（M4）
 
@@ -362,6 +366,19 @@ lumin/
 - 字段级清单：`docs/spec/theme-dark.md` + `docs/spec/theme-dark-tasks.md`；冒烟：`docs/smoke/theme-dark.md`；e2e `apps/desktop/e2e/theme-smoke.spec.ts`
 - **验收**：theme 纯函数覆盖率 ≥80%；e2e 覆盖跟随系统一致性/深浅切换（`data-theme` + token 计算值）/重启持久化；R2 八类映射；零新增依赖；gate 全绿
 
+### 4.20 图片文字识别（M20，2026-11-19 R8 登记）
+
+- **决策（用户拍板 2026-11-19）**：新增 `@lumin/tool-ocr-text`（「图片文字识别」）——单张图片（PNG/JPG/WebP，含截图）→ PP-OCR 识别 → 可编辑文本预览 → 复制到剪贴板 / 导出 TXT；不做批量、不做 PDF 输入（PDF 走 exam-split）、不做翻译/排版还原
+- **公共代码上提（AGENTS §2.2）**：OCR 引擎（`preproc`/`post`/`model`/`render`/`assets`/错误码）原样搬移根 `packages/ocr-kit`；`exam-split` 的 `ocr-*.ts` 改为薄壳 re-export（`PDF_RENDER_SCALE` 包装保持 1.5），行为零回归；`writeAtomic`/`AtomicFs` 上提 `node-kit`（qr-code 改 re-export）
+- **IPC（4 通道）**：`ocr-text:config`（输出目录记忆，缺省 `userData/ocr-text`）、`ocr-text:recognize`（三段式任务，`runTask` + worker，120s 超时、可取消）、`ocr-text:save-txt`（同步原子写盘）、`ocr-text:cancel` 走壳通用 `lumin:task:cancel`
+- **输出命名**：`{原名}-OCR.txt`，同目录冲突走 `resolveConflictPath` 递增 `(n)`；导出目录经壳 `lumin:shell:pick-directory` 选择并记忆
+- **边界**：单图 ≤20MB；文本上限 1,000,000 字；识别 0 行 → `OCR_NO_TEXT`；图片损坏/非图片 → `OCR_INPUT_INVALID`；占用 → `OCR_FILE_LOCKED`；模型缺失 → `MODEL_MISSING`
+- **错误码**：`OCR_INVALID_PAYLOAD / OCR_FILE_NOT_FOUND / OCR_FILE_LOCKED / OCR_IMAGE_TOO_LARGE / OCR_INPUT_INVALID / OCR_NO_TEXT / MODEL_MISSING / OCR_FAILED / OP_TIMEOUT / OUTPUT_WRITE_FAILED / CANCELLED`；`ocr-kit` 的 `PDF_*` 码在工具边界归一为图片语义
+- **UI 三态（AGENTS §5.3）**：空态拖拽/选择图片；加载态进度 + 取消；报错态结构化文案 + 重试/详情；结果态缩略图 + 可编辑文本框 + 行/字数统计 + 复制 / 导出 TXT
+- **图标**：`@lucide/vue` `scan-text`
+- **验收**：本包与 `ocr-kit` 覆盖率 ≥80%；e2e `apps/desktop/e2e/ocr-text-smoke.spec.ts` 3/3；R2 八类映射；chunk < 200KB gzip；零新增第三方依赖；gate 全绿
+
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -423,6 +440,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M17 v1.6**  | PDF 水印与页码（§4.17，2026-11-19）：`pdf-toolkit` 扩展两 Tab —— 水印（文字中文栅格化/图片、透明度/角度/大小/平铺/区间）+ 页码（6 向/起始页/4 预设+自定义模板/字号/颜色/边距）                                                                                                                                                                   | §4.17 验收；e2e 8/8；R2 八类；chunk 12,198 B gzip；gate 全绿                            | 0.5–1 天 |
 | **M18 v1.7**  | 重复文件查找（§4.18，2026-11-19）：`duplicate-finder` —— 目录扫描（可递归）+ 大小分组 + 64KB 前缀预筛 + 全量 SHA-256 + 重复组默认勾选 + 定位/移入回收站；壳新增 `shell:trash` 通用能力                                                                                                                                                          | §4.18 验收；e2e 覆盖三态与扫描/取消/并发；R2 八类；chunk < 200KB gzip；gate 全绿        | 1–2 天   |
 | **M19 v1.8**  | 深色主题切换（§4.19，2026-11-19）：跟随系统/浅色/深色三模式、tokens 暗色变量集、Naive 主题层切换、设置页持久化、启动防白闪；全工具零改动                                                                                                                                                                                                         | §4.19 验收；e2e 3/3；R2 八类映射；纯函数覆盖率 ≥80%；gate 全绿                          | 0.5 天   |
+| **M20 v1.9**  | 图片文字识别（§4.20，2026-11-19）：`ocr-text` —— 单图 OCR → 可编辑文本 → 复制 / 导出 TXT；OCR 引擎上提 `packages/ocr-kit`（exam-split 薄壳零回归），`writeAtomic` 上提 `node-kit`                                                                                                                                                              | §4.20 验收；e2e 3/3；R2 八类；chunk 4,163 B gzip；gate 全绿                             | 0.5–1 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

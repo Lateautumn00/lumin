@@ -27,7 +27,7 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 ## 2. 架构铁律（零耦合）
 
 1. **壳零工具知识**：`apps/desktop` 内除工具清单文件外，禁止出现任何工具名/工具专属代码。
-2. **工具间禁止互相 import**：`packages/tools/*` 只能依赖 `plugin-api / shared / ui / node-kit`。
+2. **工具间禁止互相 import**：`packages/tools/*` 只能依赖 `plugin-api / shared / ui / node-kit / ocr-kit`。
 3. **公共代码上提**：两个及以上工具复用的逻辑必须抽到根 `packages/` 对应包，禁止在工具内复制粘贴。
 4. **契约唯一入口**：工具与壳之间只通过 `packages/plugin-api`（ToolManifest / MainPluginContext / bridge）交互。
 5. **IPC schema 归工具包**：`shared` 只定义信封（channel/payload/progress/error 形状）；各工具自带 zod schema 与类型化 client。
