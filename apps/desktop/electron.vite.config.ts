@@ -109,6 +109,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/video-download/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-media-convert\/manifest$/,
+    replacement: r('../../packages/tools/media-convert/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-media-convert\/node$/,
+    replacement: r('../../packages/tools/media-convert/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-media-convert\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/media-convert/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-example\/manifest$/,
     replacement: r('../../packages/tools/example/src/manifest.ts')
   },

@@ -6,6 +6,7 @@ import { manifest as examSplitManifest } from '@lumin/tool-exam-split/manifest'
 import { manifest as fileHasherManifest } from '@lumin/tool-file-hasher/manifest'
 import { manifest as fileRenamerManifest } from '@lumin/tool-file-renamer/manifest'
 import { manifest as imageToolboxManifest } from '@lumin/tool-image-toolbox/manifest'
+import { manifest as mediaConvertManifest } from '@lumin/tool-media-convert/manifest'
 import { manifest as pdfImagesManifest } from '@lumin/tool-pdf-images/manifest'
 import { manifest as textToolboxManifest } from '@lumin/tool-text-toolbox/manifest'
 import { manifest as unitConverterManifest } from '@lumin/tool-unit-converter/manifest'
@@ -23,5 +24,6 @@ export const toolManifests: readonly ToolManifest[] = [
   textToolboxManifest,
   videoDownloadManifest,
   fileHasherManifest,
+  mediaConvertManifest,
   exampleManifest
 ]

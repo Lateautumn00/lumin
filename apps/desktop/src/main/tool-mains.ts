@@ -5,6 +5,7 @@ import { registerMain as examSplitRegisterMain } from '@lumin/tool-exam-split/no
 import { registerMain as fileHasherRegisterMain } from '@lumin/tool-file-hasher/node'
 import { registerMain as fileRenamerRegisterMain } from '@lumin/tool-file-renamer/node'
 import { registerMain as imageToolboxRegisterMain } from '@lumin/tool-image-toolbox/node'
+import { registerMain as mediaConvertRegisterMain } from '@lumin/tool-media-convert/node'
 import { registerMain as pdfImagesRegisterMain } from '@lumin/tool-pdf-images/node'
 import { registerMain as videoDownloadRegisterMain } from '@lumin/tool-video-download/node'
 
@@ -15,6 +16,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'file-hasher': fileHasherRegisterMain,
   'file-renamer': fileRenamerRegisterMain,
   'image-toolbox': imageToolboxRegisterMain,
+  'media-convert': mediaConvertRegisterMain,
   'pdf-images': pdfImagesRegisterMain,
   'video-download': videoDownloadRegisterMain
 }
