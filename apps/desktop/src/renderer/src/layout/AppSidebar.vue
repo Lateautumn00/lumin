@@ -9,6 +9,7 @@ import {
   FilePen,
   FileImage,
   FlaskConical,
+  Hash,
   Image,
   Info,
   Ruler,
@@ -33,6 +34,7 @@ const iconMap: Record<string, LucideIcon> = {
   image: Image,
   'file-pen': FilePen,
   'file-image': FileImage,
+  hash: Hash,
   braces: Braces,
   wrench: Wrench
 }

@@ -77,6 +77,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/file-renamer/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-file-hasher\/manifest$/,
+    replacement: r('../../packages/tools/file-hasher/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-file-hasher\/node$/,
+    replacement: r('../../packages/tools/file-hasher/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-file-hasher\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/file-hasher/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-text-toolbox\/manifest$/,
     replacement: r('../../packages/tools/text-toolbox/src/manifest.ts')
   },
