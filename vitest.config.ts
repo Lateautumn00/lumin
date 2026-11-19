@@ -88,6 +88,12 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
+        'packages/ocr-kit/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
         'packages/tools/exam-split/src/**/*.ts': {
           lines: 80,
           functions: 80,
@@ -143,6 +149,12 @@ export default defineConfig({
           branches: 80
         },
         'packages/tools/qr-code/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
+        'packages/tools/ocr-text/src/**/*.ts': {
           lines: 80,
           functions: 80,
           statements: 80,
