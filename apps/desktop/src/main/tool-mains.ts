@@ -7,6 +7,7 @@ import { registerMain as fileRenamerRegisterMain } from '@lumin/tool-file-rename
 import { registerMain as imageToolboxRegisterMain } from '@lumin/tool-image-toolbox/node'
 import { registerMain as mediaConvertRegisterMain } from '@lumin/tool-media-convert/node'
 import { registerMain as pdfImagesRegisterMain } from '@lumin/tool-pdf-images/node'
+import { registerMain as pdfToolkitRegisterMain } from '@lumin/tool-pdf-toolkit/node'
 import { registerMain as videoDownloadRegisterMain } from '@lumin/tool-video-download/node'
 
 export const toolMains: Readonly<Record<string, RegisterMain>> = {
@@ -18,5 +19,6 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'image-toolbox': imageToolboxRegisterMain,
   'media-convert': mediaConvertRegisterMain,
   'pdf-images': pdfImagesRegisterMain,
+  'pdf-toolkit': pdfToolkitRegisterMain,
   'video-download': videoDownloadRegisterMain
 }

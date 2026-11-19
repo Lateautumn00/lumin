@@ -65,6 +65,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/pdf-images/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-pdf-toolkit\/manifest$/,
+    replacement: r('../../packages/tools/pdf-toolkit/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-pdf-toolkit\/node$/,
+    replacement: r('../../packages/tools/pdf-toolkit/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-pdf-toolkit\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/pdf-toolkit/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-file-renamer\/manifest$/,
     replacement: r('../../packages/tools/file-renamer/src/manifest.ts')
   },
