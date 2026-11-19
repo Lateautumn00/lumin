@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, safeStorage, session } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, session } from 'electron'
 import log from 'electron-log'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -15,12 +15,15 @@ import { toolMains } from './tool-mains'
 import { toolManifests } from '../tool-manifests'
 
 let mainWindow: BrowserWindow | null = null
+/** 与 renderer tokens 同步：暗色 --lumin-color-bg=#0b1220 / 亮色 #f8fafc（main.css 单源） */
+let windowBackgroundColor = '#f8fafc'
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1120,
     height: 740,
     show: false,
+    backgroundColor: windowBackgroundColor,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -69,6 +72,12 @@ async function bootstrap(): Promise<void> {
     typeof rawConcurrency === 'number' && Number.isFinite(rawConcurrency) && rawConcurrency >= 1
       ? Math.floor(rawConcurrency)
       : 2
+
+  // 首帧窗口底色按持久化主题解析，杜绝深色模式下启动白闪（renderer 挂载前窗口已着色）
+  const rawThemeMode = await settings.get<unknown>('shell.theme.mode', 'system')
+  const darkWindow =
+    rawThemeMode === 'dark' || (rawThemeMode !== 'light' && nativeTheme.shouldUseDarkColors)
+  windowBackgroundColor = darkWindow ? '#0b1220' : '#f8fafc'
 
   const broadcast = (channel: string, payload: unknown): void => {
     for (const win of BrowserWindow.getAllWindows()) {
