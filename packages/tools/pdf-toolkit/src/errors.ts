@@ -21,7 +21,9 @@ export const PDF_TOOLKIT_ERROR_CODES = [
   'PT_ORDER_INVALID',
   'PT_OUTPUT_WRITE_FAILED',
   'PT_TIMEOUT',
-  'PT_OP_FAILED'
+  'PT_OP_FAILED',
+  'PT_WATERMARK_INVALID',
+  'PT_PAGE_NUMBER_INVALID'
 ] as const
 
 export type PdfToolkitErrorCode = (typeof PDF_TOOLKIT_ERROR_CODES)[number]
@@ -37,7 +39,9 @@ const MESSAGES: Record<PdfToolkitErrorCode, string> = {
   PT_ORDER_INVALID: '页面顺序无效，必须包含全部页码各一次',
   PT_OUTPUT_WRITE_FAILED: '无法写出结果，请检查目录权限与剩余空间',
   PT_TIMEOUT: '处理超时（120 秒），已终止',
-  PT_OP_FAILED: '处理失败，请重试或查看详情'
+  PT_OP_FAILED: '处理失败，请重试或查看详情',
+  PT_WATERMARK_INVALID: '水印内容无效，请检查文字或图片',
+  PT_PAGE_NUMBER_INVALID: '页码参数无效，请检查格式、位置与起始页'
 }
 
 /** 可重试错误码（renderer 据此显示 [重试]） */

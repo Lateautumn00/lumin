@@ -32,9 +32,11 @@ import {
   infoPayloadSchema,
   mergePayloadSchema,
   metadataPayloadSchema,
+  pageNumberPayloadSchema,
   reorderPayloadSchema,
   rotatePayloadSchema,
   splitPayloadSchema,
+  watermarkPayloadSchema,
   type InfoResult,
   type PdfMetadata
 } from './schema'
@@ -87,7 +89,7 @@ function parseOrThrow<T>(schema: ZodType<T>, payload: unknown): T {
 /** 任务上下文里 runWorker 需要的两件事 */
 type TaskArgs = { signal: AbortSignal; emit: (update: TaskUpdate) => void }
 
-/** 注册七个通道（info 同步，其余走任务），可注入 deps 供测试 */
+/** 注册八个通道（info 同步，其余走任务），可注入 deps 供测试 */
 export function registerWith(ctx: MainPluginContext, deps: PdfToolkitDeps): void {
   async function precheckInputs(paths: readonly string[]): Promise<void> {
     for (const path of paths) {
@@ -101,6 +103,17 @@ export function registerWith(ctx: MainPluginContext, deps: PdfToolkitDeps): void
       } catch (err) {
         throw classifyPdfError(err)
       }
+    }
+  }
+
+  /** 水印图片来源预检：失败统一 PT_WATERMARK_INVALID（非 PDF 输入） */
+  async function precheckImage(path: string): Promise<void> {
+    try {
+      await deps.checkReadable(path)
+      await deps.checkExclusive(path)
+    } catch (err) {
+      const detail = errnoCode(err) || tail(err instanceof Error ? err.message : String(err))
+      throw toolError('PT_WATERMARK_INVALID', detail)
     }
   }
 
@@ -163,6 +176,19 @@ export function registerWith(ctx: MainPluginContext, deps: PdfToolkitDeps): void
     const parsed = parseOrThrow(metadataPayloadSchema, payload)
     await precheckInputs([parsed.inputPath])
     return runWorker({ op: 'metadata', payload: parsed }, { signal, emit })
+  })
+
+  ctx.registerTask('watermark', async ({ payload, signal, emit }) => {
+    const parsed = parseOrThrow(watermarkPayloadSchema, payload)
+    await precheckInputs([parsed.inputPath])
+    if (parsed.kind === 'image') await precheckImage(parsed.imagePath)
+    return runWorker({ op: 'watermark', payload: parsed }, { signal, emit })
+  })
+
+  ctx.registerTask('page-numbers', async ({ payload, signal, emit }) => {
+    const parsed = parseOrThrow(pageNumberPayloadSchema, payload)
+    await precheckInputs([parsed.inputPath])
+    return runWorker({ op: 'page-numbers', payload: parsed }, { signal, emit })
   })
 }
 

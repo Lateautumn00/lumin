@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// PDF 工具集主视图（合并/拆分/删页/旋转/重排/元数据）
+// PDF 工具集主视图（合并/拆分/删页/旋转/重排/元数据/水印/页码）
 // 作者：cuilanchao · 修改时间：2026-11-19
 // 三态强制（空态引导 / 加载可取消 / 结构化错误 + 重试）、tokens、@lucide/vue（AGENTS §5）
 import { computed, onUnmounted, reactive, ref } from 'vue'
@@ -9,21 +9,38 @@ import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
 import { isRetryable } from '../errors'
-import { MAX_MERGE_FILES, type MetadataPatch } from '../schema'
+import {
+  MAX_MERGE_FILES,
+  MAX_WATERMARK_TEXT,
+  type MetadataPatch,
+  type PageNumberPosition,
+  type WatermarkPayload
+} from '../schema'
 import {
   cancelTask as requestCancel,
   deletePages,
   info,
   merge,
+  pageNumbers,
   reorder,
   revealPath,
   rotate,
   saveMetadata,
-  split
+  split,
+  watermark
 } from './client'
+import { rasterizeWatermarkText } from './watermark-text'
 
 /** Tab 标识 */
-type TabId = 'merge' | 'split' | 'delete' | 'rotate' | 'reorder' | 'metadata'
+type TabId =
+  | 'merge'
+  | 'split'
+  | 'delete'
+  | 'rotate'
+  | 'reorder'
+  | 'metadata'
+  | 'watermark'
+  | 'page-numbers'
 
 /** 任务种类（重试入口据此复放上一次提交） */
 type Action = TabId
@@ -31,8 +48,21 @@ type Action = TabId
 /** DropZone accept 串（与 schema 白名单一致） */
 const PDF_ACCEPT = '.pdf'
 
+/** 水印图片来源 accept 串（与 schema 白名单一致） */
+const WATERMARK_IMAGE_ACCEPT = '.png,.jpg,.jpeg'
+
 /** 角度下拉字符串 → 协议数值 */
 const DEGREE_MAP = { '90': 90, '180': 180, '270': 270 } as const
+
+/** 页码预设 key → 模板（{n} 当前页，{total} 文档总页数） */
+const PN_PRESETS = {
+  n: '{n}',
+  ratio: '{n}/{total}',
+  dash: '- {n} -',
+  'page-of': 'Page {n} of {total}'
+} as const
+
+type PageNumberPreset = keyof typeof PN_PRESETS | 'custom'
 
 const activeTab = ref<TabId>('merge')
 
@@ -50,6 +80,31 @@ const rotateRanges = ref('')
 const degrees = ref<keyof typeof DEGREE_MAP>('90')
 const order = ref<number[]>([])
 const meta = reactive({ title: '', author: '', subject: '', keywords: '' })
+
+// —— 水印 ——
+const wm = reactive({
+  kind: 'text' as 'text' | 'image',
+  text: '',
+  color: '#808080',
+  imagePath: '',
+  opacity: 40,
+  angle: 45,
+  scale: 20,
+  tile: false,
+  ranges: ''
+})
+
+// —— 页码 ——
+const pn = reactive({
+  preset: 'n' as PageNumberPreset,
+  customFormat: '',
+  position: 'bottom-center' as PageNumberPosition,
+  startPage: 1,
+  fontSize: 12,
+  color: '#333333',
+  margin: 24,
+  ranges: ''
+})
 
 // —— 任务与结果 ——
 const phase = ref<'idle' | 'running'>('idle')
@@ -82,6 +137,12 @@ const canSubmit = computed(() => {
   if (phase.value !== 'idle' || inspecting.value) return false
   if (activeTab.value === 'merge') return mergePaths.value.length >= 2
   if (inputPath.value === '') return false
+  if (activeTab.value === 'watermark') {
+    return wm.kind === 'text' ? wm.text.trim() !== '' : wm.imagePath !== ''
+  }
+  if (activeTab.value === 'page-numbers') {
+    return pn.preset !== 'custom' || pn.customFormat.trim() !== ''
+  }
   return activeTab.value !== 'metadata' || metaFilled.value
 })
 
@@ -177,6 +238,7 @@ async function onPick(path: string): Promise<void> {
     meta.author = result.metadata.author
     meta.subject = result.metadata.subject
     meta.keywords = result.metadata.keywords
+    pn.startPage = 1
   } catch (err) {
     inputPath.value = ''
     showError(err)
@@ -190,6 +252,12 @@ function removeInput(): void {
   inputName.value = ''
   pageCount.value = 0
   order.value = []
+  resetResult()
+}
+
+/** 选择水印图片（仅记录路径，主进程读取） */
+function onPickWatermarkImage(path: string): void {
+  wm.imagePath = path
   resetResult()
 }
 
@@ -229,7 +297,7 @@ function onEvent(event: TaskEvent): void {
 }
 
 /** 按当前 Tab 组装载荷并提交（三段式第一段返回 taskId） */
-function submitTask(action: Action): Promise<{ taskId: string }> {
+async function submitTask(action: Action): Promise<{ taskId: string }> {
   const path = inputPath.value
   switch (action) {
     case 'merge':
@@ -252,6 +320,35 @@ function submitTask(action: Action): Promise<{ taskId: string }> {
       const patch: MetadataPatch = { ...meta }
       return saveMetadata({ inputPath: path, metadata: patch })
     }
+    case 'watermark': {
+      const shared = {
+        inputPath: path,
+        opacity: wm.opacity / 100,
+        angle: wm.angle,
+        scale: wm.scale,
+        tile: wm.tile,
+        ...(wm.ranges.trim() === '' ? {} : { ranges: wm.ranges.trim() })
+      }
+      let payload: WatermarkPayload
+      if (wm.kind === 'text') {
+        const imageData = await rasterizeWatermarkText(wm.text.trim(), wm.color)
+        payload = { kind: 'text', imageData, ...shared }
+      } else {
+        payload = { kind: 'image', imagePath: wm.imagePath, ...shared }
+      }
+      return watermark(payload)
+    }
+    case 'page-numbers':
+      return pageNumbers({
+        inputPath: path,
+        format: pn.preset === 'custom' ? pn.customFormat.trim() : PN_PRESETS[pn.preset],
+        position: pn.position,
+        startPage: pn.startPage,
+        fontSize: pn.fontSize,
+        color: pn.color.trim(),
+        margin: pn.margin,
+        ...(pn.ranges.trim() === '' ? {} : { ranges: pn.ranges.trim() })
+      })
   }
 }
 
@@ -309,7 +406,7 @@ onUnmounted(detach)
     <div>
       <h1 class="text-base font-semibold">PDF 工具集</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        合并、拆分、删页、旋转、重排与元数据编辑，产物写到源文件同目录
+        合并、拆分、删页、旋转、重排、元数据、水印与页码，产物写到源文件同目录
       </p>
     </div>
 
@@ -332,6 +429,12 @@ onUnmounted(detach)
       </NTabPane>
       <NTabPane name="metadata">
         <template #tab>元数据</template>
+      </NTabPane>
+      <NTabPane name="watermark">
+        <template #tab>水印</template>
+      </NTabPane>
+      <NTabPane name="page-numbers">
+        <template #tab>页码</template>
       </NTabPane>
     </NTabs>
 
@@ -556,6 +659,208 @@ onUnmounted(detach)
             />
           </div>
         </template>
+        <template v-if="activeTab === 'watermark'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">类型</NText>
+            <select
+              v-model="wm.kind"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option value="text">文字水印</option>
+              <option value="image">图片水印</option>
+            </select>
+          </div>
+          <template v-if="wm.kind === 'text'">
+            <div class="flex items-center gap-3">
+              <NText depth="2" class="w-20 text-sm">文字</NText>
+              <NInput
+                v-model:value="wm.text"
+                :maxlength="MAX_WATERMARK_TEXT"
+                :disabled="phase === 'running'"
+                placeholder="如 内部资料（支持中文）"
+                class="flex-1"
+              />
+            </div>
+            <div class="flex items-center gap-3">
+              <NText depth="2" class="w-20 text-sm">颜色</NText>
+              <NInput
+                v-model:value="wm.color"
+                :disabled="phase === 'running'"
+                placeholder="#808080"
+                class="w-28"
+              />
+            </div>
+          </template>
+          <template v-else>
+            <DropZone
+              v-if="wm.imagePath === ''"
+              :accept="WATERMARK_IMAGE_ACCEPT"
+              hint="拖入 PNG/JPG 图片，或点击选择"
+              :disabled="phase === 'running'"
+              @select="onPickWatermarkImage($event.path)"
+              @invalid="hint"
+            />
+            <div
+              v-else
+              class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-2"
+            >
+              <div class="min-w-0 flex-1 truncate text-sm">{{ fileName(wm.imagePath) }}</div>
+              <NButton
+                size="tiny"
+                quaternary
+                :disabled="phase === 'running'"
+                @click="wm.imagePath = ''"
+              >
+                <X class="h-3.5 w-3.5" />
+              </NButton>
+            </div>
+          </template>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">透明度</NText>
+            <input
+              v-model.number="wm.opacity"
+              type="range"
+              min="5"
+              max="100"
+              step="5"
+              :disabled="phase === 'running'"
+              class="flex-1"
+            />
+            <NText depth="3" class="w-10 text-right text-xs">{{ wm.opacity }}%</NText>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">角度</NText>
+            <input
+              v-model.number="wm.angle"
+              type="range"
+              min="-90"
+              max="90"
+              step="15"
+              :disabled="phase === 'running'"
+              class="flex-1"
+            />
+            <NText depth="3" class="w-10 text-right text-xs">{{ wm.angle }}°</NText>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">大小</NText>
+            <input
+              v-model.number="wm.scale"
+              type="range"
+              min="5"
+              max="50"
+              step="5"
+              :disabled="phase === 'running'"
+              class="flex-1"
+            />
+            <NText depth="3" class="w-10 text-right text-xs">{{ wm.scale }}%</NText>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">平铺</NText>
+            <label class="flex items-center gap-1 text-sm">
+              <input v-model="wm.tile" type="checkbox" :disabled="phase === 'running'" />
+              铺满整页
+            </label>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">页码范围</NText>
+            <NInput
+              v-model:value="wm.ranges"
+              :disabled="phase === 'running'"
+              placeholder="留空 = 全部页（如 1-3,5）"
+              class="flex-1"
+            />
+          </div>
+        </template>
+        <template v-if="activeTab === 'page-numbers'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">格式</NText>
+            <select
+              v-model="pn.preset"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option value="n">1</option>
+              <option value="ratio">1/N</option>
+              <option value="dash">- 1 -</option>
+              <option value="page-of">Page 1 of N</option>
+              <option value="custom">自定义</option>
+            </select>
+            <NInput
+              v-if="pn.preset === 'custom'"
+              v-model:value="pn.customFormat"
+              :disabled="phase === 'running'"
+              placeholder="如 {n} / {total}（仅英文数字符号）"
+              class="flex-1"
+            />
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">位置</NText>
+            <select
+              v-model="pn.position"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option value="bottom-center">底部居中</option>
+              <option value="bottom-left">左下角</option>
+              <option value="bottom-right">右下角</option>
+              <option value="top-center">顶部居中</option>
+              <option value="top-left">左上角</option>
+              <option value="top-right">右上角</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">起始页</NText>
+            <input
+              v-model.number="pn.startPage"
+              type="number"
+              min="1"
+              :max="Math.max(pageCount, 1)"
+              :disabled="phase === 'running'"
+              class="w-24 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            />
+            <NText depth="3" class="text-xs">从该页起编号 1</NText>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">字号</NText>
+            <input
+              v-model.number="pn.fontSize"
+              type="number"
+              min="8"
+              max="32"
+              :disabled="phase === 'running'"
+              class="w-24 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            />
+            <NText depth="2" class="ml-4 w-12 text-sm">颜色</NText>
+            <NInput
+              v-model:value="pn.color"
+              :disabled="phase === 'running'"
+              placeholder="#333333"
+              class="w-28"
+            />
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">边距</NText>
+            <input
+              v-model.number="pn.margin"
+              type="number"
+              min="12"
+              max="72"
+              :disabled="phase === 'running'"
+              class="w-24 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            />
+            <NText depth="3" class="text-xs">pt（12–72）</NText>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">页码范围</NText>
+            <NInput
+              v-model:value="pn.ranges"
+              :disabled="phase === 'running'"
+              placeholder="留空 = 全部页（如 1-3,5）"
+              class="flex-1"
+            />
+          </div>
+        </template>
       </NSpace>
     </template>
 
@@ -572,7 +877,11 @@ onUnmounted(detach)
                   ? '开始旋转'
                   : activeTab === 'reorder'
                     ? '开始重排'
-                    : '保存元数据'
+                    : activeTab === 'watermark'
+                      ? '添加水印'
+                      : activeTab === 'page-numbers'
+                        ? '添加页码'
+                        : '保存元数据'
         }}
       </NButton>
     </NSpace>

@@ -10,7 +10,7 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'pdf-toolkit',
   name: 'PDF 工具集',
-  description: 'PDF 合并、拆分、删页、旋转、重排与元数据编辑',
+  description: 'PDF 合并、拆分、删页、旋转、重排、元数据、水印与页码',
   icon: 'files',
   order: 75,
   version: '0.1.0'

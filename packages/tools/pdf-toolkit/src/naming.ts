@@ -47,3 +47,13 @@ export function reorderDesiredPath(inputPath: string): string {
 export function metadataDesiredPath(inputPath: string): string {
   return `${baseName(inputPath)}_元数据.pdf`
 }
+
+/** 水印：`{基名}_水印.pdf` */
+export function watermarkDesiredPath(inputPath: string): string {
+  return `${baseName(inputPath)}_水印.pdf`
+}
+
+/** 页码：`{基名}_页码.pdf` */
+export function pageNumbersDesiredPath(inputPath: string): string {
+  return `${baseName(inputPath)}_页码.pdf`
+}

@@ -9,26 +9,31 @@ import { existsSync } from 'node:fs'
 import { open, readFile, unlink, writeFile } from 'node:fs/promises'
 import { errnoCode, parsePageList, parseRangeGroups, type StructuredError } from '@lumin/shared'
 import { resolveConflictPath, tail } from '@lumin/node-kit'
-import { degrees, PDFDocument } from 'pdf-lib'
+import { degrees, PDFDocument, rgb, StandardFonts, type PDFImage } from 'pdf-lib'
 import { toolError } from './errors'
 import {
   deleteDesiredPath,
   mergeDesiredPath,
   metadataDesiredPath,
+  pageNumbersDesiredPath,
   reorderDesiredPath,
   rotateDesiredPath,
-  splitDesiredPaths
+  splitDesiredPaths,
+  watermarkDesiredPath
 } from './naming'
 import type {
   DeletePayload,
   MetadataPatch,
   MetadataPayload,
   MergePayload,
+  PageNumberPayload,
+  PageNumberPosition,
   PdfMetadata,
   PdfProgress,
   ReorderPayload,
   RotatePayload,
-  SplitPayload
+  SplitPayload,
+  WatermarkPayload
 } from './schema'
 
 /** 进度上报函数 */
@@ -56,6 +61,8 @@ export type WorkerRequest =
   | { op: 'rotate'; payload: RotatePayload }
   | { op: 'reorder'; payload: ReorderPayload }
   | { op: 'metadata'; payload: MetadataPayload }
+  | { op: 'watermark'; payload: WatermarkPayload }
+  | { op: 'page-numbers'; payload: PageNumberPayload }
 
 /** 读入并解析源 PDF；不存在/占用/加密/损坏 → 结构化错误 */
 async function loadSource(inputPath: string): Promise<PDFDocument> {
@@ -317,6 +324,198 @@ export async function writeMetadata(
   return { outputPaths: [outputPath] }
 }
 
+/** 平铺步长相对水印尺寸的倍数（保证 45° 旋转下不重叠） */
+const WATERMARK_TILE_RATIO = 1.8
+
+/** #rrggbb → pdf-lib rgb 分量（0..1） */
+export function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const value = Number.parseInt(hex.replace('#', ''), 16)
+  return {
+    r: ((value >> 16) & 0xff) / 255,
+    g: ((value >> 8) & 0xff) / 255,
+    b: (value & 0xff) / 255
+  }
+}
+
+/**
+ * 绕图片中心旋转时的左下角锚点（pdf-lib 以左下角为旋转中心）
+ * @param pageWidth 页宽
+ * @param pageHeight 页高
+ * @param width 图片宽
+ * @param height 图片高
+ * @param angle 旋转角度（度）
+ */
+export function centerImageAnchor(
+  pageWidth: number,
+  pageHeight: number,
+  width: number,
+  height: number,
+  angle: number
+): { x: number; y: number } {
+  const rad = (angle * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  return {
+    x: pageWidth / 2 - ((width / 2) * cos - (height / 2) * sin),
+    y: pageHeight / 2 - ((width / 2) * sin + (height / 2) * cos)
+  }
+}
+
+/** 页码文本：替换 `{n}` / `{total}` */
+export function pageNumberText(format: string, n: number, total: number): string {
+  return format.replaceAll('{n}', String(n)).replaceAll('{total}', String(total))
+}
+
+/** 页码绘制坐标（左下角为原点） */
+export function pageNumberPosition(
+  position: PageNumberPosition,
+  pageWidth: number,
+  pageHeight: number,
+  textWidth: number,
+  fontSize: number,
+  margin: number
+): { x: number; y: number } {
+  const x = position.endsWith('left')
+    ? margin
+    : position.endsWith('right')
+      ? pageWidth - margin - textWidth
+      : (pageWidth - textWidth) / 2
+  const y = position.startsWith('top') ? pageHeight - margin - fontSize : margin
+  return { x, y }
+}
+
+/** 解析水印图片来源：文字为 renderer 预栅格化 PNG，图片读本地 PNG/JPG */
+async function loadWatermarkImage(
+  doc: PDFDocument,
+  payload: WatermarkPayload
+): Promise<PDFImage> {
+  if (payload.kind === 'text') {
+    try {
+      return await doc.embedPng(Buffer.from(payload.imageData, 'base64'))
+    } catch (err) {
+      throw toolError('PT_WATERMARK_INVALID', tail(messageOf(err)) || 'text-raster')
+    }
+  }
+  let bytes: Uint8Array
+  try {
+    bytes = await readFile(payload.imagePath)
+  } catch (err) {
+    throw toolError('PT_WATERMARK_INVALID', errnoCode(err) || tail(messageOf(err)))
+  }
+  try {
+    return /\.png$/i.test(payload.imagePath)
+      ? await doc.embedPng(bytes)
+      : await doc.embedJpg(bytes)
+  } catch (err) {
+    throw toolError('PT_WATERMARK_INVALID', tail(messageOf(err)) || 'image-embed')
+  }
+}
+
+/** 水印：文字（PNG base64）或图片按页绘制，可选平铺 */
+export async function watermarkPdf(
+  payload: WatermarkPayload,
+  progress: EmitProgress
+): Promise<OpResult> {
+  progress({ stage: 'load', current: 0, message: '读取 PDF…' })
+  const doc = await loadSource(payload.inputPath)
+  const image = await loadWatermarkImage(doc, payload)
+  const pageCount = doc.getPageCount()
+  const parsed = parsePageList(payload.ranges ?? '', pageCount, { allowEmpty: true })
+  if (!parsed.ok) throw rangeFailure(parsed)
+  const pages = parsed.value ?? []
+  const targets = pages.length === 0 ? doc.getPageIndices().map((index) => index + 1) : pages
+  const total = targets.length
+  for (const [index, pageNumber] of targets.entries()) {
+    const page = doc.getPage(pageNumber - 1)
+    if (page === undefined) throw toolError('PT_RANGE_INVALID', String(pageNumber))
+    const width = (page.getWidth() * payload.scale) / 100
+    const height = width * (image.height / image.width)
+    const rotate = degrees(payload.angle)
+    if (payload.tile) {
+      const pageWidth = page.getWidth()
+      const pageHeight = page.getHeight()
+      const stepX = width * WATERMARK_TILE_RATIO
+      const stepY = height * WATERMARK_TILE_RATIO
+      for (let y = -height; y < pageHeight + height; y += stepY) {
+        for (let x = -width; x < pageWidth + width; x += stepX) {
+          page.drawImage(image, { x, y, width, height, rotate, opacity: payload.opacity })
+        }
+      }
+    } else {
+      const { x, y } = centerImageAnchor(
+        page.getWidth(),
+        page.getHeight(),
+        width,
+        height,
+        payload.angle
+      )
+      page.drawImage(image, { x, y, width, height, rotate, opacity: payload.opacity })
+    }
+    progress({
+      stage: 'process',
+      current: index + 1,
+      total,
+      message: `已添加水印 ${index + 1}/${total}`
+    })
+  }
+  const outputPath = resolveOutput(watermarkDesiredPath(payload.inputPath))
+  progress({ stage: 'write', current: total, total, message: '写出文件…' })
+  await writeOutput(outputPath, doc)
+  progress({ stage: 'done', current: total, total, message: '完成' })
+  return { outputPaths: [outputPath] }
+}
+
+/** 页码：从 startPage 起编号（n 从 1 开始），{total} = 文档总页数 */
+export async function addPageNumbers(
+  payload: PageNumberPayload,
+  progress: EmitProgress
+): Promise<OpResult> {
+  progress({ stage: 'load', current: 0, message: '读取 PDF…' })
+  const doc = await loadSource(payload.inputPath)
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  const pageCount = doc.getPageCount()
+  const parsed = parsePageList(payload.ranges ?? '', pageCount, { allowEmpty: true })
+  if (!parsed.ok) throw rangeFailure(parsed)
+  const selected = parsed.value ?? []
+  const base = selected.length === 0 ? doc.getPageIndices().map((index) => index + 1) : selected
+  const targets = base.filter((pageNumber) => pageNumber >= payload.startPage)
+  if (targets.length === 0) throw toolError('PT_PAGE_NUMBER_INVALID', 'no-target-page')
+  const color = hexToRgb(payload.color)
+  const total = targets.length
+  for (const [index, pageNumber] of targets.entries()) {
+    const page = doc.getPage(pageNumber - 1)
+    if (page === undefined) throw toolError('PT_RANGE_INVALID', String(pageNumber))
+    const text = pageNumberText(payload.format, pageNumber - payload.startPage + 1, pageCount)
+    const textWidth = font.widthOfTextAtSize(text, payload.fontSize)
+    const { x, y } = pageNumberPosition(
+      payload.position,
+      page.getWidth(),
+      page.getHeight(),
+      textWidth,
+      payload.fontSize,
+      payload.margin
+    )
+    page.drawText(text, {
+      x,
+      y,
+      size: payload.fontSize,
+      font,
+      color: rgb(color.r, color.g, color.b)
+    })
+    progress({
+      stage: 'process',
+      current: index + 1,
+      total,
+      message: `已添加页码 ${index + 1}/${total}`
+    })
+  }
+  const outputPath = resolveOutput(pageNumbersDesiredPath(payload.inputPath))
+  progress({ stage: 'write', current: total, total, message: '写出文件…' })
+  await writeOutput(outputPath, doc)
+  progress({ stage: 'done', current: total, total, message: '完成' })
+  return { outputPaths: [outputPath] }
+}
+
 /** 载荷分发（worker 唯一入口；zod 校验已在 node.ts 完成） */
 export async function runOp(request: WorkerRequest, progress: EmitProgress): Promise<OpResult> {
   switch (request.op) {
@@ -337,5 +536,9 @@ export async function runOp(request: WorkerRequest, progress: EmitProgress): Pro
       return reorderPages(request.payload.inputPath, request.payload.order, progress)
     case 'metadata':
       return writeMetadata(request.payload.inputPath, request.payload.metadata, progress)
+    case 'watermark':
+      return watermarkPdf(request.payload, progress)
+    case 'page-numbers':
+      return addPageNumbers(request.payload, progress)
   }
 }

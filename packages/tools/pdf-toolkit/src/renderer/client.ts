@@ -10,9 +10,11 @@ import type {
   InfoResult,
   MergePayload,
   MetadataPayload,
+  PageNumberPayload,
   ReorderPayload,
   RotatePayload,
-  SplitPayload
+  SplitPayload,
+  WatermarkPayload
 } from '../schema'
 
 /** 读取页数/元数据（同步通道） */
@@ -48,6 +50,16 @@ export function reorder(payload: ReorderPayload): Promise<{ taskId: string }> {
 /** 元数据 */
 export function saveMetadata(payload: MetadataPayload): Promise<{ taskId: string }> {
   return window.lumin.invoke('pdf-toolkit:metadata', payload)
+}
+
+/** 水印 */
+export function watermark(payload: WatermarkPayload): Promise<{ taskId: string }> {
+  return window.lumin.invoke('pdf-toolkit:watermark', payload)
+}
+
+/** 页码 */
+export function pageNumbers(payload: PageNumberPayload): Promise<{ taskId: string }> {
+  return window.lumin.invoke('pdf-toolkit:page-numbers', payload)
 }
 
 /** 取消任务（壳通道） */
