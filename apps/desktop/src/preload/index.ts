@@ -48,6 +48,7 @@ const bridge: LuminBridge = {
   openLogDir: () => invoke('lumin:log:open-dir'),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   revealPath: (path) => invoke('lumin:shell:reveal', { path }),
+  trashPaths: (paths) => invoke('lumin:shell:trash', { paths: [...paths] }),
   pickDirectory: (title) =>
     invoke<string | null>('lumin:shell:pick-directory', title === undefined ? {} : { title }),
   settings: {

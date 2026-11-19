@@ -5,8 +5,10 @@
  * @description 算法列表归一与标签、期望哈希规范化（前缀优先，否则按 32/40/64 长度识别）、
  *              单行比对、结果表复制文本。全部无副作用，供 worker/renderer 共用。
  */
-import { formatBytes } from '@lumin/shared'
+import { formatBytes, fileNameOf, formatTime } from '@lumin/shared'
 import { ALGORITHMS, type Algorithm, type HashFileResult } from './schema'
+
+export { fileNameOf, formatTime }
 
 /** 算法 → 展示名 */
 const LABELS: Record<Algorithm, string> = {
@@ -97,19 +99,6 @@ export function normalizeExpected(raw: string): ExpectedHash | null {
  */
 export function matchesExpected(result: HashFileResult, expected: ExpectedHash): boolean {
   return result.status === 'ok' && result.hashes[expected.algorithm] === expected.value
-}
-
-/** 修改时间展示（YYYY-MM-DD HH:mm:ss） */
-export function formatTime(mtimeMs: number): string {
-  const date = new Date(mtimeMs)
-  const pad = (value: number): string => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-}
-
-/** 路径最后一段（列表/进度展示） */
-export function fileNameOf(path: string): string {
-  const parts = path.split(/[\\/]/)
-  return parts[parts.length - 1] ?? path
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { RegisterMain } from '@lumin/plugin-api'
 import { registerMain as docx2pdfRegisterMain } from '@lumin/tool-docx2pdf/node'
+import { registerMain as duplicateFinderRegisterMain } from '@lumin/tool-duplicate-finder/node'
 import { registerMain as exampleRegisterMain } from '@lumin/tool-example/node'
 import { registerMain as examSplitRegisterMain } from '@lumin/tool-exam-split/node'
 import { registerMain as fileHasherRegisterMain } from '@lumin/tool-file-hasher/node'
@@ -13,6 +14,7 @@ import { registerMain as videoDownloadRegisterMain } from '@lumin/tool-video-dow
 
 export const toolMains: Readonly<Record<string, RegisterMain>> = {
   docx2pdf: docx2pdfRegisterMain,
+  'duplicate-finder': duplicateFinderRegisterMain,
   example: exampleRegisterMain,
   'exam-split': examSplitRegisterMain,
   'file-hasher': fileHasherRegisterMain,

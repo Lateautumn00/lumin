@@ -26,6 +26,7 @@
     "@lumin/shared": "workspace:*",
     "@lumin/tool-calculator": "workspace:*",
     "@lumin/tool-docx2pdf": "workspace:*",
+    "@lumin/tool-duplicate-finder": "workspace:*",
     "@lumin/tool-exam-split": "workspace:*",
     "@lumin/tool-example": "workspace:*",
     "@lumin/tool-file-hasher": "workspace:*",

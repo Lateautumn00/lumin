@@ -28,6 +28,10 @@ const pickDirectorySchema = z.object({
   title: z.string().min(1).optional()
 })
 
+const trashPathsSchema = z.object({
+  paths: z.array(z.string().min(1)).min(1).max(200)
+})
+
 export interface ShellChannelDeps {
   settings: SettingsService
   queue: TaskQueue
@@ -83,6 +87,25 @@ export function registerShellChannels(bus: IpcBus, deps: ShellChannelDeps): void
       return result.canceled ? null : (result.filePaths[0] ?? null)
     }
   )
+
+  bus.registerSync('lumin:shell:trash', 'lumin', 'shell:trash', async ({ payload }) => {
+    const parsed = trashPathsSchema.safeParse(payload)
+    if (!parsed.success) throw makeError('INVALID_PAYLOAD', '回收站参数无效')
+    const trashed: string[] = []
+    const failed: { path: string; message: string }[] = []
+    for (const path of parsed.data.paths) {
+      try {
+        await shell.trashItem(path)
+        trashed.push(path)
+      } catch (err) {
+        failed.push({
+          path,
+          message: err instanceof Error ? err.message : String(err ?? '删除失败')
+        })
+      }
+    }
+    return { trashed, failed }
+  })
 
   bus.registerSync('lumin:task:cancel', 'lumin', 'task:cancel', ({ payload }) => {
     const parsed = cancelSchema.safeParse(payload)

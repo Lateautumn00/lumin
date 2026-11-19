@@ -113,6 +113,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/file-hasher/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-duplicate-finder\/manifest$/,
+    replacement: r('../../packages/tools/duplicate-finder/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-duplicate-finder\/node$/,
+    replacement: r('../../packages/tools/duplicate-finder/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-duplicate-finder\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/duplicate-finder/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-text-toolbox\/manifest$/,
     replacement: r('../../packages/tools/text-toolbox/src/manifest.ts')
   },

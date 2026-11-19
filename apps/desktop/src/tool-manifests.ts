@@ -1,6 +1,7 @@
 import type { ToolManifest } from '@lumin/plugin-api'
 import { manifest as calculatorManifest } from '@lumin/tool-calculator/manifest'
 import { manifest as docx2pdfManifest } from '@lumin/tool-docx2pdf/manifest'
+import { manifest as duplicateFinderManifest } from '@lumin/tool-duplicate-finder/manifest'
 import { manifest as exampleManifest } from '@lumin/tool-example/manifest'
 import { manifest as examSplitManifest } from '@lumin/tool-exam-split/manifest'
 import { manifest as fileHasherManifest } from '@lumin/tool-file-hasher/manifest'
@@ -29,5 +30,6 @@ export const toolManifests: readonly ToolManifest[] = [
   fileHasherManifest,
   mediaConvertManifest,
   qrCodeManifest,
+  duplicateFinderManifest,
   exampleManifest
 ]

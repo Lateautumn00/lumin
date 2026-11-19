@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import {
   Braces,
   Calculator,
+  Copy,
   Download,
   FileOutput,
   FilePen,
@@ -42,6 +43,7 @@ const iconMap: Record<string, LucideIcon> = {
   hash: Hash,
   braces: Braces,
   'qr-code': QrCode,
+  copy: Copy,
   wrench: Wrench
 }
 

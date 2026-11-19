@@ -10,6 +10,14 @@ export interface AppInfo {
   locale: string
 }
 
+/** 移入回收站结果（逐条容错：单条失败不影响其余） */
+export interface TrashOutcome {
+  /** 已成功移入回收站的路径 */
+  trashed: string[]
+  /** 失败项（message 为系统错误文本） */
+  failed: { path: string; message: string }[]
+}
+
 /** preload 通过 contextBridge 暴露给 renderer 的唯一通道（`window.lumin`） */
 export interface LuminBridge {
   /** 调用 `{toolId}:{action}` / shell 通道，返回解包后的 data 或抛出结构化错误 */
@@ -24,6 +32,8 @@ export interface LuminBridge {
   getPathForFile(file: File): string
   /** 在资源管理器中定位文件/目录（shell.showItemInFolder） */
   revealPath(path: string): Promise<void>
+  /** 移入系统回收站（shell.trashItem；单批 ≤200，逐条容错，不做永久删除） */
+  trashPaths(paths: readonly string[]): Promise<TrashOutcome>
   /** 系统目录选择对话框；用户取消返回 null（壳通用能力，多工具复用） */
   pickDirectory(title?: string): Promise<string | null>
   readonly settings: {
