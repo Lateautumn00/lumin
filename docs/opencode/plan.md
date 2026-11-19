@@ -288,6 +288,16 @@ lumin/
 - 字段级清单：`docs/spec/pdf-images.md`；冒烟：`docs/smoke/pdf-images.md`（R2 八类真实记录 + chunk **7,825 B gzip**）；e2e `apps/desktop/e2e/pdf-images-smoke.spec.ts` **5/5**
 - **验收**：单测 + e2e 覆盖两向转换/部分失败/取消/加密/占用/ACL；R2 八类全过；chunk < 200KB gzip；gate 全绿
 
+### 4.13 文件哈希校验（M13，2026-11-19 R8 登记）
+
+- **决策**：新增 `file-hasher` 工具，批量计算 **MD5 / SHA-1 / SHA-256**（可多选，默认 SHA-256）+ 粘贴期望哈希比对；不做目录递归、导出文件（无保存对话框，改复制 TSV）、SHA-512、i18n
+- 通道：`config` / `set-config` 同步（算法记忆 `settings.algorithms`）；`hash` 走 worker 三段式任务（`?modulePath` + `runTask`，30 分钟超时，取消 terminate）
+- 计算语义：逐文件顺序处理；单文件**一次读流**同时喂多个 `createHash`；64KB 粒度推字节进度；单文件失败（不存在/目录/超 20GB/占用/ACL）记入 `results` 不中断整批
+- 边界：单次 1–200 文件、单文件 20GB、批量任务 30 分钟；错误码 `FH_FILE_INVALID` / `FH_HASH_FAILED` / `FH_INVALID_PAYLOAD`（取消由壳统一 `CANCELLED`）
+- 公共代码：`shared/number.ts` 增 `formatBytes`（B/KB/MB/GB，1 位小数）；比对/归一为 renderer 纯函数，不进 IPC；零新增第三方依赖（`node:crypto` + `node:fs`）
+- 字段级清单：`docs/spec/file-hasher.md`；冒烟：`docs/smoke/file-hasher.md`（R2 八类真实记录 + chunk **8,854 B gzip**）；e2e `apps/desktop/e2e/file-hasher-smoke.spec.ts` **7/7**
+- **验收**：单测 36/36（含 80% 包覆盖率阈值）；e2e 覆盖三算法向量/中文空格路径/逐项失败/取消/并发/强杀恢复；R2 八类全过；chunk < 200KB gzip；gate 全绿
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -342,6 +352,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M9 v0.8**   | Office 转 PDF 扩展（docx2pdf）：输入扩至 doc/xls/ppt 六种扩展名 + 批量队列（1..100、串行、失败不中断、结果汇总）                                                                                                                                                                                                                                | §4.9 验收；单测/e2e 覆盖批量；chunk <200KB gzip；smoke 增量记录      | 0.5–1 天 |
 | **M10 瘦身**  | 发布体积优化（§4.10，2026-11-19）：onnxruntime 仅 win32-x64 + Electron 语言包仅 zh-CN/en-US + 移除 ffprobe（改 `ffmpeg -i` 解析）                                                                                                                                                                                                               | §4.10 验收；`pnpm dist` 复测体积；打包版 OCR/图片工具可用            | 0.5 天   |
 | **M11 v1.1**  | PDF 图片转换（§4.11，2026-11-19）：PDF→图片（范围/DPI/PNG-JPG）+ 图片→PDF（200 张、auto/A4、边距）；`node-kit/pdf` 与 `shared/naming`、`ranges` 上提复用                                                                                                                                                                                        | §4.11 验收；e2e 5/5；R2 八类；chunk <200KB gzip；gate 全绿           | 1–2 天   |
+| **M13 v1.2**  | 文件哈希校验（§4.13，2026-11-19）：MD5/SHA-1/SHA-256 多选批算 + 期望哈希比对 + 复制 TSV + 失败项重试；`shared/number` 上提 `formatBytes`                                                                                                                                                                                                         | §4.13 验收；e2e 7/7；R2 八类；chunk 8,854 B gzip；gate 全绿           | 0.5–1 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
