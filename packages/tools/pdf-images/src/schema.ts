@@ -37,6 +37,8 @@ export const pdfInfoPayloadSchema = z.object({
   inputPath: z.string().min(1).regex(PDF_INPUT_RE, '仅支持 PDF 文件')
 })
 
+export type PdfInfoPayload = z.infer<typeof pdfInfoPayloadSchema>
+
 export const pdfToImagesPayloadSchema = z.object({
   inputPath: z.string().min(1).regex(PDF_INPUT_RE, '仅支持 PDF 文件'),
   /** 页码范围 `1-3,5`；空串 = 全部页 */
@@ -64,6 +66,8 @@ export type ImagesToPdfPayload = z.infer<typeof imagesToPdfPayloadSchema>
 export const setOutputDirPayloadSchema = z.object({
   outputDir: z.string().min(1)
 })
+
+export type SetOutputDirPayload = z.infer<typeof setOutputDirPayloadSchema>
 
 /** `pdf-images:config` 返回（记忆的输出目录） */
 export const configResultSchema = z.object({ outputDir: z.string() })

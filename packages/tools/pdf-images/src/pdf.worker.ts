@@ -78,8 +78,7 @@ export async function runPdfToImages(
     if (!parsed.ok) {
       throw toolError('PI_RANGE_INVALID', parsed.reason === 'overlap' ? 'overlap' : parsed.token)
     }
-    const wanted =
-      parsed.value ?? Array.from({ length: opened.pageCount }, (_, index) => index + 1)
+    const wanted = parsed.value ?? Array.from({ length: opened.pageCount }, (_, index) => index + 1)
     const scale = dpiToScale(dpi)
     const existing = existingNames(outputDir)
 

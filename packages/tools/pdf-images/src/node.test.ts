@@ -18,12 +18,7 @@ import type {
 } from '@lumin/plugin-api'
 import type { TaskUpdate } from '@lumin/shared'
 import { manifest } from './manifest'
-import {
-  classifyPdfError,
-  mapWorkerError,
-  registerWith,
-  type PdfImagesDeps
-} from './node'
+import { classifyPdfError, mapWorkerError, registerWith, type PdfImagesDeps } from './node'
 import type { ImagesToPdfRequest, PdfToImagesRequest } from './schema'
 
 interface HarnessOptions {
@@ -81,10 +76,10 @@ function createHarness(options: HarnessOptions = {}): Harness {
         : Promise.reject(options.precheckError),
     checkExclusive: () => Promise.resolve(),
     fileExists: () => options.engineExists ?? true,
-    makeDir: (path) =>
-      options.makeDirError === undefined
-        ? Promise.resolve(mkdirSync(path, { recursive: true }))
-        : Promise.reject(options.makeDirError)
+    makeDir: async (path) => {
+      if (options.makeDirError !== undefined) throw options.makeDirError
+      mkdirSync(path, { recursive: true })
+    }
   }
 
   const ctx: MainPluginContext = {
@@ -109,7 +104,11 @@ function createHarness(options: HarnessOptions = {}): Harness {
       warn: () => undefined,
       error: () => undefined
     },
-    paths: { temp: join(root, 'temp'), userData: join(root, 'userData'), binaries: join(root, 'binaries') }
+    paths: {
+      temp: join(root, 'temp'),
+      userData: join(root, 'userData'),
+      binaries: join(root, 'binaries')
+    }
   }
   registerWith(ctx, deps)
   return { ipc, tasks, settings, calls, updates, root }
@@ -125,11 +124,7 @@ async function invokeIpc(harness: Harness, action: string, payload: unknown): Pr
   return mustGet(harness.ipc, action)({ toolId: manifest.id, action, payload })
 }
 
-async function runTask(
-  harness: Harness,
-  action: string,
-  payload: unknown
-): Promise<unknown> {
+async function runTask(harness: Harness, action: string, payload: unknown): Promise<unknown> {
   const taskCtx: TaskHandlerContext<unknown> = {
     toolId: manifest.id,
     action,

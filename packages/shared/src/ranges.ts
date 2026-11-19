@@ -19,8 +19,7 @@ export type RangeFailure = 'empty' | 'syntax' | 'overflow' | 'overlap'
 
 /** 解析结果（成功取值，失败给原因与出错片段） */
 export type RangeResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; reason: RangeFailure; token: string }
+  { ok: true; value: T } | { ok: false; reason: RangeFailure; token: string }
 
 /** 失败结果构造（内部使用） */
 function fail(reason: RangeFailure, token: string): RangeResult<never> {

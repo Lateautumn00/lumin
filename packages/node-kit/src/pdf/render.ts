@@ -19,11 +19,9 @@ export interface PdfPageHandle {
   /** 按倍率取视口尺寸（rotation 为绝对角度，含页面固有旋转） */
   getViewport(params: { scale: number; rotation?: number }): { width: number; height: number }
   /** 渲染到画布（pdfjs 6 需同时给 canvas 与 canvasContext） */
-  render(params: {
-    canvas: unknown
-    canvasContext: unknown
-    viewport: unknown
-  }): { promise: Promise<void> }
+  render(params: { canvas: unknown; canvasContext: unknown; viewport: unknown }): {
+    promise: Promise<void>
+  }
   /** 释放页面缓存（逐页渲染后调用） */
   cleanup(): void
 }

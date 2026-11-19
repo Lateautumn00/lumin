@@ -84,7 +84,9 @@ function mapPrecheckError(err: unknown, kind: 'pdf' | 'image'): StructuredError 
   const precheck = classifyPrecheckError(err)
   const detail = errnoCode(err)
   if (precheck === 'locked') {
-    return kind === 'pdf' ? toolError('PI_PDF_LOCKED', detail) : toolError('PI_INPUT_INVALID', detail)
+    return kind === 'pdf'
+      ? toolError('PI_PDF_LOCKED', detail)
+      : toolError('PI_INPUT_INVALID', detail)
   }
   if (precheck === 'not-found') return toolError('PI_INPUT_INVALID', 'ENOENT')
   return kind === 'pdf'
@@ -185,7 +187,10 @@ export function registerWith(ctx: MainPluginContext, deps: PdfImagesDeps): void 
   ctx.registerTask('images-to-pdf', async (taskCtx): Promise<ImagesToPdfResult> => {
     const parsed = parseOrThrow(imagesToPdfPayloadSchema, taskCtx.payload)
     // 非 png/jpg 需要 ffmpeg 中间转码：缺引擎立即失败（spec §7）
-    if (parsed.inputPaths.some((path) => imageKind(path) === 'other') && !deps.fileExists(ffmpegPath)) {
+    if (
+      parsed.inputPaths.some((path) => imageKind(path) === 'other') &&
+      !deps.fileExists(ffmpegPath)
+    ) {
       throw toolError('PI_ENGINE_MISSING')
     }
     await precheckInputs(parsed.inputPaths, 'image')

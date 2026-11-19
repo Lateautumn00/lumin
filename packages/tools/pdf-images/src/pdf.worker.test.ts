@@ -87,18 +87,15 @@ describe('runPdfToImages', () => {
 
   it('冲突重名自动递增', async () => {
     await writeFile(join(root, 'out', '样卷_p1.png'), 'occupied')
-    const result = await runPdfToImages(
-      request({ ranges: '1' }),
-      ctxUpdates().ctx
-    )
+    const result = await runPdfToImages(request({ ranges: '1' }), ctxUpdates().ctx)
     expect(result.outputs[0]).toBe(join(root, 'out', '样卷_p1 (1).png'))
     expect(await readdir(join(root, 'out'))).toContain('样卷_p1 (1).png')
   })
 
   it('越界范围 → PI_RANGE_INVALID', async () => {
-    await expect(runPdfToImages(request({ ranges: '1-9' }), ctxUpdates().ctx)).rejects.toMatchObject(
-      { code: 'PI_RANGE_INVALID' }
-    )
+    await expect(
+      runPdfToImages(request({ ranges: '1-9' }), ctxUpdates().ctx)
+    ).rejects.toMatchObject({ code: 'PI_RANGE_INVALID' })
   })
 
   it('损坏 PDF → PI_PDF_CORRUPT', async () => {

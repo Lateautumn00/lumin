@@ -263,6 +263,9 @@ importers:
       '@lumin/tool-image-toolbox':
         specifier: workspace:*
         version: link:../../packages/tools/image-toolbox
+      '@lumin/tool-pdf-images':
+        specifier: workspace:*
+        version: link:../../packages/tools/pdf-images
       '@lumin/tool-text-toolbox':
         specifier: workspace:*
         version: link:../../packages/tools/text-toolbox

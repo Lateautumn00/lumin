@@ -28,8 +28,7 @@ async function writeImage(
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = '#3366ff'
   ctx.fillRect(0, 0, width, height)
-  const bytes =
-    format === 'png' ? canvas.toBuffer('image/png') : await canvas.encode('jpeg', 90)
+  const bytes = format === 'png' ? canvas.toBuffer('image/png') : await canvas.encode('jpeg', 90)
   await writeFile(file, bytes)
 }
 
@@ -115,16 +114,12 @@ describe('runImagesToPdf', () => {
     const webp = join(root, 'c.webp')
     await writeFile(webp, 'fake-webp')
     const seen: (readonly string[])[] = []
-    const result = await runImagesToPdf(
-      request({ inputPaths: [webp] }),
-      ctxUpdates().ctx,
-      {
-        runProcess: fakeFfmpeg((args) => seen.push(args))
-      }
-    )
+    const result = await runImagesToPdf(request({ inputPaths: [webp] }), ctxUpdates().ctx, {
+      runProcess: fakeFfmpeg((args) => seen.push(args))
+    })
     expect(result.pages).toBe(1)
     expect(seen[0]?.[0]).toBe('-y')
-    expect(seen[0]?.[3]).toBe(webp)
+    expect(seen[0]?.[2]).toBe(webp)
     expect(seen[0]?.[5]?.endsWith('.png')).toBe(true)
   })
 
@@ -195,9 +190,13 @@ describe('runImagesToPdf', () => {
     const block = join(root, 'blocked')
     await writeFile(block, 'file')
     await expect(
-      runImagesToPdf(request({ inputPaths: [join(root, 'x.png')], outputDir: block }), ctxUpdates().ctx, {
-        runProcess: fakeFfmpeg()
-      })
+      runImagesToPdf(
+        request({ inputPaths: [join(root, 'x.png')], outputDir: block }),
+        ctxUpdates().ctx,
+        {
+          runProcess: fakeFfmpeg()
+        }
+      )
     ).rejects.toMatchObject({ code: 'PI_OUTPUT_DIR_INVALID' })
   })
 })

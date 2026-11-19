@@ -13,6 +13,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | Image toolbox    | Compress / convert / resize — JPG, PNG, WebP, AVIF, BMP, TIFF; GIF→WebP keeps animation                           |
 | Batch renamer    | Six stacked rules in one directory, live preview, conflict detection, single-step undo                            |
 | Text toolbox     | JSON format/minify/validate, Base64/URL encode-decode, regex test & replace preview                               |
+| PDF images       | PDF pages → PNG/JPG (range/DPI), images → PDF in order (auto/A4 page size)                                        |
 | Video downloader | Bilibili/Douyin/YouTube presets (online, local parsing only; respect platform terms and copyright)                |
 
 ## Requirements

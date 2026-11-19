@@ -277,6 +277,17 @@ lumin/
 - **实测（2026-11-19，`pnpm dist`）**：解包 928.7MB → **574.2MB**；setup 304.2MB → **203.6MB**（-33%）；portable 260.7MB → **187.0MB**（-28%）。打包产物核对：`app.asar.unpacked/.../onnxruntime-node/bin/napi-v6` 只剩 `win32/x64`；`locales` 只剩 `en-US.pak`/`zh-CN.pak`；`resources/binaries/download` 只剩 `ffmpeg.exe`/`yt-dlp.exe`
 - **验收**：`pnpm dist` 实测新体积；打包版 OCR（onnxruntime CPU EP）与图片工具 probe/resize 可用；gate 全绿
 
+### 4.11 PDF 图片转换（M11，2026-11-19 R8 登记）
+
+- **决策（用户拍板 2026-11-19）**：新增 `pdf-images` 工具，一包两用——**PDF 逐页转图片（PNG/JPG）+ 多图按序合成 PDF**；不做 PDF 加密/解密、合并/拆分（exam-split 范围）、图片压缩/转换（image-toolbox 范围）
+- 通道：`pdf-info` / `config` / `set-output-dir` 同步；`pdf-to-images` / `images-to-pdf` 走 worker 三段式任务（`?modulePath` + `runTask`，10 分钟超时，取消 terminate）
+- 渲染复用：新增 `node-kit/pdf`（pdfjs-dist legacy + `@napi-rs/canvas`，`openPdf` / `renderPageToCanvas` / `encodeCanvas`），**与 exam-split 共用**；公共纯函数上提 `shared/naming.ts`（`baseName` / `uniqueFileName`）与 `shared/ranges.ts`（页码解析），工具内不再重复实现
+- 合并语义：png/jpg 直嵌 `pdf-lib`；webp/bmp/tiff/avif/gif 经 ffmpeg `-frames:v 1` 转 PNG；页面模式 `auto`（跟随图片）/ `a4`（等比 contain + 0–50mm 边距）；单图失败记入 `failures` 不中断整批
+- 命名：`{PDF 基名}_p{页码}.{png|jpg}` / `{首图基名}_合并.pdf`，冲突 `{base} ({n})`；输出目录记忆 `userData/pdf-images-output`
+- 限制：页码 `1-3,5`（留空=全部页）、DPI 72/150/300、图片 1–200 张；错误码 `PI_*` 12 个
+- 字段级清单：`docs/spec/pdf-images.md`；冒烟：`docs/smoke/pdf-images.md`（R2 八类真实记录 + chunk **7,825 B gzip**）；e2e `apps/desktop/e2e/pdf-images-smoke.spec.ts` **5/5**
+- **验收**：单测 + e2e 覆盖两向转换/部分失败/取消/加密/占用/ACL；R2 八类全过；chunk < 200KB gzip；gate 全绿
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -330,6 +341,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M8 v0.7**   | 文本工具箱（纯 renderer 三 Tab：JSON 格式化/压缩/校验、Base64/URL 编解码、正则测试与替换预览）                                                                                                                                                                                                                                                  | §4.8 验收；smoke 映射（R2）；字段级清单先行（R8）；chunk <200KB gzip | 0.5–1 天 |
 | **M9 v0.8**   | Office 转 PDF 扩展（docx2pdf）：输入扩至 doc/xls/ppt 六种扩展名 + 批量队列（1..100、串行、失败不中断、结果汇总）                                                                                                                                                                                                                                | §4.9 验收；单测/e2e 覆盖批量；chunk <200KB gzip；smoke 增量记录      | 0.5–1 天 |
 | **M10 瘦身**  | 发布体积优化（§4.10，2026-11-19）：onnxruntime 仅 win32-x64 + Electron 语言包仅 zh-CN/en-US + 移除 ffprobe（改 `ffmpeg -i` 解析）                                                                                                                                                                                                               | §4.10 验收；`pnpm dist` 复测体积；打包版 OCR/图片工具可用            | 0.5 天   |
+| **M11 v1.1**  | PDF 图片转换（§4.11，2026-11-19）：PDF→图片（范围/DPI/PNG-JPG）+ 图片→PDF（200 张、auto/A4、边距）；`node-kit/pdf` 与 `shared/naming`、`ranges` 上提复用                                                                                                                                                                                        | §4.11 验收；e2e 5/5；R2 八类；chunk <200KB gzip；gate 全绿           | 1–2 天   |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

@@ -166,10 +166,7 @@ export async function runImagesToPdf(
       } catch (err) {
         const structured = isStructuredError(err)
           ? err
-          : toolError(
-              'PI_CONVERT_FAILED',
-              tail(err instanceof Error ? err.message : String(err))
-            )
+          : toolError('PI_CONVERT_FAILED', tail(err instanceof Error ? err.message : String(err)))
         failures.push(toFailure(label, structured))
       }
       ctx.emit({
@@ -197,18 +194,14 @@ export async function runImagesToPdf(
   const firstInput = inputPaths[0]
   if (firstInput === undefined) throw toolError('PI_CONVERT_FAILED')
 
-  const name = uniqueFileName(await existingNames(outputDir), mergedPdfName(firstInput))
+  const name = uniqueFileName(await existingNames(outputDir), basename(mergedPdfName(firstInput)))
   const finalPath = join(outputDir, name)
   const tmpPath = `${finalPath}.tmp`
   try {
     const bytes = await pdf.save()
-    console.log('DBG save ok', bytes.length, finalPath)
     await writeFile(tmpPath, bytes)
-    console.log('DBG write ok')
     await rename(tmpPath, finalPath)
-    console.log('DBG rename ok')
   } catch (err) {
-    console.log('DBG save/write err', err)
     await rm(tmpPath, { force: true })
     throw classifyWriteError(err)
   }
