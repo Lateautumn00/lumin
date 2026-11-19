@@ -1,0 +1,8 @@
+version: 0.9.0
+files:
+  - url: https://gitee.com/Lateautumn00/lumin/releases/download/v0.9.0/Lumin-0.9.0-win-x64-setup.exe
+    sha512: QzR3lU69tIZNDK/JseT+u4wCcBlGLGXFG0TggTLC7PUnwLTbC+Ty1d399iAlKxt2nSC3SMmxnbgNKMwagKgREA==
+    size: 213689615
+path: https://gitee.com/Lateautumn00/lumin/releases/download/v0.9.0/Lumin-0.9.0-win-x64-setup.exe
+sha512: QzR3lU69tIZNDK/JseT+u4wCcBlGLGXFG0TggTLC7PUnwLTbC+Ty1d399iAlKxt2nSC3SMmxnbgNKMwagKgREA==
+releaseDate: '2026-11-19T03:47:39.468Z'

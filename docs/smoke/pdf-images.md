@@ -8,21 +8,22 @@
 
 ## 1. 验收总览
 
-| 项  | 检查点                         | 方式     | 结果                                                                                                           |
-| --- | ------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------- |
-| 1   | 页面加载 / 两 Tab / 空态       | e2e      | ✅ 侧边栏「PDF 图片转换」→ 标题 + 两个页签可见，空态有引导                                                     |
-| 2   | 图片→PDF（中文+空格路径 R2.1） | e2e      | ✅ `第一张 图.png`+`第二张.png` → `第一张 图_合并.pdf`，2 页，`%PDF-`                                          |
-| 3   | PDF→图片（jpeg）               | e2e      | ✅ `单页_合并.pdf` + 范围 `1` + 150DPI → `单页_合并_p1.jpg`，`ffd8ff`                                          |
-| 4   | R2.3 损坏 / 加密 PDF           | e2e      | ✅ 损坏 → `PI_PDF_CORRUPT`；RC4-40 加密 → `PI_PDF_ENCRYPTED`                                                   |
-| 5   | 页码越界 / 文件不存在          | e2e      | ✅ 范围 `9`（1 页 PDF）→ `PI_RANGE_INVALID`；不存在 → `PI_INPUT_INVALID`                                       |
-| 6   | R2.2 占用 PDF                  | e2e      | ✅ PowerShell 独占打开 → `pdf-info` 返回 `PI_PDF_LOCKED`                                                       |
-| 7   | R2.5 任务取消                  | e2e      | ✅ 120 张合并，首个 progress 后 cancel → `CANCELLED`                                                           |
-| 8   | R2.4 多页大文件                | e2e      | ✅ 100 页 PDF（600×400/页）→ `ranges=1-100` 全量渲染 **100/100**                                               |
-| 9   | R2.6 并发排队                  | e2e      | ✅ 同时提交 3 个任务（含排队）→ 3 × `done`                                                                     |
-| 10  | R2.7 输出目录不可写            | e2e      | ✅ `icacls /deny <user>:(WD,AD)` → `PI_OUTPUT_DIR_INVALID`，目录无残留                                         |
-| 11  | R2.8 强杀恢复                  | e2e      | ✅ 100 张任务中 `taskkill /F /T` → 重启后再次转换成功、产物 `%PDF-`                                            |
-| 12  | R5 chunk（<200KB gzip）        | 构建实测 | ✅ `pdf-images-*.js` **30,842 B raw / 7,825 B gzip**                                                           |
-| 13  | 运行时资产单列（R5 口径）      | 构建实测 | ℹ️ pdfjs worker `pdf.worker.min-*.mjs` 1,271,915 B raw / 379,243 B gzip（exam-split 已单列的同一资产，非新增） |
+| 项  | 检查点                                         | 方式     | 结果                                                                                                           |
+| --- | ---------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| 1   | 页面加载 / 两 Tab / 空态                       | e2e      | ✅ 侧边栏「PDF 图片转换」→ 标题 + 两个页签可见，空态有引导                                                     |
+| 2   | 图片→PDF（中文+空格路径 R2.1）                 | e2e      | ✅ `第一张 图.png`+`第二张.png` → `第一张 图_合并.pdf`，2 页，`%PDF-`                                          |
+| 3   | PDF→图片（jpeg）                               | e2e      | ✅ `单页_合并.pdf` + 范围 `1` + 150DPI → `单页_合并_p1.jpg`，`ffd8ff`                                          |
+| 4   | R2.3 损坏 / 加密 PDF                           | e2e      | ✅ 损坏 → `PI_PDF_CORRUPT`；RC4-40 加密 → `PI_PDF_ENCRYPTED`                                                   |
+| 5   | 页码越界 / 文件不存在                          | e2e      | ✅ 范围 `9`（1 页 PDF）→ `PI_RANGE_INVALID`；不存在 → `PI_INPUT_INVALID`                                       |
+| 6   | R2.2 占用 PDF                                  | e2e      | ✅ PowerShell 独占打开 → `pdf-info` 返回 `PI_PDF_LOCKED`                                                       |
+| 7   | R2.5 任务取消                                  | e2e      | ✅ 120 张合并，首个 progress 后 cancel → `CANCELLED`                                                           |
+| 8   | R2.4 多页大文件                                | e2e      | ✅ 100 页 PDF（600×400/页）→ `ranges=1-100` 全量渲染 **100/100**                                               |
+| 9   | R2.6 并发排队                                  | e2e      | ✅ 同时提交 3 个任务（含排队）→ 3 × `done`                                                                     |
+| 10  | R2.7 输出目录不可写                            | e2e      | ✅ `icacls /deny <user>:(WD,AD)` → `PI_OUTPUT_DIR_INVALID`，目录无残留                                         |
+| 11  | R2.8 强杀恢复                                  | e2e      | ✅ 100 张任务中 `taskkill /F /T` → 重启后再次转换成功、产物 `%PDF-`                                            |
+| 12  | R5 chunk（<200KB gzip）                        | 构建实测 | ✅ `pdf-images-*.js` **30,842 B raw / 7,825 B gzip**                                                           |
+| 13  | 运行时资产单列（R5 口径）                      | 构建实测 | ℹ️ pdfjs worker `pdf.worker.min-*.mjs` 1,271,915 B raw / 379,243 B gzip（exam-split 已单列的同一资产，非新增） |
+| 14  | 打包态实测（`release/win-unpacked/Lumin.exe`） | 打包冒烟 | ✅ 图片→PDF（`%PDF-`、1 页）+ PDF→图片（`89504e47`）均成功——asar 内 pdfjs 与解包 `@napi-rs/canvas` 加载正常    |
 
 ## 2. R2 八类异常清单（逐条实测证据）
 
