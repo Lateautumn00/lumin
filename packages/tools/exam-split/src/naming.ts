@@ -1,11 +1,4 @@
-import { extname } from 'node:path'
-import { rangeLabel, toRangeList } from './ranges'
-
-/** 去扩展名基名（schema 已约束 .pdf；无扩展名时原样返回） */
-function baseName(inputPath: string): string {
-  const ext = extname(inputPath)
-  return ext === '' ? inputPath : inputPath.slice(0, -ext.length)
-}
+import { baseName, rangeLabel, toRangeList } from '@lumin/shared'
 
 /** 区间组标签（组内页码连续，取首尾） */
 function groupLabel(pages: readonly number[]): string {

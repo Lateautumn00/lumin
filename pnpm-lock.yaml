@@ -317,6 +317,16 @@ importers:
       '@lumin/shared':
         specifier: workspace:*
         version: link:../shared
+      '@napi-rs/canvas':
+        specifier: 1.1.1
+        version: 1.1.1
+    devDependencies:
+      pdf-lib:
+        specifier: 1.17.1
+        version: 1.17.1
+      pdfjs-dist:
+        specifier: 6.5.438
+        version: 6.5.438
 
   packages/plugin-api:
     dependencies:
@@ -496,6 +506,40 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+
+  packages/tools/pdf-images:
+    dependencies:
+      '@lucide/vue':
+        specifier: 1.72.0
+        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
+      '@lumin/node-kit':
+        specifier: workspace:*
+        version: link:../../node-kit
+      '@lumin/plugin-api':
+        specifier: workspace:*
+        version: link:../../plugin-api
+      '@lumin/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@lumin/ui':
+        specifier: workspace:*
+        version: link:../../ui
+      naive-ui:
+        specifier: 2.45.3
+        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
+      pdf-lib:
+        specifier: 1.17.1
+        version: 1.17.1
+      vue:
+        specifier: 3.5.45
+        version: 3.5.45(typescript@6.0.3)
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@napi-rs/canvas':
+        specifier: 1.1.1
+        version: 1.1.1
 
   packages/tools/text-toolbox:
     dependencies:

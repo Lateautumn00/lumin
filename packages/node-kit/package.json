@@ -7,12 +7,21 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./pdf": {
+      "types": "./src/pdf/index.ts",
+      "default": "./src/pdf/index.ts"
     }
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
+  "devDependencies": {
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.5.438"
+  },
   "dependencies": {
-    "@lumin/shared": "workspace:*"
+    "@lumin/shared": "workspace:*",
+    "@napi-rs/canvas": "1.1.1"
   }
 }

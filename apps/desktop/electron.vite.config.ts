@@ -11,6 +11,10 @@ const workspaceAlias = [
   { find: /^@lumin\/shared$/, replacement: r('../../packages/shared/src/index.ts') },
   { find: /^@lumin\/plugin-api$/, replacement: r('../../packages/plugin-api/src/index.ts') },
   { find: /^@lumin\/node-kit$/, replacement: r('../../packages/node-kit/src/index.ts') },
+  {
+    find: /^@lumin\/node-kit\/pdf$/,
+    replacement: r('../../packages/node-kit/src/pdf/index.ts')
+  },
   { find: /^@lumin\/ui\/(.+)$/, replacement: r('../../packages/ui/src/$1') },
   {
     find: /^@lumin\/tool-docx2pdf\/manifest$/,

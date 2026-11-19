@@ -1,17 +1,15 @@
 /**
- * OCR 输入渲染（spec §10.1/§10.4）：PDF/图片 → RGBA 位图；PNG 编码；输入错误分类。
- * 仅 worker 侧使用（依赖 @napi-rs/canvas 原生模块，renderer 不得 import）。
- *
- * spike 实证（2026-11-16，plan §4.4）：
- * - pdfjs-dist 6 legacy build + @napi-rs/canvas：`page.render({ canvas, canvasContext, viewport })`
- * - 中文渲染需注册系统字体（GlobalFonts msyh.ttc）；`standardFontDataUrl`/`cmaps` 用本地路径
- * - pdfjs 加密 → PasswordException（→ PDF_ENCRYPTED）；`doc.cleanup()` 收尾
+ * @file ocr-render.ts OCR 输入渲染：PDF/图片 → RGBA 位图；PNG 编码；输入错误分类。
+ * @author cuilanchao
+ * @date 2026-11-16
+ * @description PDF 渲染原语已上提至 @lumin/node-kit/pdf（跨工具共用）；本文件保留
+ *              OCR 专属逻辑：RGBA 抽取、旋转、倍率、错误码分类。仅 worker 侧使用
+ *              （依赖 @napi-rs/canvas 原生模块，renderer 不得 import）。
  */
-import { GlobalFonts, ImageData, createCanvas, loadImage } from '@napi-rs/canvas'
+import { ImageData, createCanvas, loadImage } from '@napi-rs/canvas'
 import type { Image } from '@napi-rs/canvas'
 import { readFile } from 'node:fs/promises'
-import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
+import { openPdf, renderPageToCanvas } from '@lumin/node-kit/pdf'
 import { tail } from '@lumin/node-kit'
 import { errnoCode, type StructuredError } from '@lumin/shared'
 import { toolError } from './errors'
@@ -19,14 +17,10 @@ import type { RgbaImage } from './ocr-preproc'
 import { PDF_RENDER_SCALE } from './preview'
 import type { OcrRotation } from './schema'
 
-/** pdfjs 的 DOM 画布类型（结构兼容别名；工具包不引 DOM lib，主进程 typecheck 才通过） */
-type PdfCanvasTarget = Parameters<import('pdfjs-dist').PDFPageProxy['render']>[0]['canvas']
-type PdfRenderContext = NonNullable<
-  Parameters<import('pdfjs-dist').PDFPageProxy['render']>[0]['canvasContext']
->
-
 /** 渲染倍率单源在 `preview.ts`（renderer 预览换算同源，spec §10.9） */
 export { PDF_RENDER_SCALE }
+/** 中文字体注册（实现上提至 node-kit/pdf；保持本工具导出名） */
+export { ensureCjkFont } from '@lumin/node-kit/pdf'
 
 /** OCR 输入扩展白名单中的 PDF 判断（与 schema.OCR_INPUT_RE 一致；zod 不进 worker 预期） */
 const PDF_EXT_RE = /\.pdf$/i
@@ -57,20 +51,6 @@ export function rotatedSize(
   return rotation === 90 || rotation === 270 ? { width: height, height: width } : { width, height }
 }
 
-let fontRegistered = false
-
-/** 注册中文渲染字体（幂等；失败不阻断，skia 仍可走系统字体回退） */
-export function ensureCjkFont(): void {
-  if (fontRegistered) return
-  fontRegistered = true
-  const windir = process.env.WINDIR ?? 'C:/Windows'
-  try {
-    GlobalFonts.registerFromPath(`${windir}/Fonts/msyh.ttc`, 'YaHei')
-  } catch {
-    // 字体缺失（非 Windows 或精简系统）：保留 skia 默认回退，仅中文可能缺字
-  }
-}
-
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
@@ -97,41 +77,18 @@ export function classifyPdfjsError(err: unknown): StructuredError {
   return toolError('PDF_INVALID', message)
 }
 
-/** pdfjs legacy build（Node/worker 内渲染；裸 specifier 动态 import，构建后由运行时解析） */
-async function loadPdfjs(): Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> {
-  return import('pdfjs-dist/legacy/build/pdf.mjs')
-}
-
-/** pdfjs 资产目录（standard_fonts/cmaps 随包落盘，按本地路径提供） */
-function pdfjsRoot(): string {
-  const pkg = createRequire(import.meta.url).resolve('pdfjs-dist/package.json')
-  return dirname(pkg)
-}
-
 async function renderPdf(inputPath: string, options: RenderOptions): Promise<RenderedPage[]> {
-  ensureCjkFont()
-  let bytes: Uint8Array
+  let opened: Awaited<ReturnType<typeof openPdf>>
   try {
-    bytes = new Uint8Array(await readFile(inputPath))
+    opened = await openPdf(inputPath)
   } catch (err) {
-    throw classifyReadError(err, 'pdf')
-  }
-
-  const pdfjs = await loadPdfjs()
-  const root = pdfjsRoot()
-  let doc: import('pdfjs-dist/legacy/build/pdf.mjs').PDFDocumentProxy
-  try {
-    doc = await pdfjs.getDocument({
-      data: bytes,
-      standardFontDataUrl: join(root, 'standard_fonts') + '/',
-      cMapUrl: join(root, 'cmaps') + '/'
-    }).promise
-  } catch (err) {
+    // openPdf 内部读盘失败是 fs 错误（带 errno）；pdfjs 解析失败无 errno
+    if (errnoCode(err) !== '') throw classifyReadError(err, 'pdf')
     throw classifyPdfjsError(err)
   }
 
   try {
-    const total = doc.numPages
+    const total = opened.pageCount
     options.onPage?.(0, total)
     const wanted = options.pageNumbers ?? Array.from({ length: total }, (_, index) => index + 1)
     const out: RenderedPage[] = []
@@ -139,43 +96,31 @@ async function renderPdf(inputPath: string, options: RenderOptions): Promise<Ren
       if (pageNumber < 1 || pageNumber > total) {
         throw toolError('INVALID_PAYLOAD', `页码 ${pageNumber} 超出 1..${total}`)
       }
-      const page = await doc.getPage(pageNumber)
-      // 用户旋转叠加页面固有旋转（spec §10.12；pdfjs viewport.rotation 为绝对值）
-      const rotation = (page.rotate + (options.rotation ?? 0)) % 360
-      const viewport = page.getViewport({ scale: PDF_RENDER_SCALE, rotation })
-      const width = Math.max(1, Math.ceil(viewport.width))
-      const height = Math.max(1, Math.ceil(viewport.height))
-      const canvas = createCanvas(width, height)
-      const ctx = canvas.getContext('2d')
-      // 页面底色为白（PDF 页面语义即白底；空页/透明区不得落成黑底破坏 OCR 二值假设）
-      ctx.fillStyle = '#ffffff'
-      ctx.fillRect(0, 0, width, height)
+      let rendered: Awaited<ReturnType<typeof renderPageToCanvas>>
       try {
-        await page.render({
-          canvas: canvas as unknown as PdfCanvasTarget,
-          canvasContext: ctx as unknown as PdfRenderContext,
-          viewport
-        }).promise
+        rendered = await renderPageToCanvas(opened.doc, pageNumber, {
+          scale: PDF_RENDER_SCALE,
+          rotation: options.rotation ?? 0
+        })
       } catch (err) {
         throw classifyPdfjsError(err)
       }
-      // 软掩模/抗锯齿残留的透明像素补白（destination-over 只填充透明区）
-      ctx.globalCompositeOperation = 'destination-over'
-      ctx.fillStyle = '#ffffff'
-      ctx.fillRect(0, 0, width, height)
-      ctx.globalCompositeOperation = 'source-over'
-      out.push({ pageNumber, width, height, image: ctx.getImageData(0, 0, width, height) })
-      page.cleanup()
+      const ctx = rendered.canvas.getContext('2d')
+      out.push({
+        pageNumber,
+        width: rendered.width,
+        height: rendered.height,
+        image: ctx.getImageData(0, 0, rendered.width, rendered.height)
+      })
       options.onPage?.(out.length, total)
     }
     return out
   } finally {
-    await doc.cleanup()
+    await opened.doc.cleanup()
   }
 }
 
 async function renderImage(inputPath: string, options: RenderOptions): Promise<RenderedPage[]> {
-  ensureCjkFont()
   options.onPage?.(0, 1)
   // 先读后解码：IO 错误走 §5 分类，解码失败单独归 OCR_INPUT_INVALID（spec §10.5）
   let bytes: Buffer
@@ -212,7 +157,7 @@ async function renderImage(inputPath: string, options: RenderOptions): Promise<R
 
 /**
  * 渲染 OCR 输入（PDF 逐页 / 图片单页，spec §10.1）。
- * 失败抛结构化错误：NOT_FOUND/LOCKED/ENCRYPTED/PDF_INVALID（PDF 类走 §5）、
+ * 失败抛结构化错误：PDF_NOT_FOUND/PDF_LOCKED/PDF_ENCRYPTED/PDF_INVALID（PDF 类走 §5）、
  * OCR_INPUT_INVALID（图片解码）、INVALID_PAYLOAD（页码越界）。
  */
 export async function renderOcrInput(

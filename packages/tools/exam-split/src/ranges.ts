@@ -1,23 +1,27 @@
+/**
+ * @file ranges.ts 页码区间解析（exam-split 薄包装）
+ * @author cuilanchao
+ * @date 2026-11-16
+ * @description 解析实现已上提至 @lumin/shared（跨工具共用）；本文件只负责把
+ *              RangeResult 映射为本工具的 RANGE_INVALID 结构化错误，对外签名不变。
+ */
+import {
+  parsePageList,
+  parseRangeGroups,
+  toRangeList,
+  rangeLabel,
+  type PageRange,
+  type RangeFailure
+} from '@lumin/shared'
 import { toolError } from './errors'
 
 /** 解析后的单个区间（1-based，闭区间） */
-export interface PageRange {
-  start: number
-  end: number
-}
+export type { PageRange }
+export { toRangeList, rangeLabel }
 
-/** 单段（如 `3` 或 `7-9`）→ 页码列表；语法错/越界抛 RANGE_INVALID */
-function expandToken(token: string, pageCount: number): number[] {
-  const match = /^(\d+)(?:-(\d+))?$/.exec(token)
-  if (match === null) throw toolError('RANGE_INVALID', token)
-  const start = Number(match[1])
-  const end = match[2] === undefined ? start : Number(match[2])
-  if (start < 1 || end < start || end > pageCount) {
-    throw toolError('RANGE_INVALID', token)
-  }
-  const pages: number[] = []
-  for (let page = start; page <= end; page += 1) pages.push(page)
-  return pages
+/** 失败原因 → detail（区间重叠沿用 `overlap`，其余给出出错片段） */
+function failureDetail(reason: RangeFailure, token: string): string {
+  return reason === 'overlap' ? 'overlap' : token
 }
 
 /**
@@ -30,19 +34,9 @@ export function parsePages(
   pageCount: number,
   options: { allowEmpty?: boolean } = {}
 ): number[] | null {
-  const trimmed = text.trim()
-  if (trimmed === '') {
-    if (options.allowEmpty === true) return null
-    throw toolError('RANGE_INVALID', text)
-  }
-  const pages = new Set<number>()
-  for (const part of trimmed.split(',')) {
-    const token = part.trim()
-    if (token === '') continue
-    for (const page of expandToken(token, pageCount)) pages.add(page)
-  }
-  if (pages.size === 0) throw toolError('RANGE_INVALID', text)
-  return [...pages].sort((a, b) => a - b)
+  const result = parsePageList(text, pageCount, options)
+  if (!result.ok) throw toolError('RANGE_INVALID', failureDetail(result.reason, result.token))
+  return result.value
 }
 
 /**
@@ -50,39 +44,7 @@ export function parsePages(
  * 区间互相重叠 → RANGE_INVALID（detail=`overlap`）；语法错/越界同 parsePages。
  */
 export function parseSplitRanges(text: string, pageCount: number): number[][] {
-  const trimmed = text.trim()
-  if (trimmed === '') throw toolError('RANGE_INVALID', text)
-  const groups: number[][] = []
-  const seen = new Set<number>()
-  for (const part of trimmed.split(',')) {
-    const token = part.trim()
-    if (token === '') continue
-    const pages = expandToken(token, pageCount)
-    for (const page of pages) {
-      if (seen.has(page)) throw toolError('RANGE_INVALID', 'overlap')
-      seen.add(page)
-    }
-    groups.push(pages)
-  }
-  if (groups.length === 0) throw toolError('RANGE_INVALID', text)
-  return groups
-}
-
-/** 连续页码 → 区间列表（拆分产物命名与展示用） */
-export function toRangeList(pages: readonly number[]): PageRange[] {
-  const ranges: PageRange[] = []
-  for (const page of pages) {
-    const last = ranges[ranges.length - 1]
-    if (last !== undefined && last.end === page - 1) {
-      last.end = page
-    } else {
-      ranges.push({ start: page, end: page })
-    }
-  }
-  return ranges
-}
-
-/** 区间标签（spec §7.2：单页 `5`、跨页 `1-3`，直接进命名模板） */
-export function rangeLabel(range: PageRange): string {
-  return range.start === range.end ? `${range.start}` : `${range.start}-${range.end}`
+  const result = parseRangeGroups(text, pageCount)
+  if (!result.ok) throw toolError('RANGE_INVALID', failureDetail(result.reason, result.token))
+  return result.value
 }

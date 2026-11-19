@@ -7,6 +7,12 @@
  */
 import type { TargetFormat } from './schema'
 
+/**
+ * 冲突自动重命名（实现上提至 @lumin/shared，跨工具共用；保持本工具导出名）
+ */
+export { uniqueFileName as uniqueName } from '@lumin/shared'
+
+
 /** 压缩「原格式」可直出的扩展名（jpg/jpeg 归一 jpg；gif/webp 动画路径归 webp） */
 export type OutputFormat = TargetFormat | 'bmp' | 'tiff'
 
@@ -63,28 +69,4 @@ export function buildOutputName(args: {
           ? `h${size.height}`
           : `fit${size.fitWidth}x${size.fitHeight}`
   return `${stem}.${tag}.${args.ext}`
-}
-
-/** 冲突重命名比较键（Windows 文件系统大小写不敏感） */
-function keyOf(name: string): string {
-  return name.toLowerCase()
-}
-
-/**
- * 冲突自动重命名（spec §6 拍板）：已占用 → `{base} ({n}){suffix}`，n 从 1 起递增。
- * Windows 大小写不敏感，比较一律走 lowercase 键
- * @param existing 已占用文件名集合（调用方需含同批次已分配名）
- * @param candidate 期望文件名
- * @returns 可用文件名（candidate 本身可用时原样返回）
- */
-export function uniqueName(existing: ReadonlySet<string>, candidate: string): string {
-  const occupied = new Set([...existing].map((name) => name.toLowerCase()))
-  if (!occupied.has(keyOf(candidate))) return candidate
-  const dot = candidate.lastIndexOf('.')
-  const base = dot <= 0 ? candidate : candidate.slice(0, dot)
-  const suffix = dot <= 0 ? '' : candidate.slice(dot)
-  for (let n = 1; ; n++) {
-    const next = `${base} (${n})${suffix}`
-    if (!occupied.has(keyOf(next))) return next
-  }
 }
