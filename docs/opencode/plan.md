@@ -15,7 +15,7 @@
 | Q2  | 渲染框架  | Vue 3 + Vite + TS + Pinia + Naive UI                                                                                                                                                                                                                         |
 | Q3  | Monorepo  | pnpm workspaces + Turborepo                                                                                                                                                                                                                                  |
 | Q4  | 形态/集成 | 单窗口 + 侧边栏；工具**编译期清单插拔**（契约按运行时热插拔设计）                                                                                                                                                                                            |
-| Q5  | Python    | **不引入**；视频下载捆绑 `yt-dlp.exe`/`ffmpeg.exe`；OCR 走纯 JS ONNX                                                                                                                                                                                         |
+| Q5  | Python    | **不引入**；视频下载捆绑 `yt-dlp.exe`/`ffmpeg.exe`（2026-11-19 体积优化：`ffprobe.exe` 移出随包，图片元信息改解析 `ffmpeg -i` stderr）；OCR 走纯 JS ONNX                                                                                                     |
 | Q6  | 离线边界  | 无自建后端、数据不出本机；视频下载允许联网、仅本地解析，风险自担                                                                                                                                                                                             |
 | Q7  | 试卷切割  | **a+b**：a = PDF 拆分/合并/删页/裁剪；b = OCR 切题（图片/PDF → 单题）；c（结构化题库）不做                                                                                                                                                                   |
 | Q8  | Word→PDF  | LibreOffice headless，保真优先，按需下载组件                                                                                                                                                                                                                 |
@@ -214,7 +214,7 @@ lumin/
 
 ### 4.5 短视频下载（M4）
 
-- `scripts/fetch-binaries.mjs`：拉取官方 `yt-dlp.exe` + `ffmpeg.exe`/`ffprobe.exe` 到 `binaries/`（**固定 URL + SHA256 钉死**，gitignore）
+- `scripts/fetch-binaries.mjs`：拉取官方 `yt-dlp.exe` + `ffmpeg.exe` 到 `binaries/`（**固定 URL + SHA256 钉死**，gitignore；ffprobe 已于 2026-11-19 移除，见 §4.10）
 - 主进程 spawn 队列（并发 2）：`probe`（`yt-dlp -J`）→ `start` → 逐行解析 stdout 进度 → 事件推送
 - 功能：链接粘贴、格式预设（best/1080p/仅音频 mp3）、暂停（kill + `--continue` 续传）、取消、输出目录、历史（JSON）
 - 保鲜：设置页「更新下载引擎」；UI 免责声明（**文案 M4 开工前定稿，R8**）
@@ -230,8 +230,8 @@ lumin/
 
 ### 4.6 图片工具箱（M6，2026-11-18 R8 登记）
 
-- **决策（用户拍板 2026-11-18）**：下一个功能 = 图片批量压缩/格式转换/缩放（一工具三 Tab）；引擎 = **复用 M4 的 ffmpeg.exe/ffprobe.exe**（零新增依赖与二进制）；格式矩阵**含 AVIF**（libaom-av1 单张 5–30s，UI 标注）；输出冲突**自动重命名**；GIF **转 webp 保留动画**（其他格式取首帧并标注）
-- 通道：`image-toolbox:probe`（sync，ffprobe 元信息）+ `image-toolbox:process`（task，批量串行 + 可取消）；编码参数映射/缩放求解/输出命名/冲突重命名全部纯函数（≥80% 覆盖）
+- **决策（用户拍板 2026-11-18）**：下一个功能 = 图片批量压缩/格式转换/缩放（一工具三 Tab）；引擎 = **复用 M4 的 ffmpeg.exe**（零新增依赖与二进制；原并存的 ffprobe.exe 已于 2026-11-19 移除，见 §4.10）；格式矩阵**含 AVIF**（libaom-av1 单张 5–30s，UI 标注）；输出冲突**自动重命名**；GIF **转 webp 保留动画**（其他格式取首帧并标注）
+- 通道：`image-toolbox:probe`（sync，ffmpeg 元信息）+ `image-toolbox:process`（task，批量串行 + 可取消）；编码参数映射/缩放求解/输出命名/冲突重命名全部纯函数（≥80% 覆盖）。**2026-11-19 体积优化**：探测改用 `ffmpeg -hide_banner -i <file>` 的 stderr 流行解析（纯函数 `parseFfmpegStream`），不再依赖 `ffprobe.exe`
 - **2026-11-18 增补（用户反馈）**：输出目录支持系统选择器（新增壳通用通道 `lumin:shell:pick-directory` + bridge `pickDirectory`，工具 `set-output-dir` 即时记忆）；目标格式补全常用项——压缩 Tab `原格式/jpg/png/webp/avif`，转换/缩放 Tab `jpg(JPEG)/png/webp/avif/bmp/tiff`（png/bmp/tiff 为无损，质量滑杆置灰）
 - 字段级清单：`docs/spec/image-toolbox.md`（已定稿）；错误码 `IT_*`；settings 仅记忆输出目录，一期无历史列表
 - 依据实测：gyan.dev essentials 6.1.1 编码器 libwebp/png/mjpeg/libaom-av1 与 muxer avif/webp/image2 全部可用
@@ -265,6 +265,17 @@ lumin/
 - 每文件独立工作子目录与 profile（`lumin-docx2pdf-<taskId>/f<序号>`），同名基名不同扩展名顺序落盘自动 `(1)` 后缀
 - 字段级清单：`docs/spec/docx2pdf.md`（M9 章节）；冒烟：`docs/smoke/docx2pdf.md`；fixture 新增 `表格样例.xlsx`、`演示样例.pptx`
 - **验收**：批量/去重/上限/部分失败/全失败/取消单测覆盖；e2e 真实转换 docx+xlsx+pptx 混合批次；gate 全绿；chunk 复测 gzip < 200KB
+
+### 4.10 发布体积优化（M10，2026-11-19 R8 登记）
+
+- **决策（用户拍板 2026-11-19）**：v0.9.0 安装包体积过大（解包 928.7MB / setup 290.1MB / portable 260.7MB），采用「全面瘦身」方案；**不改随包捆绑策略**（不改为运行时按需下载），首次使用不需要联网
+- 三项措施与依据：
+  1. **onnxruntime-node 只保留 win32-x64 原生库**：该包自带全平台二进制（darwin 86.8MB + linux 70.5MB + win32-arm64 70.6MB），`electron-builder.yml` `files` 取反排除，省 ≈227.9MB
+  2. **Electron 语言包只保留 `zh-CN`/`en-US`**：`electronLanguages` 裁剪其余 50+ 语言，省 ≈44MB
+  3. **移除 `ffprobe.exe`**（随包 ≈78.8MB）：图片元信息改由 `ffmpeg -hide_banner -i <file>` stderr 解析（`parseFfmpegStream` 纯函数 + 单测）；`scripts/fetch-binaries.mjs` 同步删除该资产；视频下载链路只用 ffmpeg 合流，不受影响
+- 维护约束：后续新增/升级依赖若再随包**全平台原生库或语言资源**，必须在 `pnpm dist` 后复测体积，并把数字记入 `docs/smoke/shell.md`
+- **实测（2026-11-19，`pnpm dist`）**：解包 928.7MB → **574.2MB**；setup 304.2MB → **203.6MB**（-33%）；portable 260.7MB → **187.0MB**（-28%）。打包产物核对：`app.asar.unpacked/.../onnxruntime-node/bin/napi-v6` 只剩 `win32/x64`；`locales` 只剩 `en-US.pak`/`zh-CN.pak`；`resources/binaries/download` 只剩 `ffmpeg.exe`/`yt-dlp.exe`
+- **验收**：`pnpm dist` 实测新体积；打包版 OCR（onnxruntime CPU EP）与图片工具 probe/resize 可用；gate 全绿
 
 ---
 
@@ -318,6 +329,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M7 v0.6**   | 批量重命名（单目录非递归、六规则叠加、预览/冲突/撤销、5000 条截断）                                                                                                                                                                                                                                                                             | §4.7 验收；smoke 8 类全过（R2）；字段级清单先行（R8）                | 2–3 天   |
 | **M8 v0.7**   | 文本工具箱（纯 renderer 三 Tab：JSON 格式化/压缩/校验、Base64/URL 编解码、正则测试与替换预览）                                                                                                                                                                                                                                                  | §4.8 验收；smoke 映射（R2）；字段级清单先行（R8）；chunk <200KB gzip | 0.5–1 天 |
 | **M9 v0.8**   | Office 转 PDF 扩展（docx2pdf）：输入扩至 doc/xls/ppt 六种扩展名 + 批量队列（1..100、串行、失败不中断、结果汇总）                                                                                                                                                                                                                                | §4.9 验收；单测/e2e 覆盖批量；chunk <200KB gzip；smoke 增量记录      | 0.5–1 天 |
+| **M10 瘦身**  | 发布体积优化（§4.10，2026-11-19）：onnxruntime 仅 win32-x64 + Electron 语言包仅 zh-CN/en-US + 移除 ffprobe（改 `ffmpeg -i` 解析）                                                                                                                                                                                                               | §4.10 验收；`pnpm dist` 复测体积；打包版 OCR/图片工具可用            | 0.5 天   |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

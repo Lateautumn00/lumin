@@ -2,7 +2,7 @@
 
 > 依据 AGENTS §11：开工前定稿。变更须同步更新本文件与 `docs/opencode/plan.md` §4.5。
 > 工具 id：`video-download` · 显示名：**视频下载** · 包：`@lumin/tool-video-download` · 图标：`download`
-> 引擎：yt-dlp（版本随包钉死）+ ffmpeg/ffprobe（合流），`scripts/fetch-binaries.mjs` 固定 URL + SHA256，gitignore，打包走 `resources/binaries`。
+> 引擎：yt-dlp（版本随包钉死）+ ffmpeg（合流；ffprobe 已于 2026-11-19 移除，plan §4.10），`scripts/fetch-binaries.mjs` 固定 URL + SHA256，gitignore，打包走 `resources/binaries`。
 
 ## 0. 合规与免责（R8 定稿，2026-11-18）
 

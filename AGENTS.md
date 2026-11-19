@@ -42,7 +42,7 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 
 - **禁止**乱建文件、乱分层、乱拆组件；新文件必须落在定稿树的既定位置
 - 工具包固定形态：`manifest.ts` + `renderer/` + `node.ts?`（主进程逻辑可选）
-- 大二进制（yt-dlp/ffmpeg/OCR 模型）一律走 `scripts/fetch-binaries.mjs` 拉取，**禁止提交进 git**（`binaries/` 已 gitignore）
+- 大二进制（yt-dlp/ffmpeg/OCR 模型）一律走 `scripts/fetch-binaries.mjs` 拉取，**禁止提交进 git**（`binaries/` 已 gitignore）；**随包资源只保留 win32-x64 原生库与 `zh-CN`/`en-US` 语言包**（2026-11-19 体积优化，plan §4.10）
 
 ---
 

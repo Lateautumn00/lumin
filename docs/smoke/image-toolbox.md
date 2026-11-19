@@ -1,6 +1,6 @@
 # 图片工具箱冒烟记录（M6）
 
-> 环境：Windows · Electron 45.3.1 · ffmpeg/ffprobe 6.1（`binaries/download/`，fetch 脚本 SHA256 校验） · 分支：`feature/m6-image`
+> 环境：Windows · Electron 45.3.1 · ffmpeg 6.1（`binaries/download/`，fetch 脚本 SHA256 校验；ffprobe 于 2026-11-19 移除，见 §7） · 分支：`feature/m6-image`
 > 日期：2026-11-18 · 工具：`@lumin/tool-image-toolbox` v0.1.0
 
 ## 1. 冒烟总览
@@ -20,8 +20,8 @@
 | 类别             | 验证级别 | 记录                                                                                                                                                                                                                                                                                        |
 | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1. 中文/空格路径 | e2e      | ✅ 输出目录 `lumin d2p 中文 输出`（中文+空格）+ 输入 `保真 样例.png`（中文+空格）→ probe 尺寸正确、convert → `保真 样例.jpg` 落盘成功；progress→done 事件链完整                                                                                                                             |
-| 2. 文件被占用    | e2e      | ✅ PowerShell `FileShare.None` 独占句柄持有输入文件 → ffprobe 打开失败 → `IT_PROBE_FAILED` /「探测失败」；单张失败不中断批次（spec §7）                                                                                                                                                     |
-| 3. 加密/损坏文件 | e2e      | ✅ 垃圾字节文件（伪 `.jpg`，加密文件同路径归并）→ ffprobe exit 0 但返回 0×0 流 → `IT_FILE_CORRUPT` /「文件损坏或格式不受支持」；顺带修复原实现 zod 正宽度约束误分类为 `IT_FILE_UNSUPPORTED` 的缺陷                                                                                          |
+| 2. 文件被占用    | e2e      | ✅ PowerShell `FileShare.None` 独占句柄持有输入文件 → 探测（现为 `ffmpeg -i`，见 §7）打开失败 → `IT_PROBE_FAILED` /「探测失败」；单张失败不中断批次（spec §7）                                                                                                                              |
+| 3. 加密/损坏文件 | e2e      | ✅ 垃圾字节文件（伪 `.jpg`，加密文件同路径归并）→ 探测无可用尺寸 → `IT_FILE_CORRUPT` /「文件损坏或格式不受支持」（2026-11-19 前由 ffprobe 0×0 流判定，见 §7）；顺带修复原实现 zod 正宽度约束误分类为 `IT_FILE_UNSUPPORTED` 的缺陷                                                           |
 | 4. 超大文件      | 真实验收 | ✅ `fstruncate` 生成 210MB 稀疏文件 → probe 侧 `IT_FILE_UNSUPPORTED`（>200MB 上限拒入）；process 侧同样拒入，无产物、无临时文件残留                                                                                                                                                         |
 | 5. 任务取消      | e2e      | ✅ convert avif 批量 4 文件，首个 progress 后 `lumin:task:cancel`（AbortSignal 杀树）→ 终态 `CANCELLED` /「任务已取消」；已完成文件保留，失败清单不含取消项                                                                                                                                 |
 | 6. 并发溢出      | e2e      | ✅ 并发提交两任务 → 壳队列串行执行，两任务各自完整 done（A→out-a、B→out-b）；顺带暴露并修复壳级 **settings 并发 rename EPERM 竞态**（写队列串行化 + EPERM/EACCES 短重试，50 并发 set 单测覆盖）                                                                                             |
@@ -37,7 +37,7 @@
 
 - 口径：gzip；工具专属增量 = `image-toolbox-*.js` **30.5KB gzip**。
 - 全部直接依赖（plugin-api / shared / node-kit / ui）均为壳与其它工具共享，**独占依赖 chunk = 0**。
-- **无运行时资产**（ffmpeg/ffprobe 属 `binaries/download/` 外部二进制，走 fetch 脚本，不入 renderer 包）。
+- **无运行时资产**（ffmpeg 属 `binaries/download/` 外部二进制，走 fetch 脚本，不入 renderer 包；ffprobe 已于 2026-11-19 移除）。
 - 无求值库工具基线 <200KB gzip → **30.5KB，达标**（对照：单位换算 37.9KB、docx2pdf 13.3KB）。
 
 ## 5. 本里程碑附带修复（壳级缺陷，CHANGELOG 同步）
@@ -51,3 +51,13 @@
 - **现象**：三 Tab（压缩/转换/缩放）标签文字空白、页签宽度 0 —— 当前 `naive-ui@2.45.3` 构建下，自闭合 `NTabPane` 的 `tab` 文本不会被渲染（`normalizeSlots(undefined)` 产出空 default slot，走 comment 分支）。
 - **修复**：标签改走 `<template #tab>` 插槽（`packages/tools/image-toolbox/src/renderer/ToolView.vue`），与 `text-toolbox` 同范式。
 - **回归**：新增 e2e 用例「页签标签可见（naive-ui 自闭合 pane 渲染回归）」——断言三个页签 visible、文本正确、`getBoundingClientRect().width > 0`；image-toolbox 套件 **5/5 通过**（2026-11-19，`pnpm build` 产物）。
+
+## 7. 移除 ffprobe 依赖（2026-11-19，M10 体积优化）
+
+- **背景**：随包 `ffprobe.exe` 78.8MB，与 `ffmpeg.exe` 同源重复；plan §4.10 决策移除（setup 304.2MB → 203.6MB）。
+- **改造**：`probeStream` 改跑 `ffmpeg -hide_banner -i <file>`（无输出文件，引擎以 code 1 退出，流信息在 stderr），纯函数 `parseFfmpegStream` 解析首个 `Video:` 行的 codec 与 `WxH`；`R2.3 损坏文件` 判定改为「有 Video 行但取不到尺寸」或 stderr 命中损坏特征 → `IT_FILE_CORRUPT`。
+- **实测（真实 ffmpeg，2026-11-19）**：
+  - 正常 jpg/png/gif/webp/bmp/tiff/avif → 尺寸与 codec 解析正确（单测覆盖真实行样例，含 `Stream #0:0[0x1]: Video:` 与 `mjpeg (Baseline)` 变体）
+  - 损坏 jpg（文本改名）→ `No JPEG data found in image` + 无尺寸 Video 行 → `IT_FILE_CORRUPT` ✅
+  - 无法解析 stderr → `IT_PROBE_FAILED` ✅；探测超时 10s 杀树不变
+- **回归**：单测 28 全绿；e2e 套件 **5/5 通过**（probe 元信息 / 压缩 / 占用+损坏混合批次 / gif 动画 / 页签渲染）。

@@ -109,7 +109,7 @@ pnpm --filter @lumin/desktop exec playwright test update-smoke
 
 断言链：`关于 → 检查更新 → 已下载新版本（120s）→ 安装并重启 → 安装目录出现 → 结束旧进程 → 启动已安装 exe → appVersion === apps/desktop/package.json.version`（M5 起不再硬编码版本号）。
 
-**结果：✅ 通过（40.7s，2026-11-19）** —— 旧版 0.8.0 检测到 0.9.0 → 下载 → 静默安装 → 新版报告 `appVersion=0.9.0`。安装包 setup 304.2MB（含随包 OCR 模型与 yt-dlp/ffmpeg）；`release/` 产物为 localhost 冒烟产物，**不可**作为发布资产。
+**结果：✅ 通过（40.7s，2026-11-19）** —— 旧版 0.8.0 检测到 0.9.0 → 下载 → 静默安装 → 新版报告 `appVersion=0.9.0`。当次安装包 setup 304.2MB（瘦身前产物；含随包 OCR 模型与 yt-dlp/ffmpeg/ffprobe，瘦身后体积见 §7）；`release/` 产物为 localhost 冒烟产物，**不可**作为发布资产。
 
 ## 6. 已知限制与待办
 
@@ -117,3 +117,29 @@ pnpm --filter @lumin/desktop exec playwright test update-smoke
 - 更新源已落定 Gitee raw 地址（`apps/desktop/electron-builder.yml` `publish` 单点）；发布新版本需同步安装包 + `.blockmap` + `latest.yml` 到仓库 `updates/`。
 - §2 中「M1 起按工具执行」的类别，随各工具 `docs/smoke/<tool>.md` 落地。
 - Gitee Go CI（`.gitee/workflows/mr-gate.yml`）需在仓库开启 Gitee Go 后验证首跑。
+
+## 7. 发布体积优化复测（M10，2026-11-19）
+
+决策与措施见 plan §4.10（R8 登记）。复现：`pnpm build` → `pnpm dist`（需先 `node scripts/fetch-binaries.mjs`）。
+
+| 项                      | 瘦身前  | 瘦身后             | 变化   |
+| ----------------------- | ------- | ------------------ | ------ |
+| 解包 `win-unpacked`     | 928.7MB | **574.2MB**        | -38.2% |
+| `...-setup.exe`（NSIS） | 304.2MB | **203.6MB**        | -33.1% |
+| `...-portable.exe`      | 260.7MB | **187.0MB**        | -28.3% |
+| `locales/`              | 48.8MB  | **1.1MB**（2 pak） | -97.7% |
+| `onnxruntime-node/`     | 293.4MB | **65.5MB**         | -77.7% |
+| `resources/binaries/`   | 195.7MB | **116.9MB**        | -40.3% |
+
+产物核对（`release/win-unpacked` 实测）：
+
+- `resources/app.asar.unpacked/node_modules/onnxruntime-node/bin/napi-v6` 仅 `win32/x64`（darwin/linux/win32-arm64 已排除）
+- `locales` 仅 `en-US.pak` / `zh-CN.pak`
+- `resources/binaries/download` 仅 `ffmpeg.exe` + `yt-dlp.exe`（**ffprobe.exe 已移除**）
+
+功能回归（瘦身后）：
+
+- 图片工具箱 e2e 5/5 ✅（probe 改解析 `ffmpeg -i` stderr；损坏 jpg → `IT_FILE_CORRUPT`、无法解析 → `IT_PROBE_FAILED`）
+- **打包产物实测** ✅：直接启动 `release/win-unpacked/Lumin.exe`（Playwright `_electron`），`window.lumin.invoke('image-toolbox:probe')` 对 400×300 png 返回 `{format:'png',width:400,height:300,animated:false}`，`appVersion=0.9.0` —— 证明 `resources/binaries/download/ffmpeg.exe` 定位与新探测链路在打包态可用
+- 单元测试 866 全绿；coverage 93.22/84.84/90.83/95.79；lint / typecheck / boundary 全绿
+- OCR（onnxruntime CPU EP）在打包版所用文件集（仅 win32/x64 库）下不受影响：CPU EP 只加载 `onnxruntime.dll`，DirectML/dxcompiler 仍随包保留未裁剪

@@ -9,13 +9,14 @@
  *
  * 产物落 `binaries/`（已 gitignore）：
  *   binaries/ocr/{det,rec,cls}.onnx + binaries/ocr/ppocr_keys_v1.txt
- *   binaries/download/yt-dlp.exe + binaries/download/{ffmpeg,ffprobe}.exe
+ *   binaries/download/yt-dlp.exe + binaries/download/ffmpeg.exe
  *
  * 模型源：RapidOCR 官方托管（modelscope），SHA256 与其上游 default_models.yaml 一致；
  * cls 与字典以上游不可达时的本机实测值钉死（2026-11-16，见 plan §4.4 M3b 记录）。
- * 下载引擎：yt-dlp 2026.10.26 官方 Release（SHA256 本机实测钉死）；ffmpeg/ffprobe 来自
+ * 下载引擎：yt-dlp 2026.10.26 官方 Release（SHA256 本机实测钉死）；ffmpeg 来自
  * ffmpeg-static b6.1.1 Release（win32-x64，.gz 压缩变体，SHA256 为解压后本机实测钉死，
- * 2026-11-18，见 docs/smoke/video-download.md）。
+ * 2026-11-18，见 docs/smoke/video-download.md）。ffprobe 已于 2026-11-19 移除（体积优化，
+ * 图片元信息改由 `ffmpeg -i` stderr 解析，见 plan §4.10）。
  */
 import { createHash } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
@@ -77,13 +78,6 @@ const GROUPS = {
         sha256: '04e1307997530f9cf2fe35cba2ca7e8875ca91da02f89d6c7243df819c94ad00',
         bytes: 82797568,
         gunzip: true
-      },
-      {
-        id: 'ffprobe',
-        url: 'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-win32-x64.gz',
-        sha256: '3a7e2dc003dc2cd1472827e4c7c4f056ae1ae0ae7c5bbc580c99b49827351ba4',
-        bytes: 82668032,
-        gunzip: true
       }
     ]
   }
@@ -96,8 +90,7 @@ const FILE_NAMES = {
   cls: 'cls.onnx',
   dict: 'ppocr_keys_v1.txt',
   'yt-dlp': 'yt-dlp.exe',
-  ffmpeg: 'ffmpeg.exe',
-  ffprobe: 'ffprobe.exe'
+  ffmpeg: 'ffmpeg.exe'
 }
 
 async function sha256File(path) {

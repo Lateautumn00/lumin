@@ -1,9 +1,10 @@
-/**
+﻿/**
  * @file node.ts 单测（假 runProcess 注入，不依赖真实 ffmpeg）
  * @author cuilanchao
- * @date 2026-11-18
+ * @date 2026-11-19
  * @description probe/config/process 通道行为：引擎缺失、单张失败不中断批次、动图参数分发、
- *              冲突自动重命名、缩放尺寸探测联动、取消不记失败、磁盘满归类、输出目录记忆
+ *              冲突自动重命名、缩放尺寸探测联动、取消不记失败、磁盘满归类、输出目录记忆；
+ *              2026-11-19 起探测改解析 `ffmpeg -i` stderr（parseFfmpegStream 纯函数单测）
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -18,7 +19,7 @@ import type {
 } from '@lumin/plugin-api'
 import type { StructuredError, TaskUpdate } from '@lumin/shared'
 import { manifest } from './manifest'
-import { registerWith, type ImageToolboxDeps } from './node'
+import { parseFfmpegStream, registerWith, type ImageToolboxDeps } from './node'
 
 const okResult = (overrides: Partial<RunProcessResult> = {}): RunProcessResult => ({
   code: 0,
@@ -31,15 +32,17 @@ const okResult = (overrides: Partial<RunProcessResult> = {}): RunProcessResult =
   ...overrides
 })
 
-/** ffprobe JSON 样例（64×48 静态 jpg） */
-function probeJson(width = 64, height = 48, codec = 'mjpeg'): string {
-  return JSON.stringify({
-    streams: [{ codec_type: 'video', codec_name: codec, width, height }]
-  })
+/** ffmpeg `-i` stderr 样例（64×48 静态 jpg；实测行形如 `Stream #0:0: Video: mjpeg, ...`） */
+function probeStderr(width = 64, height = 48, codec = 'mjpeg'): string {
+  return [
+    "Input #0, image2, from 'C:\\x.jpg':",
+    '  Duration: N/A, bitrate: N/A',
+    `  Stream #0:0: Video: ${codec}, yuvj420p(pc), ${width}x${height} [SAR 1:1 DAR 4:3], 25 fps`
+  ].join('\n')
 }
 
 interface HarnessOptions {
-  /** ffprobe 返回的 JSON（按调用序或全局） */
+  /** 探测（`ffmpeg -i`）返回的 stderr（按调用序或全局） */
   probeResponses?: string[]
   /** ffmpeg 退出码 */
   ffmpegCode?: number
@@ -49,7 +52,7 @@ interface HarnessOptions {
   outputBytes?: number
   /** ffmpeg 执行后置 aborted（模拟取消杀树） */
   abortAfterRun?: boolean
-  /** 引擎目录是否预置 ffmpeg/ffprobe（默认预置） */
+  /** 引擎目录是否预置 ffmpeg（默认预置） */
   withEngine?: boolean
 }
 
@@ -77,7 +80,6 @@ function createHarness(options: HarnessOptions = {}): Harness {
   if (options.withEngine !== false) {
     mkdirSync(engineDir, { recursive: true })
     writeFileSync(join(engineDir, 'ffmpeg.exe'), 'stub')
-    writeFileSync(join(engineDir, 'ffprobe.exe'), 'stub')
   }
 
   const ipc = new Map<string, IpcHandler<unknown, unknown>>()
@@ -89,14 +91,15 @@ function createHarness(options: HarnessOptions = {}): Harness {
   const deps: ImageToolboxDeps = {
     runProcess: (opts) => {
       calls.push(opts)
-      const isProbe = opts.command.endsWith('ffprobe.exe')
+      // 探测 = `ffmpeg -hide_banner -i <file>`（无输出文件，真实引擎以 code 1 退出）
+      const isProbe = opts.args?.[0] === '-hide_banner'
       if (isProbe) {
-        const json =
+        const stderr =
           options.probeResponses !== undefined && probeIndex < options.probeResponses.length
-            ? (options.probeResponses[probeIndex] ?? probeJson())
-            : probeJson()
+            ? (options.probeResponses[probeIndex] ?? probeStderr())
+            : probeStderr()
         probeIndex++
-        return Promise.resolve(okResult({ stdout: json }))
+        return Promise.resolve(okResult({ code: 1, stderr }))
       }
       // ffmpeg 假执行：写出输出文件（末位参数）供 statSync 统计体积
       const output = opts.args?.[opts.args.length - 1]
@@ -155,6 +158,11 @@ function firstOf<T>(items: T[]): T {
   return item
 }
 
+/** 取首个编码调用（探测调用也是 ffmpeg，以 `-hide_banner` 首参区分；编码首参为 `-y`） */
+function findEncodeCall(harness: Harness): RunProcessOptions | undefined {
+  return harness.calls.find((c) => c.args?.[0] === '-y')
+}
+
 async function invokeIpc(harness: Harness, action: string, payload: unknown): Promise<unknown> {
   return mustGet(harness.ipc, action)({ toolId: manifest.id, action, payload })
 }
@@ -181,12 +189,34 @@ async function runTask(
   }
 }
 
-/** 造一个假输入图片文件（内容任意，探测走假 ffprobe） */
+/** 造一个假输入图片文件（内容任意，探测走假 ffmpeg） */
 function makeInput(dir: string, name: string, bytes = 1000): string {
   const path = join(dir, name)
   writeFileSync(path, Buffer.alloc(bytes, 0))
   return path
 }
+
+describe('parseFfmpegStream', () => {
+  it('解析普通视频流行（codec + 宽高）', () => {
+    expect(parseFfmpegStream(probeStderr(320, 240, 'png'))).toEqual({
+      codecName: 'png',
+      width: 320,
+      height: 240
+    })
+  })
+
+  it('兼容 [0x1] 流序号与 codec 括号档位（实测 avif / jpg 行）', () => {
+    const avif = '  Stream #0:0[0x1]: Video: av1 (High), gbrp(pc), 320x240 [SAR 1:1 DAR 4:3], 1 fps'
+    expect(parseFfmpegStream(avif)).toEqual({ codecName: 'av1', width: 320, height: 240 })
+    const jpg = '  Stream #0:0: Video: mjpeg (Baseline), yuvj444p(pc), 320x240, 25 fps'
+    expect(parseFfmpegStream(jpg)).toEqual({ codecName: 'mjpeg', width: 320, height: 240 })
+  })
+
+  it('无视频流 / 零尺寸 → null', () => {
+    expect(parseFfmpegStream('Invalid data found when processing input')).toBeNull()
+    expect(parseFfmpegStream('  Stream #0:0: Video: mjpeg, yuvj420p(pc), 0x0, 25 fps')).toBeNull()
+  })
+})
 
 describe('probe', () => {
   it('引擎缺失 → IT_ENGINE_MISSING', async () => {
@@ -205,7 +235,11 @@ describe('probe', () => {
 
   it('成功项 + 动图标志 + 单张失败不阻塞', async () => {
     const harness = createHarness({
-      probeResponses: [probeJson(800, 600, 'mjpeg'), probeJson(100, 100, 'gif'), 'not-json']
+      probeResponses: [
+        probeStderr(800, 600, 'mjpeg'),
+        probeStderr(100, 100, 'gif'),
+        'garbage output'
+      ]
     })
     const dir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
     roots.push(dir)
@@ -229,8 +263,10 @@ describe('probe', () => {
     expect(result.failures[0]).toMatchObject({ file: broken, code: 'IT_PROBE_FAILED' })
   })
 
-  it('ffprobe 返回 0×0 流（损坏图片典型输出）→ IT_FILE_CORRUPT，不落入 zod 兜底', async () => {
-    const harness = createHarness({ probeResponses: [probeJson(0, 0, 'mjpeg')] })
+  it('损坏图片（ffmpeg 报 Invalid data、无视频流）→ IT_FILE_CORRUPT，不落入 zod 兜底', async () => {
+    const harness = createHarness({
+      probeResponses: ['C:\\x.jpg: Invalid data found when processing input']
+    })
     const dir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
     roots.push(dir)
     const corrupt = makeInput(dir, '损坏.jpg')
@@ -241,7 +277,38 @@ describe('probe', () => {
     expect(result.failures[0]).toMatchObject({ file: corrupt, code: 'IT_FILE_CORRUPT' })
   })
 
-  it('不支持的扩展名 → IT_FILE_UNSUPPORTED（不走 ffprobe）', async () => {
+  it('损坏 jpg（实测：有视频流行但取不到尺寸）→ IT_FILE_CORRUPT', async () => {
+    const harness = createHarness({
+      probeResponses: [
+        [
+          '[mjpeg @ 000001] No JPEG data found in image',
+          '[image2 @ 000002] Could not find codec parameters for stream 0 (Video: mjpeg, none(bt470bg/unknown/unknown)):',
+          "Input #0, image2, from 'C:\\x.jpg':",
+          '  Stream #0:0: Video: mjpeg, none(bt470bg/unknown/unknown), 25 fps, 25 tbr, 25 tbn'
+        ].join('\n')
+      ]
+    })
+    const dir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(dir)
+    const corrupt = makeInput(dir, '损坏.jpg')
+    const result = (await invokeIpc(harness, 'probe', { files: [corrupt] })) as {
+      failures: { code: string }[]
+    }
+    expect(result.failures[0]).toMatchObject({ code: 'IT_FILE_CORRUPT' })
+  })
+
+  it('不可解析的探测输出 → IT_PROBE_FAILED', async () => {
+    const harness = createHarness({ probeResponses: ['garbage output'] })
+    const dir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(dir)
+    const weird = makeInput(dir, 'weird.png')
+    const result = (await invokeIpc(harness, 'probe', { files: [weird] })) as {
+      failures: { code: string }[]
+    }
+    expect(result.failures[0]).toMatchObject({ code: 'IT_PROBE_FAILED' })
+  })
+
+  it('不支持的扩展名 → IT_FILE_UNSUPPORTED（不调引擎）', async () => {
     const harness = createHarness()
     const dir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
     roots.push(dir)
@@ -350,7 +417,7 @@ describe('process', () => {
     roots.push(inDir)
     const gif = makeInput(inDir, 'anim.gif')
     await runTask(harness, compressPayload([gif], outDir))
-    const ffmpegCall = harness.calls.find((c) => c.command.endsWith('ffmpeg.exe'))
+    const ffmpegCall = findEncodeCall(harness)
     expect(ffmpegCall).toBeDefined()
     expect(ffmpegCall?.args).toContain('-loop')
     expect(ffmpegCall?.args).not.toContain('-frames:v')
@@ -370,7 +437,7 @@ describe('process', () => {
       outputDir: outDir,
       options: { format: 'jpg', quality: 75 }
     })
-    const ffmpegCall = harness.calls.find((c) => c.command.endsWith('ffmpeg.exe'))
+    const ffmpegCall = findEncodeCall(harness)
     expect(ffmpegCall?.args).toContain('-frames:v')
     expect(ffmpegCall?.args).not.toContain('-loop')
   })
@@ -441,7 +508,7 @@ describe('process', () => {
   })
 
   it('resize：探测尺寸 → 缩放参数 + 命名模板', async () => {
-    const harness = createHarness({ probeResponses: [probeJson(1000, 600)] })
+    const harness = createHarness({ probeResponses: [probeStderr(1000, 600)] })
     const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
     roots.push(outDir)
     const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
@@ -456,12 +523,12 @@ describe('process', () => {
     const r = result as { outputs: { output: string }[]; failures: unknown[] }
     expect(r.failures).toHaveLength(0)
     expect(firstOf(r.outputs).output).toBe(join(outDir, 'photo.50%.jpg'))
-    const ffmpegCall = harness.calls.find((c) => c.command.endsWith('ffmpeg.exe'))
+    const ffmpegCall = findEncodeCall(harness)
     expect(ffmpegCall?.args).toContain('scale=500:300')
   })
 
   it('resize 不放大（目标大于原图）→ 无缩放滤镜，命名仍含尺寸段', async () => {
-    const harness = createHarness({ probeResponses: [probeJson(1000, 600)] })
+    const harness = createHarness({ probeResponses: [probeStderr(1000, 600)] })
     const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
     roots.push(outDir)
     const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
@@ -475,12 +542,12 @@ describe('process', () => {
     })
     const r = result as { outputs: { output: string }[]; failures: unknown[] }
     expect(r.failures).toHaveLength(0)
-    const ffmpegCall = harness.calls.find((c) => c.command.endsWith('ffmpeg.exe'))
+    const ffmpegCall = findEncodeCall(harness)
     expect(ffmpegCall?.args).not.toContain('-vf')
     expect(firstOf(r.outputs).output).toBe(join(outDir, 'photo.200%.jpg'))
   })
 
-  it('resize ffprobe 失败 → 单张 IT_PROBE_FAILED，批次 done', async () => {
+  it('resize 探测失败 → 单张 IT_PROBE_FAILED，批次 done', async () => {
     const brokenHarness = createHarness({ probeResponses: ['garbage'] })
     const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
     roots.push(outDir)

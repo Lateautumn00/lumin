@@ -2,7 +2,8 @@
 
 > 依据 AGENTS §11：开工前定稿。变更须同步更新本文件与 `docs/opencode/plan.md` §4.6。
 > 工具 id：`image-toolbox` · 显示名：**图片工具箱** · 包：`@lumin/tool-image-toolbox` · 图标：`image`（壳 AppSidebar `iconMap` 需注册 `Image`）
-> 引擎：**复用 M4 已拉取的 `binaries/download/ffmpeg.exe` + `ffprobe.exe`**（零新增依赖、零新增二进制）；`ffmpeg -version` 探测，缺失 → `IT_ENGINE_MISSING`。
+> 引擎：**复用 M4 已拉取的 `binaries/download/ffmpeg.exe`**（零新增依赖、零新增二进制）；`ffmpeg -version` 探测，缺失 → `IT_ENGINE_MISSING`。
+> **2026-11-19 变更（plan §4.10 体积优化）**：不再依赖 `ffprobe.exe`，元信息改由 `ffmpeg -hide_banner -i <file>` 的 stderr 解析（`parseFfmpegStream` 纯函数）。
 > 决策拍板（2026-11-18）：引擎 = ffmpeg · 一期范围 = **压缩 + 转换 + 缩放**（一工具三 Tab）· 格式矩阵**含 AVIF**（慢 5–30s，UI 标注）· 冲突**自动重命名** · GIF **转 webp 保留动画**。
 
 ## 1. 输入项（三 Tab 共享）
@@ -59,7 +60,7 @@
 
 | 通道                           | 类型 | payload → 返回                                                                                                                                                                                                                  |
 | ------------------------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `image-toolbox:probe`          | sync | `{files: string[]}` → `{items: [{file, format, width, height, sizeBytes, animated}]}`；单文件 ffprobe 超时 10s；选后即探测，列表实时展示尺寸/大小                                                                               |
+| `image-toolbox:probe`          | sync | `{files: string[]}` → `{items: [{file, format, width, height, sizeBytes, animated}]}`；单文件探测（`ffmpeg -i` stderr）超时 10s；选后即探测，列表实时展示尺寸/大小                                                              |
 | `image-toolbox:process`        | task | `{mode: compress\|convert\|resize, files, outputDir, options}`（options 形状随 mode zod discriminated union）→ `{taskId}`；progress `{current, total, message}`；done → `{outputs: [{input, output, beforeBytes, afterBytes}]}` |
 | `image-toolbox:config`         | sync | `{}` → `{outputDir}`（settings 记忆回填，缺省 `userData/images`）                                                                                                                                                               |
 | `image-toolbox:set-output-dir` | sync | `{outputDir: string}` → void；选择目录后即时记忆（空串 → `INVALID_PAYLOAD`）                                                                                                                                                    |
@@ -96,12 +97,12 @@
 
 | 错误码                   | 触发                                                 | 中文文案                                           |
 | ------------------------ | ---------------------------------------------------- | -------------------------------------------------- |
-| `IT_ENGINE_MISSING`      | `binaries/download/ffmpeg.exe` / `ffprobe.exe` 缺失  | 处理引擎未就绪，请运行 fetch 脚本获取 ffmpeg       |
+| `IT_ENGINE_MISSING`      | `binaries/download/ffmpeg.exe` 缺失                  | 处理引擎未就绪，请运行 fetch 脚本获取 ffmpeg       |
 | `IT_FILE_UNSUPPORTED`    | 扩展名不在白名单 / 单文件超 200MB / 输入非文件       | 不支持该文件（仅支持常见图片格式，单文件 ≤ 200MB） |
-| `IT_FILE_CORRUPT`        | ffprobe/ffmpeg 解码失败（损坏/加密/截断）            | 文件无法解析，可能已损坏或加密                     |
+| `IT_FILE_CORRUPT`        | 探测无视频流且 stderr 报损坏特征（加密/截断/非图片） | 文件无法解析，可能已损坏或加密                     |
 | `IT_OUTPUT_WRITE_FAILED` | 输出目录不存在/不可写；errno ENOSPC → 磁盘满专项文案 | 输出目录不可写或磁盘空间不足                       |
 | `IT_SCALE_INVALID`       | 缩放参数非法（≤0 / 超上限 / 适配框缺边）             | 缩放参数不正确，请检查后重试                       |
-| `IT_PROBE_FAILED`        | ffprobe 超时/非零退出/JSON 不可解析                  | 无法读取图片信息                                   |
+| `IT_PROBE_FAILED`        | 探测超时 / stderr 无法解析出视频流                   | 无法读取图片信息                                   |
 | `IT_NO_FILES`            | 空文件列表提交（renderer 拦截为主，主进程兜底）      | 请先添加图片文件                                   |
 | `IT_CANCELLED`           | 用户取消（复用 shared `CANCELLED` 语义）             | 已取消（已完成的 N 张保留）                        |
 
@@ -109,7 +110,7 @@
 
 ## 8. 验收标准
 
-1. jpg/png/webp 压缩与互转真实文件成功；avif 输出成功（结果区显示单张耗时）；gif → webp 动画帧数一致（ffprobe 断言）、gif → jpg 仅首帧
+1. jpg/png/webp 压缩与互转真实文件成功；avif 输出成功（结果区显示单张耗时）；gif → webp 动画帧数一致（`ffmpeg` 复读帧数断言）、gif → jpg 仅首帧
 2. 缩放四模式尺寸断言正确；「不放大」边界（目标 > 原图）保持原尺寸
 3. 冲突自动重命名；同批次互不覆盖
 4. 性能：单张 jpg 压缩 < 1s（avif 除外，UI 标注慢）；批量可取消，取消后已完成文件保留

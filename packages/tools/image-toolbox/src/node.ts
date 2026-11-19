@@ -1,11 +1,12 @@
 /**
  * @file image-toolbox 主进程逻辑（node-kit.runProcess + 壳任务队列三段式）
  * @author cuilanchao
- * @date 2026-11-18
- * @description probe（sync，ffprobe 元信息）/ process（task，批量串行 + 可取消）/
- *              config（sync，输出目录记忆）通道注册；引擎复用 binaries/download/ffmpeg.exe
- *              + ffprobe.exe（M4 已拉取，零新增依赖）。批量语义：单张失败不中断批次
- *              （spec §7）；取消 = AbortSignal 杀树，已完成文件保留。deps 可注入便于单测
+ * @date 2026-11-19
+ * @description probe（sync，ffmpeg 元信息）/ process（task，批量串行 + 可取消）/
+ *              config（sync，输出目录记忆）通道注册；引擎只复用 binaries/download/ffmpeg.exe
+ *              （M4 已拉取，零新增依赖；2026-11-19 体积优化移除 ffprobe 依赖，改解析
+ *              `ffmpeg -i` 的 stderr 流信息）。批量语义：单张失败不中断批次（spec §7）；
+ *              取消 = AbortSignal 杀树，已完成文件保留。deps 可注入便于单测
  */
 import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
@@ -53,18 +54,41 @@ function createDefaultDeps(): ImageToolboxDeps {
   }
 }
 
-/** probe/单张尺寸探测超时（spec §4：单文件 ffprobe 10s，超时杀树） */
+/** probe/单张尺寸探测超时（spec §4：单文件探测 10s，超时杀树） */
 export const PROBE_TIMEOUT_MS = 10_000
 
-/** ffprobe JSON 中判定动图的 codec（静态 webp 误标仅影响 -loop 0 与 UI 标签，无视觉差异） */
+/** 判定动图的 codec（与引擎无关的既有口径：静态 webp 误标仅影响 UI 标签，无视觉差异） */
 const ANIMATED_CODECS = new Set(['gif', 'webp', 'apng'])
 
-/** ffprobe JSON 流形状（仅取用字段；宽松解析后经 zod 收口） */
-interface ProbeStream {
-  codec_name?: unknown
-  codec_type?: unknown
-  width?: unknown
-  height?: unknown
+/** 损坏类 stderr 特征（据此把「无可用视频流」细分为文件损坏而非探测失败） */
+const CORRUPT_HINTS =
+  /Invalid data|moov atom not found|does not contain any stream|End of file|No .* data found|Could not find codec parameters/i
+
+/**
+ * 解析 `ffmpeg -i <file>` stderr 中的首个视频流（纯函数，替代 ffprobe 以减小安装包体积）
+ * @param stderr ffmpeg 探测输出（含 `Stream #0:0...: Video: <codec>, ..., <W>x<H>` 行）
+ * @returns codec 名与宽高；无视频流 → null
+ */
+export function parseFfmpegStream(
+  stderr: string
+): { codecName: string; width: number; height: number } | null {
+  for (const line of stderr.split(/\r?\n/)) {
+    const marker = ': Video: '
+    const idx = line.indexOf(marker)
+    if (idx === -1) continue
+    // 只解析 Video 段之后的内容，避免把 `#0:0[0x1]` 之类的流序号误当尺寸
+    const rest = line.slice(idx + marker.length)
+    const codecMatch = /^([^\s,]+)/.exec(rest)
+    const sizeMatch = /(\d+)x(\d+)/.exec(rest)
+    if (codecMatch === null || sizeMatch === null) continue
+    const width = Number(sizeMatch[1])
+    const height = Number(sizeMatch[2])
+    if (width < 1 || height < 1) continue
+    const codecName = codecMatch[1]
+    if (codecName === undefined) continue
+    return { codecName, width, height }
+  }
+  return null
 }
 
 /**
@@ -76,47 +100,37 @@ function diagnose(result: RunProcessResult): string {
 }
 
 /**
- * 单张图片元信息探测（probe 与 resize 共用）：ffprobe JSON → 首个视频流
+ * 单张图片元信息探测（probe 与 resize 共用）：`ffmpeg -i` → 首个视频流
  * @param file 磁盘绝对路径
- * @param ffprobePath ffprobe 可执行文件路径
+ * @param ffmpegPath ffmpeg 可执行文件路径
  * @param deps 可注入依赖
  * @returns 宽高/编码器名（codec_name）/是否动图
  */
 async function probeStream(
   file: string,
-  ffprobePath: string,
+  ffmpegPath: string,
   deps: ImageToolboxDeps
 ): Promise<{ width: number; height: number; codecName: string; animated: boolean }> {
+  // 无输出文件 → ffmpeg 以 code 1 退出并把流信息打到 stderr（不解码，探测开销最小）
   const result = await deps.runProcess({
-    command: ffprobePath,
-    args: ['-v', 'error', '-print_format', 'json', '-show_streams', file],
+    command: ffmpegPath,
+    args: ['-hide_banner', '-i', file],
     timeoutMs: PROBE_TIMEOUT_MS
   })
-  if (result.timedOut || result.code !== 0 || result.aborted) {
+  if (result.timedOut || result.aborted) {
     throw toolError('IT_PROBE_FAILED', diagnose(result))
   }
-  let json: { streams?: ProbeStream[] }
-  try {
-    json = JSON.parse(result.stdout) as { streams?: ProbeStream[] }
-  } catch {
-    throw toolError('IT_PROBE_FAILED', 'ffprobe 输出不是合法 JSON')
-  }
-  const stream = json.streams?.find((s) => s.codec_type === 'video')
-  if (
-    stream === undefined ||
-    typeof stream.width !== 'number' ||
-    typeof stream.height !== 'number' ||
-    typeof stream.codec_name !== 'string' ||
-    stream.width < 1 ||
-    stream.height < 1
-  ) {
-    throw toolError('IT_FILE_CORRUPT', 'ffprobe 未返回有效视频流（可能非图片或已损坏）')
+  const stream = parseFfmpegStream(result.stderr)
+  if (stream === null) {
+    // 有视频流行但取不到尺寸（实测损坏 jpg：`Video: mjpeg, none(...), 25 fps` 无 WxH）也算损坏
+    const corrupt = result.stderr.includes(': Video: ') || CORRUPT_HINTS.test(result.stderr)
+    throw toolError(corrupt ? 'IT_FILE_CORRUPT' : 'IT_PROBE_FAILED', diagnose(result))
   }
   return {
     width: stream.width,
     height: stream.height,
-    codecName: stream.codec_name,
-    animated: ANIMATED_CODECS.has(stream.codec_name)
+    codecName: stream.codecName,
+    animated: ANIMATED_CODECS.has(stream.codecName)
   }
 }
 
@@ -128,12 +142,11 @@ async function probeStream(
 export function registerWith(ctx: MainPluginContext, deps: ImageToolboxDeps): void {
   const engineDir = join(ctx.paths.binaries, 'download')
   const ffmpegPath = join(engineDir, 'ffmpeg.exe')
-  const ffprobePath = join(engineDir, 'ffprobe.exe')
   const defaultOutputDir = join(ctx.paths.userData, 'images')
 
-  /** 引擎预检：两个可执行文件存在即过（SHA 由 fetch 脚本负责） */
+  /** 引擎预检：ffmpeg 存在即过（SHA 由 fetch 脚本负责） */
   const ensureEngine = (): ReturnType<typeof toolError> | null =>
-    existsSync(ffmpegPath) && existsSync(ffprobePath) ? null : toolError('IT_ENGINE_MISSING')
+    existsSync(ffmpegPath) ? null : toolError('IT_ENGINE_MISSING')
 
   // —— probe（sync）：选文件后即探测，列表实时展示尺寸/大小（spec §4） ——
   ctx.registerIpc('probe', async ({ payload }) => {
@@ -148,7 +161,7 @@ export function registerWith(ctx: MainPluginContext, deps: ImageToolboxDeps): vo
         const stat = statSync(file)
         if (!stat.isFile() || stat.size > MAX_FILE_BYTES) throw toolError('IT_FILE_UNSUPPORTED')
         if (extensionOf(file) === null) throw toolError('IT_FILE_UNSUPPORTED')
-        const info = await probeStream(file, ffprobePath, deps)
+        const info = await probeStream(file, ffmpegPath, deps)
         items.push(
           probeResultSchema.shape.items.element.parse({
             file,
@@ -192,7 +205,6 @@ export function registerWith(ctx: MainPluginContext, deps: ImageToolboxDeps): vo
     try {
       return await runProcessTask(taskCtx, {
         ffmpegPath,
-        ffprobePath,
         defaultOutputDir,
         deps,
         settings: ctx.settings
@@ -211,7 +223,6 @@ export function registerWith(ctx: MainPluginContext, deps: ImageToolboxDeps): vo
 /** process 任务上下文所需的闭包资源（registerWith 组装，runProcessTask 消费） */
 interface ProcessEnv {
   ffmpegPath: string
-  ffprobePath: string
   /** outputDir 缺省回填根（壳注入 userData/images） */
   defaultOutputDir: string
   deps: ImageToolboxDeps
@@ -242,7 +253,7 @@ async function runProcessTask(
 ): Promise<ProcessResult> {
   const parsed = processPayloadSchema.safeParse(taskCtx.payload)
   if (!parsed.success) throw makeError('INVALID_PAYLOAD', '参数无效')
-  if (!existsSync(env.ffmpegPath) || !existsSync(env.ffprobePath)) {
+  if (!existsSync(env.ffmpegPath)) {
     throw toolError('IT_ENGINE_MISSING')
   }
   const input = parsed.data
@@ -280,7 +291,6 @@ async function runProcessTask(
       const output = await processOne(file, input, {
         outputDir,
         ffmpegPath: env.ffmpegPath,
-        ffprobePath: env.ffprobePath,
         deps: env.deps,
         existing,
         signal: taskCtx.signal
@@ -308,7 +318,6 @@ async function runProcessTask(
 interface SingleEnv {
   outputDir: string
   ffmpegPath: string
-  ffprobePath: string
   deps: ImageToolboxDeps
   /** 已占用文件名集合（lowercase 键，分配后回写） */
   existing: Set<string>
@@ -347,8 +356,8 @@ async function processOne(
   } else {
     ext = payload.options.format
     quality = payload.options.quality
-    // 缩放需原始尺寸：ffprobe 探测（损坏 → IT_PROBE_FAILED 归入单张失败）
-    const info = await probeStream(file, env.ffprobePath, env.deps)
+    // 缩放需原始尺寸：ffmpeg 探测（损坏 → 单张失败项）
+    const info = await probeStream(file, env.ffmpegPath, env.deps)
     const target = resolveTargetSize(
       { width: info.width, height: info.height },
       resizeParamsOf(payload.options),

@@ -10,15 +10,15 @@
 - 验证人：cuilanchao
 - 日期：2026-11-18
 - 分支：`feature/m4-download`
-- 引擎：yt-dlp 2026.10.26（SHA256 `f5389d…77a7d`，实测 23,575,744 bytes）+ ffmpeg-static b6.1.1 win32-x64（ffmpeg.exe 82,797,568 bytes / SHA `04e130…4ad00`；ffprobe.exe 82,668,032 bytes / SHA `3a7e2d…51ba4`）
+- 引擎：yt-dlp 2026.10.26（SHA256 `f5389d…77a7d`，实测 23,575,744 bytes）+ ffmpeg-static b6.1.1 win32-x64（ffmpeg.exe 82,797,568 bytes / SHA `04e130…4ad00`）。**2026-11-19 体积优化（plan §4.10）**：ffprobe.exe 已从 fetch 脚本与随包资源移除（当年实测 82,668,032 bytes / SHA `3a7e2d…51ba4`），yt-dlp 仅用 ffmpeg 合流不受影响
 
 ## 0. R5 chunk / 资产口径记录
 
-| 项           | 体积                                                                      | 说明                                                                                                                                                    |
-| ------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 工具 chunk   | 11.0KB gzip（40.4KB raw）                                                 | `video-download-*.js`，实测 electron-vite build 产物                                                                                                    |
-| 独占依赖增量 | **0**                                                                     | Select/Popover/Popconfirm/Spin/TaskProgress/createLucideIcon 均被壳或其他工具引用（逐 chunk import 关系实测）                                           |
-| 引擎资产     | yt-dlp.exe 22.5MB + ffmpeg.exe 79.0MB + ffprobe.exe 78.8MB（合计 ≈180MB） | `binaries/download/`，fetch 脚本固定 URL + SHA256 钉死（ffmpeg/ffprobe 为 .gz 下载解压后校验），不入 git、不计入 chunk 口径（AGENTS §8 运行时资产例外） |
+| 项           | 体积                                                   | 说明                                                                                                                                                                                            |
+| ------------ | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 工具 chunk   | 11.0KB gzip（40.4KB raw）                              | `video-download-*.js`，实测 electron-vite build 产物                                                                                                                                            |
+| 独占依赖增量 | **0**                                                  | Select/Popover/Popconfirm/Spin/TaskProgress/createLucideIcon 均被壳或其他工具引用（逐 chunk import 关系实测）                                                                                   |
+| 引擎资产     | yt-dlp.exe 22.5MB + ffmpeg.exe 79.0MB（合计 ≈101.5MB） | `binaries/download/`，fetch 脚本固定 URL + SHA256 钉死（ffmpeg 为 .gz 下载解压后校验），不入 git、不计入 chunk 口径（AGENTS §8 运行时资产例外）；2026-11-19 移除 ffprobe（-78.8MB，plan §4.10） |
 
 结论：工具 chunk 11.0KB gzip ≪ 200KB 上限（R5 达标）。
 
@@ -49,7 +49,7 @@
 
 - [x] best 预设下载：bv+ba 经 ffmpeg 合流，中文空格目录产物 21.5MB、212.3s 完整
 - [x] 1080p 预设下载：`bv*[height<=1080]+ba/b[height<=1080]` 产物完整
-- [x] audio-mp3 预设：`-f ba -x --audio-format mp3` 转码产物 ffprobe 验证 format_name=mp3、duration 212.35s（`--ffmpeg-location` 指向 `binaries/download/` 生效）
+- [x] audio-mp3 预设：`-f ba -x --audio-format mp3` 转码产物 ffprobe 验证 format_name=mp3、duration 212.35s（`--ffmpeg-location` 指向 `binaries/download/` 生效；ffprobe 已于 2026-11-19 移除，后续复验改用 `ffmpeg -i`）
 - [x] 暂停 → 续传：限速杀树 `.part` 保留 → `--continue` 断点接续 → 完整产物（见 §1 #5）
 - [x] 抖音试探：假 id 短链 `VD_UNSUPPORTED_PLATFORM`；真实分享口令短链解析出 id 但取流需 cookies（`Fresh cookies are needed`，cookie 支持列二期）——分享口令整段粘贴已支持（schema preprocess 提取 URL，单测 56/56）
 - [ ] YouTube：本网络不可达（`Connection to www.youtube.com timed out`，connect timeout 12s 重试 3 次失败）。yt-dlp 内置 youtube extractor，网络可达环境可直接验证，不阻塞本里程碑
