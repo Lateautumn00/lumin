@@ -15,6 +15,8 @@ const appDir = path.resolve(__dirname, '..')
 const fixturesDir = path.resolve(__dirname, '../../../packages/tools/docx2pdf/fixtures')
 const fixtureFile = path.join(fixturesDir, '保真样例.docx')
 const encryptedFixture = path.join(fixturesDir, '加密样例.docx')
+const xlsxFixture = path.join(fixturesDir, '表格样例.xlsx')
+const pptxFixture = path.join(fixturesDir, '演示样例.pptx')
 
 interface StatusResult {
   source: 'custom' | 'system' | 'portable' | 'none'
@@ -58,12 +60,12 @@ async function pollNoNewTaskDirs(baseline: Set<string>, timeoutMs = 8000): Promi
   }
 }
 
-test.describe('docx2pdf（Word 转 PDF）冒烟', () => {
+test.describe('docx2pdf（Office 转 PDF）冒烟', () => {
   test('状态与自定义路径往返：status 枚举 + set-path 保存/清空', async () => {
     const { app, page } = await launch()
     try {
-      await page.getByRole('link', { name: 'Word 转 PDF' }).click()
-      await expect(page.getByRole('heading', { name: 'Word 转 PDF' })).toBeVisible()
+      await page.getByRole('link', { name: 'Office 转 PDF' }).click()
+      await expect(page.getByRole('heading', { name: 'Office 转 PDF' })).toBeVisible()
 
       const status = await getStatus(page)
       expect(['custom', 'system', 'portable', 'none']).toContain(status.source)
@@ -138,7 +140,7 @@ test.describe('docx2pdf（Word 转 PDF）冒烟', () => {
                 }
               })
               window.lumin
-                .invoke<{ taskId: string }>('docx2pdf:convert', { inputPath: input })
+                .invoke<{ taskId: string }>('docx2pdf:convert', { inputPaths: [input] })
                 .then(({ taskId }) => {
                   currentTaskId = taskId
                 })
@@ -152,13 +154,101 @@ test.describe('docx2pdf（Word 转 PDF）冒烟', () => {
       )
 
       expect(outcome.hasProgress).toBe(true)
-      const result = outcome.result as { outputPath: string }
+      const result = outcome.result as { outputs: { outputPath: string }[]; failures: unknown[] }
+      expect(result.failures).toEqual([])
+      const outputPath = result.outputs[0]?.outputPath ?? ''
       // 输出同目录同基名（中文+空格保留）
-      expect(result.outputPath).toBe(path.join(workDir, '保真 样例 v2.pdf'))
-      expect(fs.existsSync(result.outputPath)).toBe(true)
-      const head = fs.readFileSync(result.outputPath).subarray(0, 5).toString('latin1')
+      expect(outputPath).toBe(path.join(workDir, '保真 样例 v2.pdf'))
+      expect(fs.existsSync(outputPath)).toBe(true)
+      const head = fs.readFileSync(outputPath).subarray(0, 5).toString('latin1')
       expect(head).toBe('%PDF-')
       // finally 清理：无 lumin-docx2pdf-* 残留
+      expect(await pollNoNewTaskDirs(taskDirSnapshot())).toBe(true)
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('批量转换：成功项与失败项并行上报（单文件失败不中断批次）', async () => {
+    test.setTimeout(240_000)
+    const { app, page } = await launch()
+    const workDir = path.join(os.tmpdir(), 'lumin-d2p-batch')
+    fs.rmSync(workDir, { recursive: true, force: true })
+    fs.mkdirSync(workDir, { recursive: true })
+    try {
+      const status = await getStatus(page)
+      test.skip(status.source === 'none', '本机无 LibreOffice')
+      const docx = path.join(workDir, '批量甲.docx')
+      fs.copyFileSync(fixtureFile, docx)
+      const xlsx = path.join(workDir, '批量乙.xlsx')
+      fs.copyFileSync(xlsxFixture, xlsx)
+      const pptx = path.join(workDir, '批量丙.pptx')
+      fs.copyFileSync(pptxFixture, pptx)
+      // 缺失的 .xlsx：触发单文件失败，验证批次不中断
+      const missing = path.join(workDir, '缺失.xlsx')
+
+      const outcome = await page.evaluate(
+        (inputs: string[]) =>
+          new Promise<{
+            totals: number[]
+            result: {
+              outputs: { inputPath: string; outputPath: string }[]
+              failures: { inputPath: string; code: string; message: string }[]
+            }
+          }>((resolve, reject) => {
+            let taskId = ''
+            const totals: number[] = []
+            const off = window.lumin.onTaskEvent((ev) => {
+              if (ev.taskId !== taskId) return
+              if (ev.kind === 'progress') {
+                if (ev.total !== undefined) totals.push(ev.total)
+              } else if (ev.kind === 'done') {
+                off()
+                resolve({
+                  totals,
+                  result: ev.result as {
+                    outputs: { inputPath: string; outputPath: string }[]
+                    failures: { inputPath: string; code: string; message: string }[]
+                  }
+                })
+              } else if (ev.kind === 'error') {
+                off()
+                reject(new Error(`${ev.error.code}: ${ev.error.message}`))
+              }
+            })
+            window.lumin
+              .invoke<{ taskId: string }>('docx2pdf:convert', { inputPaths: inputs })
+              .then(({ taskId: id }) => {
+                taskId = id
+              })
+              .catch((err: unknown) => {
+                off()
+                reject(err)
+              })
+          }),
+        [docx, xlsx, pptx, missing]
+      )
+
+      expect(outcome.totals.length).toBeGreaterThanOrEqual(2)
+      expect(outcome.totals.every((total) => total === 4)).toBe(true)
+      expect(outcome.result.outputs).toEqual([
+        { inputPath: docx, outputPath: path.join(workDir, '批量甲.pdf') },
+        { inputPath: xlsx, outputPath: path.join(workDir, '批量乙.pdf') },
+        { inputPath: pptx, outputPath: path.join(workDir, '批量丙.pdf') }
+      ])
+      expect(outcome.result.failures).toMatchObject([
+        {
+          inputPath: missing,
+          code: 'INPUT_NOT_FOUND',
+          message: '输入文件不存在，请重新选择'
+        }
+      ])
+      for (const output of outcome.result.outputs) {
+        const head = fs.readFileSync(output.outputPath).subarray(0, 5)
+        expect(head.toString('latin1')).toBe('%PDF-')
+      }
+      expect(fs.existsSync(path.join(workDir, '缺失.pdf'))).toBe(false)
       expect(await pollNoNewTaskDirs(taskDirSnapshot())).toBe(true)
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true })
@@ -204,7 +294,7 @@ test.describe('docx2pdf（Word 转 PDF）冒烟', () => {
               }
             })
             window.lumin
-              .invoke<{ taskId: string }>('docx2pdf:convert', { inputPath: input })
+              .invoke<{ taskId: string }>('docx2pdf:convert', { inputPaths: [input] })
               .then(({ taskId }) => {
                 currentTaskId = taskId
               })
@@ -253,7 +343,7 @@ test.describe('docx2pdf（Word 转 PDF）冒烟', () => {
               }
             })
             window.lumin
-              .invoke<{ taskId: string }>('docx2pdf:convert', { inputPath: input })
+              .invoke<{ taskId: string }>('docx2pdf:convert', { inputPaths: [input] })
               .then(({ taskId }) => {
                 currentTaskId = taskId
               })
@@ -313,7 +403,7 @@ test.describe('docx2pdf（Word 转 PDF）冒烟', () => {
               }
             })
             window.lumin
-              .invoke<{ taskId: string }>('docx2pdf:convert', { inputPath: input })
+              .invoke<{ taskId: string }>('docx2pdf:convert', { inputPaths: [input] })
               .then(({ taskId: id }) => {
                 taskId = id
                 if (wantCancel) doCancel()
@@ -355,8 +445,8 @@ test.describe('docx2pdf（Word 转 PDF）冒烟', () => {
             const donePaths: string[] = []
             const off = window.lumin.onTaskEvent((ev) => {
               if (ev.kind === 'done') {
-                const result = ev.result as { outputPath?: string }
-                donePaths.push(result.outputPath ?? '')
+                const result = ev.result as { outputs?: { outputPath: string }[] }
+                donePaths.push(result.outputs?.[0]?.outputPath ?? '')
                 if (donePaths.length === inputs.length) {
                   off()
                   resolve(donePaths)
@@ -368,7 +458,7 @@ test.describe('docx2pdf（Word 转 PDF）冒烟', () => {
             })
             Promise.all(
               inputs.map((input) =>
-                window.lumin.invoke<{ taskId: string }>('docx2pdf:convert', { inputPath: input })
+                window.lumin.invoke<{ taskId: string }>('docx2pdf:convert', { inputPaths: [input] })
               )
             ).catch((err: unknown) => {
               off()
@@ -424,7 +514,7 @@ test.describe('docx2pdf（Word 转 PDF）冒烟', () => {
               }
             })
             window.lumin
-              .invoke<{ taskId: string }>('docx2pdf:convert', { inputPath: input })
+              .invoke<{ taskId: string }>('docx2pdf:convert', { inputPaths: [input] })
               .then(({ taskId }) => {
                 currentTaskId = taskId
               })
@@ -456,14 +546,17 @@ test.describe('docx2pdf（Word 转 PDF）冒烟', () => {
                 if (ev.taskId !== currentTaskId) return
                 if (ev.kind === 'done') {
                   off()
-                  resolve((ev.result as { outputPath: string }).outputPath)
+                  resolve(
+                    (ev.result as { outputs: { outputPath: string }[] }).outputs[0]?.outputPath ??
+                      ''
+                  )
                 } else if (ev.kind === 'error') {
                   off()
                   reject(new Error(`${ev.error.code}: ${ev.error.message}`))
                 }
               })
               window.lumin
-                .invoke<{ taskId: string }>('docx2pdf:convert', { inputPath: input })
+                .invoke<{ taskId: string }>('docx2pdf:convert', { inputPaths: [input] })
                 .then(({ taskId }) => {
                   currentTaskId = taskId
                 })

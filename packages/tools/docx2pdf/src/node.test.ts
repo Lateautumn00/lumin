@@ -263,21 +263,23 @@ describe('docx2pdf registerMain', () => {
       const harness = createHarness({ run: fakeConvertRun() })
       const input = makeInput(harness)
       const updates: TaskUpdate[] = []
-      const result = (await runTask(harness, 'convert', { inputPath: input }, { updates })) as {
-        outputPath: string
+      const result = (await runTask(harness, 'convert', { inputPaths: [input] }, { updates })) as {
+        outputs: { inputPath: string; outputPath: string }[]
+        failures: unknown[]
       }
-      expect(result.outputPath).toBe(join(harness.root, 'in', '报告.pdf'))
-      expect(existsSync(result.outputPath)).toBe(true)
+      expect(result.failures).toEqual([])
+      expect(result.outputs[0]?.outputPath).toBe(join(harness.root, 'in', '报告.pdf'))
+      expect(existsSync(result.outputs[0]?.outputPath ?? '')).toBe(true)
       expect(
         updates.map((update) => (update.kind === 'progress' ? update.stage : undefined))
-      ).toEqual(['locate', 'convert', 'verify', 'done'])
+      ).toEqual(['locate', 'convert', 'done'])
       expect(readdirSync(harness.tempRoot)).toEqual([])
     })
 
     it('输入不存在 → INPUT_NOT_FOUND', async () => {
       const harness = createHarness()
       await expect(
-        runTask(harness, 'convert', { inputPath: join(harness.root, 'nope.docx') })
+        runTask(harness, 'convert', { inputPaths: [join(harness.root, 'nope.docx')] })
       ).rejects.toMatchObject({ code: 'INPUT_NOT_FOUND' })
     })
 
@@ -288,7 +290,7 @@ describe('docx2pdf registerMain', () => {
         }
       })
       const input = makeInput(harness)
-      await expect(runTask(harness, 'convert', { inputPath: input })).rejects.toMatchObject({
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
         code: 'INPUT_LOCKED'
       })
     })
@@ -296,7 +298,7 @@ describe('docx2pdf registerMain', () => {
     it('无可用组件 → SOFFICE_NOT_FOUND', async () => {
       const harness = createHarness({ queryRegistry: async () => null })
       const input = makeInput(harness)
-      await expect(runTask(harness, 'convert', { inputPath: input })).rejects.toMatchObject({
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
         code: 'SOFFICE_NOT_FOUND'
       })
     })
@@ -304,7 +306,7 @@ describe('docx2pdf registerMain', () => {
     it('非法扩展名 → INVALID_PAYLOAD', async () => {
       const harness = createHarness()
       await expect(
-        runTask(harness, 'convert', { inputPath: join(harness.root, 'a.txt') })
+        runTask(harness, 'convert', { inputPaths: [join(harness.root, 'a.txt')] })
       ).rejects.toMatchObject({ code: 'INVALID_PAYLOAD' })
     })
 
@@ -313,7 +315,7 @@ describe('docx2pdf registerMain', () => {
         run: async () => okResult({ timedOut: true, code: null })
       })
       const input = makeInput(harness)
-      await expect(runTask(harness, 'convert', { inputPath: input })).rejects.toMatchObject({
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
         code: 'CONVERT_TIMEOUT'
       })
     })
@@ -323,7 +325,7 @@ describe('docx2pdf registerMain', () => {
         run: async () => okResult({ code: 1, stderr: 'Error: source file could not be loaded!' })
       })
       const input = makeInput(harness)
-      await expect(runTask(harness, 'convert', { inputPath: input })).rejects.toMatchObject({
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
         code: 'INPUT_LOAD_FAILED'
       })
     })
@@ -333,7 +335,7 @@ describe('docx2pdf registerMain', () => {
         run: async () => okResult({ code: 2, stderr: 'boom' })
       })
       const input = makeInput(harness)
-      await expect(runTask(harness, 'convert', { inputPath: input })).rejects.toMatchObject({
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
         code: 'CONVERT_FAILED',
         detail: 'boom'
       })
@@ -342,7 +344,7 @@ describe('docx2pdf registerMain', () => {
     it('假成功（无 PDF 产物）→ OUTPUT_MISSING 且工作目录清理', async () => {
       const harness = createHarness({ run: async () => okResult() })
       const input = makeInput(harness)
-      await expect(runTask(harness, 'convert', { inputPath: input })).rejects.toMatchObject({
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
         code: 'OUTPUT_MISSING'
       })
       expect(readdirSync(harness.tempRoot)).toEqual([])
@@ -351,7 +353,7 @@ describe('docx2pdf registerMain', () => {
     it('产物头非 %PDF- → OUTPUT_MISSING', async () => {
       const harness = createHarness({ run: fakeConvertRun('<html>fake</html>') })
       const input = makeInput(harness)
-      await expect(runTask(harness, 'convert', { inputPath: input })).rejects.toMatchObject({
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
         code: 'OUTPUT_MISSING'
       })
     })
@@ -360,10 +362,10 @@ describe('docx2pdf registerMain', () => {
       const harness = createHarness({ run: fakeConvertRun() })
       const input = makeInput(harness)
       writeFileSync(join(harness.root, 'in', '报告.pdf'), 'existing')
-      const result = (await runTask(harness, 'convert', { inputPath: input })) as {
-        outputPath: string
+      const result = (await runTask(harness, 'convert', { inputPaths: [input] })) as {
+        outputs: { outputPath: string }[]
       }
-      expect(result.outputPath).toBe(join(harness.root, 'in', '报告(1).pdf'))
+      expect(result.outputs[0]?.outputPath).toBe(join(harness.root, 'in', '报告(1).pdf'))
     })
 
     it('spawn 失败 → SPAWN_FAILED', async () => {
@@ -373,7 +375,7 @@ describe('docx2pdf registerMain', () => {
         }
       })
       const input = makeInput(harness)
-      await expect(runTask(harness, 'convert', { inputPath: input })).rejects.toMatchObject({
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
         code: 'SPAWN_FAILED'
       })
     })
@@ -387,7 +389,7 @@ describe('docx2pdf registerMain', () => {
         }
       }
       const input = makeInput(harness)
-      await expect(runTask(harness, 'convert', { inputPath: input })).rejects.toMatchObject({
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
         code: 'OUTPUT_WRITE_FAILED',
         detail: 'ENOSPC'
       })
@@ -402,7 +404,7 @@ describe('docx2pdf registerMain', () => {
         }
       })
       const input = makeInput(harness)
-      await expect(runTask(harness, 'convert', { inputPath: input })).rejects.toMatchObject({
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
         code: 'OUTPUT_WRITE_FAILED',
         detail: 'EACCES'
       })
@@ -416,10 +418,10 @@ describe('docx2pdf registerMain', () => {
         }
       })
       const input = makeInput(harness)
-      const result = (await runTask(harness, 'convert', { inputPath: input })) as {
-        outputPath: string
+      const result = (await runTask(harness, 'convert', { inputPaths: [input] })) as {
+        outputs: { outputPath: string }[]
       }
-      expect(result.outputPath.endsWith('报告.pdf')).toBe(true)
+      expect(result.outputs[0]?.outputPath.endsWith('报告.pdf')).toBe(true)
     })
 
     it('并发提交串行执行（convert 互斥）', async () => {
@@ -436,12 +438,117 @@ describe('docx2pdf registerMain', () => {
       const inputA = makeInput(harness, 'a.docx')
       const inputB = makeInput(harness, 'b.docx')
       const [first, second] = await Promise.all([
-        runTask(harness, 'convert', { inputPath: inputA }, { taskId: 't-a' }),
-        runTask(harness, 'convert', { inputPath: inputB }, { taskId: 't-b' })
+        runTask(harness, 'convert', { inputPaths: [inputA] }, { taskId: 't-a' }),
+        runTask(harness, 'convert', { inputPaths: [inputB] }, { taskId: 't-b' })
       ])
       expect(maxActive).toBe(1)
-      expect(first).toEqual({ outputPath: join(harness.root, 'in', 'a.pdf') })
-      expect(second).toEqual({ outputPath: join(harness.root, 'in', 'b.pdf') })
+      expect(first).toEqual({
+        outputs: [{ inputPath: inputA, outputPath: join(harness.root, 'in', 'a.pdf') }],
+        failures: []
+      })
+      expect(second).toEqual({
+        outputs: [{ inputPath: inputB, outputPath: join(harness.root, 'in', 'b.pdf') }],
+        failures: []
+      })
+    })
+
+    it('批量：多格式逐条转换，结果按提交顺序返回且进度带 total', async () => {
+      const harness = createHarness({ run: fakeConvertRun() })
+      const a = makeInput(harness, '甲.docx')
+      const b = makeInput(harness, '乙.xlsx')
+      const c = makeInput(harness, '丙.pptx')
+      const updates: TaskUpdate[] = []
+      const result = (await runTask(
+        harness,
+        'convert',
+        { inputPaths: [a, b, c] },
+        { updates }
+      )) as {
+        outputs: { inputPath: string; outputPath: string }[]
+        failures: unknown[]
+      }
+      expect(result.failures).toEqual([])
+      expect(result.outputs.map((item) => item.outputPath)).toEqual([
+        join(harness.root, 'in', '甲.pdf'),
+        join(harness.root, 'in', '乙.pdf'),
+        join(harness.root, 'in', '丙.pdf')
+      ])
+      expect(updates.map((u) => (u.kind === 'progress' ? u.current : -1))).toEqual([0, 1, 2, 3, 3])
+      expect(updates.map((u) => (u.kind === 'progress' ? u.total : -1))).toEqual([3, 3, 3, 3, 3])
+      expect(readdirSync(harness.tempRoot)).toEqual([])
+    })
+
+    it('批量部分失败：单文件失败不中断，失败项随结果上报', async () => {
+      const harness = createHarness({ run: fakeConvertRun() })
+      const ok1 = makeInput(harness, 'ok1.docx')
+      const missing = join(harness.root, 'in', '不存在.xlsx')
+      const ok2 = makeInput(harness, 'ok2.pptx')
+      const result = (await runTask(harness, 'convert', { inputPaths: [ok1, missing, ok2] })) as {
+        outputs: { outputPath: string }[]
+        failures: { inputPath: string; code: string; message: string }[]
+      }
+      expect(result.outputs.map((item) => item.outputPath)).toEqual([
+        join(harness.root, 'in', 'ok1.pdf'),
+        join(harness.root, 'in', 'ok2.pdf')
+      ])
+      expect(result.failures).toMatchObject([
+        {
+          inputPath: missing,
+          code: 'INPUT_NOT_FOUND',
+          message: '输入文件不存在，请重新选择'
+        }
+      ])
+    })
+
+    it('批量全部失败：抛首个结构化错误（保持单文件重试语义）', async () => {
+      const harness = createHarness({ run: fakeConvertRun() })
+      const missingA = join(harness.root, 'in', '缺甲.docx')
+      const missingB = join(harness.root, 'in', '缺乙.xlsx')
+      await expect(
+        runTask(harness, 'convert', { inputPaths: [missingA, missingB] })
+      ).rejects.toMatchObject({ code: 'INPUT_NOT_FOUND' })
+    })
+
+    it('重复路径（大小写不敏感）只转换一次', async () => {
+      const harness = createHarness({ run: fakeConvertRun() })
+      const input = makeInput(harness, '重复.docx')
+      const duplicated = input.replace('重复.docx', '重复.DOCX')
+      const updates: TaskUpdate[] = []
+      const result = (await runTask(
+        harness,
+        'convert',
+        { inputPaths: [input, duplicated] },
+        { updates }
+      )) as { outputs: unknown[] }
+      expect(result.outputs).toHaveLength(1)
+      const convertUpdates = updates.filter(
+        (update) => update.kind === 'progress' && update.stage === 'convert'
+      )
+      expect(convertUpdates).toHaveLength(1)
+    })
+
+    it('批量同名基名（不同扩展名）→ 第二个自动 (1) 后缀', async () => {
+      const harness = createHarness({ run: fakeConvertRun() })
+      const a = makeInput(harness, '同名.docx')
+      const b = makeInput(harness, '同名.xlsx')
+      const result = (await runTask(harness, 'convert', { inputPaths: [a, b] })) as {
+        outputs: { outputPath: string }[]
+      }
+      expect(result.outputs.map((item) => item.outputPath)).toEqual([
+        join(harness.root, 'in', '同名.pdf'),
+        join(harness.root, 'in', '同名(1).pdf')
+      ])
+    })
+
+    it('空数组 / 超过 100 个 → INVALID_PAYLOAD', async () => {
+      const harness = createHarness()
+      await expect(runTask(harness, 'convert', { inputPaths: [] })).rejects.toMatchObject({
+        code: 'INVALID_PAYLOAD'
+      })
+      const tooMany = Array.from({ length: 101 }, (_unused, index) => `C:\\x\\f${index}.docx`)
+      await expect(runTask(harness, 'convert', { inputPaths: tooMany })).rejects.toMatchObject({
+        code: 'INVALID_PAYLOAD'
+      })
     })
 
     it('取消：信号中止 → 拒绝且工作目录清理', async () => {
@@ -458,7 +565,7 @@ describe('docx2pdf registerMain', () => {
       const promise = runTask(
         harness,
         'convert',
-        { inputPath: input },
+        { inputPaths: [input] },
         { signal: controller.signal }
       )
       controller.abort()
@@ -480,11 +587,11 @@ describe('docx2pdf registerMain', () => {
       })
       const inputA = makeInput(harness, 'a.docx')
       const inputB = makeInput(harness, 'b.docx')
-      const first = runTask(harness, 'convert', { inputPath: inputA }, { taskId: 't-1' })
+      const first = runTask(harness, 'convert', { inputPaths: [inputA] }, { taskId: 't-1' })
       const second = runTask(
         harness,
         'convert',
-        { inputPath: inputB },
+        { inputPaths: [inputB] },
         { taskId: 't-2', signal: controller.signal }
       )
       await new Promise((resolve) => setTimeout(resolve, 10))

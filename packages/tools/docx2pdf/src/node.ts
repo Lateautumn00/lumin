@@ -10,6 +10,7 @@ import {
 } from '@lumin/node-kit'
 import type { MainPluginContext, RegisterMain, TaskHandlerContext } from '@lumin/plugin-api'
 import { makeError } from '@lumin/shared'
+import { batchProgressMessage, dedupeInputPaths, toBatchFailure } from './batch'
 import {
   buildConvertArgs,
   convertDetail,
@@ -24,6 +25,7 @@ import {
 } from './convert'
 import { downloadMsi, type DownloadOptions } from './download'
 import { toolError, errnoCode, isStructuredError } from './errors'
+import { OFFICE_INPUT_HINT } from './formats'
 import { locateSoffice, parseRegistryInstallPath, probeSofficeDir } from './locate'
 import { createMutex } from './mutex'
 import { resolveOutputPath } from './naming'
@@ -31,6 +33,9 @@ import {
   convertPayloadSchema,
   installPayloadSchema,
   setPathPayloadSchema,
+  type BatchConvertResult,
+  type BatchFailure,
+  type BatchOutput,
   type StatusResult
 } from './schema'
 
@@ -96,27 +101,26 @@ export function registerWith(ctx: MainPluginContext, deps: Docx2pdfDeps): void {
     return currentStatus()
   })
 
-  async function runConvert(
-    inputPath: string,
-    args: { taskId: string; signal: AbortSignal; emit: TaskHandlerContext<unknown>['emit'] }
-  ): Promise<{ outputPath: string }> {
-    const { taskId, signal, emit } = args
+  /**
+   * 单文件转换流水线：预检 → 转换 → 产物校验 → 移入输入同目录。
+   * 批量内按序号使用独立工作目录，避免不同目录同名基名产物互串。
+   */
+  async function convertOne(args: {
+    inputPath: string
+    command: string
+    workDir: string
+    index: number
+    total: number
+    signal: AbortSignal
+    emit: TaskHandlerContext<unknown>['emit']
+  }): Promise<string> {
+    const { inputPath, command, workDir, index, total, signal, emit } = args
     if (signal.aborted) throw new Error('aborted')
-    emit({ kind: 'progress', current: 0, stage: 'locate', message: '定位转换组件…' })
     await precheckInput(inputPath, deps)
-
-    const locate = await locateSoffice({
-      customPath: await ctx.settings.get('customPath', ''),
-      portableDir: portableProgramDir,
-      queryRegistry: deps.queryRegistry,
-      exists: deps.fileExists
-    })
-    if (locate.source === 'none' || locate.path === undefined) throw toolError('SOFFICE_NOT_FOUND')
 
     const outputPath = resolveOutputPath(inputPath, deps.fileExists)
     if (outputPath === null) throw toolError('OUTPUT_MISSING', '同名输出已存在 99 个')
 
-    const workDir = taskWorkDir(ctx.paths.temp, taskId)
     try {
       await deps.makeDir(workDir)
     } catch (err) {
@@ -124,8 +128,13 @@ export function registerWith(ctx: MainPluginContext, deps: Docx2pdfDeps): void {
       throw toolError('OUTPUT_WRITE_FAILED', errnoCode(err) || String(err))
     }
     try {
-      emit({ kind: 'progress', current: 1, stage: 'convert', message: '转换中…（最长 60 秒）' })
-      const command = pickSofficeCommand(locate.path)
+      emit({
+        kind: 'progress',
+        current: index + 1,
+        total,
+        stage: 'convert',
+        message: batchProgressMessage(index, total, inputPath)
+      })
       const convertArgs = buildConvertArgs({
         inputPath,
         outDir: workDir,
@@ -153,7 +162,6 @@ export function registerWith(ctx: MainPluginContext, deps: Docx2pdfDeps): void {
         )
       }
 
-      emit({ kind: 'progress', current: 2, stage: 'verify', message: '校验产物…' })
       const produced = producedPdfPath(workDir, inputPath)
       const valid = await verifyPdfOutput(produced, deps.readHead)
       if (!valid) {
@@ -165,8 +173,7 @@ export function registerWith(ctx: MainPluginContext, deps: Docx2pdfDeps): void {
         if (isStructuredError(err)) throw err
         throw toolError('OUTPUT_WRITE_FAILED', errnoCode(err) || String(err))
       }
-      emit({ kind: 'progress', current: 3, stage: 'done', message: '完成' })
-      return { outputPath }
+      return outputPath
     } finally {
       // spec §7.4：清理失败仅记日志，不阻塞结果（AGENTS §13）
       try {
@@ -179,10 +186,76 @@ export function registerWith(ctx: MainPluginContext, deps: Docx2pdfDeps): void {
 
   ctx.registerTask('convert', async ({ payload, taskId, signal, emit }) => {
     const parsed = convertPayloadSchema.safeParse(payload)
-    if (!parsed.success) throw makeError('INVALID_PAYLOAD', '仅支持 .doc/.docx 文件')
+    if (!parsed.success) {
+      throw makeError('INVALID_PAYLOAD', `仅支持 ${OFFICE_INPUT_HINT} 文件`)
+    }
     await convertMutex.acquire(signal)
     try {
-      return await runConvert(parsed.data.inputPath, { taskId, signal, emit })
+      const inputs = dedupeInputPaths(parsed.data.inputPaths)
+      emit({
+        kind: 'progress',
+        current: 0,
+        total: inputs.length,
+        stage: 'locate',
+        message: '定位转换组件…'
+      })
+
+      const locate = await locateSoffice({
+        customPath: await ctx.settings.get('customPath', ''),
+        portableDir: portableProgramDir,
+        queryRegistry: deps.queryRegistry,
+        exists: deps.fileExists
+      })
+      if (locate.source === 'none' || locate.path === undefined) {
+        throw toolError('SOFFICE_NOT_FOUND')
+      }
+      const command = pickSofficeCommand(locate.path)
+
+      const taskDir = taskWorkDir(ctx.paths.temp, taskId)
+      try {
+        const outputs: BatchOutput[] = []
+        const failures: BatchFailure[] = []
+        for (let index = 0; index < inputs.length; index += 1) {
+          const inputPath = inputs[index]
+          if (inputPath === undefined) continue
+          if (signal.aborted) throw new Error('aborted')
+          try {
+            const outputPath = await convertOne({
+              inputPath,
+              command,
+              workDir: join(taskDir, `f${index + 1}`),
+              index,
+              total: inputs.length,
+              signal,
+              emit
+            })
+            outputs.push({ inputPath, outputPath })
+          } catch (err) {
+            // 取消属于任务终态，直接上抛；单文件失败不中断批次（spec §3.1）
+            if (signal.aborted) throw err
+            failures.push(toBatchFailure(inputPath, err))
+          }
+        }
+
+        // 全部失败：抛首个结构化错误，保持单文件语义与 [重试] 入口不变
+        const firstFailure = failures[0]
+        if (outputs.length === 0 && firstFailure !== undefined) throw firstFailure
+
+        emit({
+          kind: 'progress',
+          current: inputs.length,
+          total: inputs.length,
+          stage: 'done',
+          message: '完成'
+        })
+        return { outputs, failures } satisfies BatchConvertResult
+      } finally {
+        try {
+          await deps.removeDir(taskDir)
+        } catch (err) {
+          ctx.log.warn('清理批量工作目录失败', taskDir, err)
+        }
+      }
     } finally {
       convertMutex.release()
     }

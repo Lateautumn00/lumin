@@ -169,6 +169,7 @@ lumin/
 - 打包策略：默认「精简包」不含 LibreOffice；设置页「安装转换组件」按需下载
 - 中文字体走系统字体，无需打包
 - **验收**：含表格/页眉/中文字体 docx 转换保真可接受（R8 功能清单先行）——P4 实测：保真人工目视通过、e2e 13 passed、chunk 13,322 B gzip、R2 八类真实记录见 `docs/smoke/docx2pdf.md`
+- **M9 扩展**：输入扩至 Excel/PPT 六种扩展名并支持批量队列，见 §4.9
 
 ### 4.4 试卷切割（M3a PDF + M3b OCR）
 
@@ -255,6 +256,16 @@ lumin/
 - 字段级清单：`docs/spec/text-toolbox.md`；冒烟：`docs/smoke/text-toolbox.md`（R2 八类映射 + chunk **8.6KB gzip**）
 - **验收**：三 Tab 成功/失败分支单测齐全（46 tests，本包组覆盖率 80% 门禁全绿）、e2e 4/4、R2 八类映射、gate 全绿
 
+### 4.9 Office 转 PDF 扩展（M9，2026-11-19 R8 登记）
+
+- **决策（用户拍板 2026-11-19）**：下一个功能 = docx2pdf 扩展，范围锁定「xlsx/pptx → PDF + 批量转换队列」；不新增图片/PDF 输出格式、不做 PDF 合并
+- 格式白名单扩至 `.doc/.docx/.xls/.xlsx/.ppt/.pptx`（`src/formats.ts` 单一来源；零依赖，避免 zod 进渲染层 chunk）；显示名由「Word 转 PDF」改为「Office 转 PDF」，工具 id/通道/包名**不变**
+- 批量语义：单任务 `{ inputPaths: string[] }`（1..100，大小写不敏感去重），任务内**串行**逐文件转换；单文件失败记入 `failures` 并继续，全部失败抛首个结构化错误（保持单文件 [重试] 语义）；取消终止整批
+- 结果：`done { outputs: {inputPath, outputPath}[], failures: {inputPath, code, message, detail?}[] }`；progress 改为 `locate(0/total) → convert(i+1/total) → done(total/total)`（不再单列 verify）
+- 每文件独立工作子目录与 profile（`lumin-docx2pdf-<taskId>/f<序号>`），同名基名不同扩展名顺序落盘自动 `(1)` 后缀
+- 字段级清单：`docs/spec/docx2pdf.md`（M9 章节）；冒烟：`docs/smoke/docx2pdf.md`；fixture 新增 `表格样例.xlsx`、`演示样例.pptx`
+- **验收**：批量/去重/上限/部分失败/全失败/取消单测覆盖；e2e 真实转换 docx+xlsx+pptx 混合批次；gate 全绿；chunk 复测 gzip < 200KB
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -306,6 +317,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M6 v0.5**   | 图片工具箱（ffmpeg 复用：压缩/转换/缩放三 Tab，含 AVIF，gif→webp 动画）                                                                                                                                            | §4.6 验收；smoke 8 类全过（R2）；**字段级清单先行（R8）**            | 3–5 天   |
 | **M7 v0.6**   | 批量重命名（单目录非递归、六规则叠加、预览/冲突/撤销、5000 条截断）                                                                                                                                                | §4.7 验收；smoke 8 类全过（R2）；字段级清单先行（R8）                | 2–3 天   |
 | **M8 v0.7**   | 文本工具箱（纯 renderer 三 Tab：JSON 格式化/压缩/校验、Base64/URL 编解码、正则测试与替换预览）                                                                                                                     | §4.8 验收；smoke 映射（R2）；字段级清单先行（R8）；chunk <200KB gzip | 0.5–1 天 |
+| **M9 v0.8**   | Office 转 PDF 扩展（docx2pdf）：输入扩至 doc/xls/ppt 六种扩展名 + 批量队列（1..100、串行、失败不中断、结果汇总）                                                                                                   | §4.9 验收；单测/e2e 覆盖批量；chunk <200KB gzip；smoke 增量记录      | 0.5–1 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

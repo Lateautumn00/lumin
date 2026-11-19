@@ -1,12 +1,19 @@
 <script setup lang="ts">
+/**
+ * @file ToolView.vue
+ * @author cuilanchao
+ * @date 2026-11-19
+ * @description Office 转 PDF 工具页：批量选择增删、批量转换进度（可取消）、成功/失败汇总与组件引导三态。
+ */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { NButton, NInput, NSpace, NText } from 'naive-ui'
-import { Download, FileText, FolderOpen, RefreshCw, RotateCcw } from '@lucide/vue'
+import { Download, FileText, FolderOpen, RefreshCw, RotateCcw, X } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
 import { isRetryable } from '../errors'
-import type { StatusResult } from '../schema'
+import { MAX_BATCH_FILES, OFFICE_ACCEPT } from '../formats'
+import type { BatchConvertResult, StatusResult } from '../schema'
 import {
   cancelTask,
   fetchStatus,
@@ -16,6 +23,11 @@ import {
   submitInstall
 } from './client'
 
+interface PickedFile {
+  path: string
+  name: string
+}
+
 type Phase = 'idle' | 'converting' | 'installing' | 'error'
 type LastAction = 'convert' | 'install'
 
@@ -23,9 +35,8 @@ const phase = ref<Phase>('idle')
 const status = ref<StatusResult | null>(null)
 const statusFailed = ref(false)
 const statusLoading = ref(false)
-const inputPath = ref('')
-const inputName = ref('')
-const outputPath = ref('')
+const files = ref<PickedFile[]>([])
+const result = ref<BatchConvertResult | null>(null)
 const progress = ref<{ current?: number; total?: number; message: string } | null>(null)
 const error = ref<StructuredError | null>(null)
 const detailOpen = ref(false)
@@ -38,10 +49,12 @@ let unsubscribe: (() => void) | null = null
 let currentTaskId = ''
 
 const busy = computed(() => phase.value === 'converting' || phase.value === 'installing')
-const showDropZone = computed(() => inputPath.value === '' && outputPath.value === '')
-const showFileCard = computed(() => inputPath.value !== '' && outputPath.value === '')
+const showDropZone = computed(() => files.value.length === 0 && result.value === null)
+const showFileList = computed(() => files.value.length > 0 && result.value === null)
 const retryable = computed(() => error.value !== null && isRetryable(error.value.code))
 const hasDetail = computed(() => (error.value?.detail ?? '') !== '')
+const outputCount = computed(() => result.value?.outputs.length ?? 0)
+const failureList = computed(() => result.value?.failures ?? [])
 const sourceLabel = computed(() => {
   switch (status.value?.source) {
     case 'custom':
@@ -103,8 +116,8 @@ function onEvent(event: TaskEvent): void {
     phase.value = 'idle'
     progress.value = null
     if (lastAction.value === 'convert') {
-      const result = event.result as { outputPath?: string } | undefined
-      outputPath.value = result?.outputPath ?? ''
+      const payload = event.result as BatchConvertResult | undefined
+      result.value = payload ?? { outputs: [], failures: [] }
     } else {
       void refreshStatus()
     }
@@ -122,7 +135,7 @@ function onEvent(event: TaskEvent): void {
 }
 
 async function startConvert(): Promise<void> {
-  if (inputPath.value === '') return
+  if (files.value.length === 0) return
   if (status.value?.source === 'none') {
     setError({
       code: 'SOFFICE_NOT_FOUND',
@@ -133,10 +146,11 @@ async function startConvert(): Promise<void> {
   lastAction.value = 'convert'
   error.value = null
   detailOpen.value = false
+  result.value = null
   phase.value = 'converting'
   progress.value = { message: '提交中…' }
   try {
-    const { taskId } = await submitConvert(inputPath.value)
+    const { taskId } = await submitConvert(files.value.map((file) => file.path))
     currentTaskId = taskId
     unsubscribe = window.lumin.onTaskEvent(onEvent)
   } catch (err) {
@@ -177,9 +191,8 @@ function retry(): void {
 }
 
 function resetForNew(): void {
-  inputPath.value = ''
-  inputName.value = ''
-  outputPath.value = ''
+  files.value = []
+  result.value = null
   error.value = null
   progress.value = null
   invalidHint.value = ''
@@ -188,8 +201,13 @@ function resetForNew(): void {
 }
 
 function onSelect(payload: { file: File; path: string }): void {
-  inputPath.value = payload.path
-  inputName.value = payload.file.name
+  if (files.value.length >= MAX_BATCH_FILES) {
+    invalidHint.value = `单次最多 ${MAX_BATCH_FILES} 个文件`
+    return
+  }
+  const key = payload.path.toLowerCase()
+  if (files.value.some((file) => file.path.toLowerCase() === key)) return
+  files.value.push({ path: payload.path, name: payload.file.name })
   invalidHint.value = ''
   error.value = null
 }
@@ -198,10 +216,16 @@ function onInvalid(reason: string): void {
   invalidHint.value = reason
 }
 
+function removeFile(index: number): void {
+  files.value.splice(index, 1)
+  invalidHint.value = ''
+}
+
 async function openFolder(): Promise<void> {
-  if (outputPath.value === '') return
+  const first = result.value?.outputs[0]
+  if (first === undefined) return
   try {
-    await revealPath(outputPath.value)
+    await revealPath(first.outputPath)
   } catch (err) {
     setError(err)
   }
@@ -238,9 +262,9 @@ onUnmounted(() => {
 <template>
   <div class="flex max-w-2xl flex-col gap-4">
     <div>
-      <h1 class="text-base font-semibold">Word 转 PDF</h1>
+      <h1 class="text-base font-semibold">Office 转 PDF</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        将 .doc/.docx 文件转换为 PDF（LibreOffice 转换组件按需下载）
+        将 Word / Excel / PPT 文件批量转换为 PDF（LibreOffice 转换组件按需下载）
       </p>
     </div>
 
@@ -296,36 +320,61 @@ onUnmounted(() => {
       </template>
     </div>
 
-    <!-- 空态：拖拽/选择 -->
+    <!-- 空态：拖拽/多选 -->
     <DropZone
       v-if="showDropZone"
-      accept=".doc,.docx"
-      hint="拖拽 Word 文件到此处，或点击选择"
+      :accept="OFFICE_ACCEPT"
+      hint="拖拽 Office 文件到此处（可多选），或点击选择"
       :disabled="busy"
+      multiple
       @select="onSelect"
       @invalid="onInvalid"
     />
     <NText v-if="invalidHint !== ''" type="error" class="text-sm">{{ invalidHint }}</NText>
 
-    <!-- 已选文件卡 -->
+    <!-- 已选文件列表 -->
     <div
-      v-if="showFileCard"
-      class="flex items-center gap-3 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-4 py-3"
+      v-if="showFileList"
+      class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-4 py-3"
     >
-      <FileText
-        :size="20"
-        class="shrink-0 text-[var(--lumin-color-text-secondary)]"
-        aria-hidden="true"
-      />
-      <div class="min-w-0 flex-1">
-        <p class="truncate text-sm font-medium" :title="inputName">{{ inputName }}</p>
-        <p class="truncate text-xs text-[var(--lumin-color-text-secondary)]" :title="inputPath">
-          {{ inputPath }}
+      <div class="flex items-center justify-between gap-3">
+        <p class="text-sm font-medium">
+          已选 {{ files.length }} 个文件
+          <span class="text-xs font-normal text-[var(--lumin-color-text-secondary)]">
+            （单次最多 {{ MAX_BATCH_FILES }} 个）
+          </span>
         </p>
+        <NSpace>
+          <NButton size="small" quaternary :disabled="busy" @click="resetForNew">清空</NButton>
+        </NSpace>
       </div>
-      <NSpace>
-        <NButton type="primary" :disabled="busy" @click="startConvert">开始转换</NButton>
-        <NButton :disabled="busy" @click="resetForNew">重新选择</NButton>
+      <ul class="mt-3 max-h-64 space-y-2 overflow-auto" aria-label="待转换文件列表">
+        <li
+          v-for="(file, index) in files"
+          :key="file.path"
+          class="flex items-center gap-2 rounded-[var(--lumin-radius-md)] px-2 py-1 hover:bg-[var(--lumin-color-bg)]"
+        >
+          <FileText
+            :size="16"
+            class="shrink-0 text-[var(--lumin-color-text-secondary)]"
+            aria-hidden="true"
+          />
+          <span class="min-w-0 flex-1 truncate text-sm" :title="file.path">{{ file.name }}</span>
+          <NButton
+            size="tiny"
+            quaternary
+            :disabled="busy"
+            :aria-label="`移除 ${file.name}`"
+            @click="removeFile(index)"
+          >
+            <template #icon><X :size="14" /></template>
+          </NButton>
+        </li>
+      </ul>
+      <NSpace class="mt-3">
+        <NButton type="primary" :disabled="busy || files.length === 0" @click="startConvert">
+          开始转换（{{ files.length }}）
+        </NButton>
       </NSpace>
     </div>
 
@@ -338,26 +387,46 @@ onUnmounted(() => {
       @cancel="onCancel"
     />
 
-    <!-- 成功结果 -->
+    <!-- 成功结果（含部分失败汇总） -->
     <div
-      v-if="outputPath !== ''"
+      v-if="result !== null"
       class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-4 py-3"
     >
-      <NText type="success" class="text-sm font-medium">转换完成</NText>
-      <p
-        class="mt-1 break-all text-xs text-[var(--lumin-color-text-secondary)]"
-        :title="outputPath"
+      <NText :type="failureList.length === 0 ? 'success' : 'warning'" class="text-sm font-medium">
+        转换完成：成功 {{ outputCount }} 个<template v-if="failureList.length > 0">
+          ，失败 {{ failureList.length }} 个</template
+        >
+      </NText>
+      <ul class="mt-2 max-h-40 space-y-1 overflow-auto" aria-label="转换产物">
+        <li
+          v-for="item in result.outputs"
+          :key="item.outputPath"
+          class="break-all text-xs text-[var(--lumin-color-text-secondary)]"
+          :title="item.outputPath"
+        >
+          {{ item.outputPath }}
+        </li>
+      </ul>
+      <ul
+        v-if="failureList.length > 0"
+        class="mt-2 max-h-40 space-y-1 overflow-auto"
+        aria-label="转换失败列表"
       >
-        {{ outputPath }}
-      </p>
+        <li v-for="item in failureList" :key="item.inputPath" class="text-xs">
+          <span class="font-medium">{{ item.inputPath }}</span>
+          <span class="ml-1 text-[var(--lumin-color-text-secondary)]">
+            {{ item.code }} · {{ item.message }}
+          </span>
+        </li>
+      </ul>
       <NSpace class="mt-3">
-        <NButton size="small" type="primary" @click="openFolder">
+        <NButton v-if="outputCount > 0" size="small" type="primary" @click="openFolder">
           <template #icon><FolderOpen :size="14" /></template>
           打开文件夹
         </NButton>
         <NButton size="small" @click="resetForNew">
           <template #icon><RotateCcw :size="14" /></template>
-          再转一个
+          再转一批
         </NButton>
       </NSpace>
     </div>

@@ -1,4 +1,4 @@
-# Word 转 PDF 冒烟记录（M2）
+# Office 转 PDF 冒烟记录（M2 / M9）
 
 > 环境：Windows · Electron 45.3.1 · LibreOffice 7.x（注册表 system 定位） · 分支：`feature/m0-skeleton`
 > 日期：2026-11-14 · 工具：`@lumin/tool-docx2pdf` v0.1.0
@@ -52,3 +52,36 @@
 - 口径：gzip；工具专属增量 = `docx2pdf-*.js` **60,188 B raw / 13,322 B gzip**。
 - 全部直接依赖（plugin-api / shared / node-kit）均为壳与其它工具共享，**独占依赖 chunk = 0**。
 - 无求值库工具基线 <200KB gzip → **13.3KB，达标**（对照：单位换算 37.9KB gzip）。
+
+## 5. M9（Office 格式扩展 + 批量队列）冒烟记录（2026-11-19）
+
+> 环境：Windows · Electron 45.3.1 · LibreOffice 7.x（注册表 system 定位） · 分支：`feature/m9-office-batch`
+> 工具：`@lumin/tool-docx2pdf` v0.2.0（显示名「Office 转 PDF」，id/通道不变）
+
+### 5.1 总览
+
+| #   | 冒烟项                                 | 方式                                          | 结果                                                                                                      |
+| --- | -------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 1   | 单测（批量/去重/上限/部分失败/全失败） | `pnpm vitest run packages/tools/docx2pdf`     | ✅ docx2pdf **110 tests / 8 文件**；全仓 `pnpm coverage` **861 tests** 全绿                               |
+| 2   | 覆盖率（本包组 80% 门禁）              | `pnpm coverage`                               | ✅ 全仓 statements 93.22% / branches 84.86% / functions 90.83% / lines 95.77%，各分组阈值全过             |
+| 3   | 质量门禁                               | lint / typecheck / format / boundary          | ✅ 全绿；`pnpm audit` 仍为已知例外（picomatch，plan §4.4 登记）                                           |
+| 4   | e2e（docx2pdf 套件）                   | `pnpm test:e2e -- e2e/docx2pdf-smoke.spec.ts` | ✅ **8/8 passed（1.3m）**，含新增批量混合格式用例                                                         |
+| 5   | e2e（全量回归）                        | `pnpm test:e2e`                               | ✅ **46 passed / 1 skipped**（update-smoke guard），M2 的 R2 六类用例重跑通过                             |
+| 6   | 批量真实转换（docx+xlsx+pptx+缺失项）  | e2e 批量用例                                  | ✅ 24.3s 完成；3 份产物均 `%PDF-`；缺失 `.xlsx` 记 `INPUT_NOT_FOUND` 失败且**不中断后续**；无临时目录残留 |
+| 7   | 人工目视（xlsx / pptx）                | 产物 PDF → soffice 转 PNG → 目视              | ✅ xlsx：中文表头「姓名/分数」+ 数值 90/85 正常；pptx：「Lumin PPT 样例」白色文字与绿色框正常，无豆腐块   |
+| 8   | chunk 体积（R5 <200KB gzip）           | 构建产物实测                                  | ✅ `docx2pdf-*.js` **24,412 B raw / 6,062 B gzip**，独占依赖 = 0                                          |
+
+### 5.2 R2 八类在 M9 的映射（真实记录）
+
+| 类别             | 验证级别 | M9 记录                                                                                                   |
+| ---------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| 1. 中文/空格路径 | e2e      | ✅ M2 用例重跑通过（`保真 样例 v2.docx`）；批量用例输入均为中文名（批量甲/乙/丙）                         |
+| 2. 文件被占用    | e2e      | ✅ M2 用例重跑通过（`INPUT_LOCKED`）                                                                      |
+| 3. 加密文件      | e2e      | ✅ M2 用例重跑通过（`INPUT_LOAD_FAILED`）                                                                 |
+| 4. 超大文件      | 沿用     | ✅ M2 真实验收记录有效（改动未触及 soffice 调用参数与超时）                                               |
+| 5. 任务取消      | e2e      | ✅ M2 用例重跑通过（`CANCELLED` + 临时目录基线无新增）；批量内取消抛 `aborted` 由任务队列归一 `CANCELLED` |
+| 6. 并发溢出      | e2e      | ✅ M2 用例重跑通过（mutex 串行，两份产物完整）；批量整批持锁，不会与另一批次交错                          |
+| 7. 磁盘满        | 沿用     | ✅ M2 真实验收记录有效（`OUTPUT_WRITE_FAILED` 映射路径未变，批量下该文件记失败、其余继续）                |
+| 8. 断电恢复      | e2e      | ✅ M2 用例重跑通过（强杀后重启仍可真实转换）                                                              |
+
+> 批量语义增量验证：缺失文件（`INPUT_NOT_FOUND`）位于批次中段时，前后文件均正常输出——证明「单文件失败不中断批次、全失败才抛首错」的实现口径。

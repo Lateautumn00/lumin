@@ -97,14 +97,15 @@ describe.skipIf(!hasSoffice)('docx2pdf 保真 fixture 集成（本机有 soffice
     const result = (await handler({
       toolId: manifest.id,
       action: 'convert',
-      payload: { inputPath },
+      payload: { inputPaths: [inputPath] },
       taskId: 'integration-1',
       signal: new AbortController().signal,
       emit: () => undefined
-    })) as { outputPath: string }
+    })) as { outputs: { outputPath: string }[] }
 
-    expect(existsSync(result.outputPath)).toBe(true)
-    const text = await extractPdfText(result.outputPath)
+    const outputPath = result.outputs[0]?.outputPath ?? ''
+    expect(existsSync(outputPath)).toBe(true)
+    const text = await extractPdfText(outputPath)
     expect(text).toContain('保真样例标题')
     expect(text).toContain('表头甲')
     expect(text).toContain('数据一行')
