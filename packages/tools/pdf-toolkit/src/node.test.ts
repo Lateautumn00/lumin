@@ -181,7 +181,7 @@ describe('pdf-toolkit node:任务通道', () => {
     expect(updates).toEqual([{ kind: 'progress', stage: 'process', current: 1, total: 2 }])
   })
 
-  it('split/delete/rotate/reorder/metadata 映射到对应 op', async () => {
+  it('split/delete/rotate/reorder/metadata/watermark/page-numbers 映射到对应 op', async () => {
     const { ctx, harness } = makeCtx()
     const { deps, runs } = makeDeps()
     registerWith(ctx, deps)
@@ -203,13 +203,74 @@ describe('pdf-toolkit node:任务通道', () => {
       ...base,
       payload: { inputPath: input, metadata: { title: 'T' } }
     })
+    await getTask(
+      harness,
+      'watermark'
+    )({
+      ...base,
+      payload: {
+        kind: 'text',
+        inputPath: input,
+        imageData: 'iVBORw0KGgo=',
+        opacity: 0.4,
+        angle: 45,
+        scale: 20,
+        tile: false
+      }
+    })
+    await getTask(
+      harness,
+      'page-numbers'
+    )({
+      ...base,
+      payload: {
+        inputPath: input,
+        format: '{n}/{total}',
+        position: 'bottom-center',
+        startPage: 2,
+        fontSize: 12,
+        color: '#333333',
+        margin: 24
+      }
+    })
     expect(runs.map((run) => run.payload.op)).toEqual([
       'split',
       'delete',
       'rotate',
       'reorder',
-      'metadata'
+      'metadata',
+      'watermark',
+      'page-numbers'
     ])
+  })
+
+  it('水印图片预检失败 → PT_WATERMARK_INVALID', async () => {
+    const { ctx, harness } = makeCtx()
+    const { deps, runs } = makeDeps({
+      checkReadable: async (path: string) => {
+        if (path.endsWith('.png')) throw errnoError('ENOENT')
+      }
+    })
+    registerWith(ctx, deps)
+    await expect(
+      getTask(
+        harness,
+        'watermark'
+      )({
+        payload: {
+          kind: 'image',
+          inputPath: input,
+          imagePath: 'C:/文档/缺失.png',
+          opacity: 0.4,
+          angle: 0,
+          scale: 20,
+          tile: false
+        },
+        signal: new AbortController().signal,
+        emit: () => undefined
+      })
+    ).rejects.toMatchObject({ code: 'PT_WATERMARK_INVALID', detail: 'ENOENT' })
+    expect(runs).toHaveLength(0)
   })
 
   it('非法载荷不发 worker', async () => {
@@ -222,6 +283,34 @@ describe('pdf-toolkit node:任务通道', () => {
         'merge'
       )({
         payload: { inputPaths: [input] },
+        signal: new AbortController().signal,
+        emit: () => undefined
+      })
+    ).rejects.toMatchObject({ code: 'INVALID_PAYLOAD' })
+    await expect(
+      getTask(
+        harness,
+        'watermark'
+      )({
+        payload: { kind: 'text', inputPath: input, opacity: 0.4, angle: 0, scale: 20, tile: false },
+        signal: new AbortController().signal,
+        emit: () => undefined
+      })
+    ).rejects.toMatchObject({ code: 'INVALID_PAYLOAD' })
+    await expect(
+      getTask(
+        harness,
+        'page-numbers'
+      )({
+        payload: {
+          inputPath: input,
+          format: '第 {n} 页',
+          position: 'bottom-center',
+          startPage: 1,
+          fontSize: 12,
+          color: '#333333',
+          margin: 24
+        },
         signal: new AbortController().signal,
         emit: () => undefined
       })
@@ -334,7 +423,7 @@ describe('pdf-toolkit node:错误分类与默认依赖', () => {
     expect(typeof deps.checkExclusive).toBe('function')
   })
 
-  it('registerMain 注册 info + 六个任务通道', () => {
+  it('registerMain 注册 info + 八个任务通道', () => {
     const { ctx, harness } = makeCtx()
     registerMain(ctx)
     expect([...harness.ipc.keys()]).toEqual(['info'])
@@ -344,7 +433,9 @@ describe('pdf-toolkit node:错误分类与默认依赖', () => {
       'delete',
       'rotate',
       'reorder',
-      'metadata'
+      'metadata',
+      'watermark',
+      'page-numbers'
     ])
   })
 })

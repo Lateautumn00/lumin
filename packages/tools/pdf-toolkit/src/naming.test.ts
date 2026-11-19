@@ -3,9 +3,11 @@ import {
   deleteDesiredPath,
   mergeDesiredPath,
   metadataDesiredPath,
+  pageNumbersDesiredPath,
   reorderDesiredPath,
   rotateDesiredPath,
-  splitDesiredPaths
+  splitDesiredPaths,
+  watermarkDesiredPath
 } from './naming'
 
 describe('pdf-toolkit naming（spec §6）', () => {
@@ -35,5 +37,10 @@ describe('pdf-toolkit naming（spec §6）', () => {
     expect(rotateDesiredPath('C:/a/卷.pdf', 180)).toBe('C:/a/卷_旋转180.pdf')
     expect(reorderDesiredPath('C:/a/卷.pdf')).toBe('C:/a/卷_重排.pdf')
     expect(metadataDesiredPath('C:/a/卷.pdf')).toBe('C:/a/卷_元数据.pdf')
+  })
+
+  it('水印/页码命名（M17）', () => {
+    expect(watermarkDesiredPath('C:/a/卷.pdf')).toBe('C:/a/卷_水印.pdf')
+    expect(pageNumbersDesiredPath('C:/a/卷.pdf')).toBe('C:/a/卷_页码.pdf')
   })
 })

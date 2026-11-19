@@ -26,6 +26,15 @@ describe('pdf-toolkit errors（spec §7）', () => {
     expect(isRetryable('PT_INPUT_INVALID')).toBe(false)
     expect(isRetryable('PT_NO_PAGES_LEFT')).toBe(false)
     expect(isRetryable('PT_PDF_ENCRYPTED')).toBe(false)
+    expect(isRetryable('PT_WATERMARK_INVALID')).toBe(false)
+    expect(isRetryable('PT_PAGE_NUMBER_INVALID')).toBe(false)
     expect(isRetryable('UNKNOWN')).toBe(false)
+  })
+
+  it('水印/页码错误码文案（M17）', () => {
+    expect(toolError('PT_WATERMARK_INVALID').message).toBe('水印内容无效，请检查文字或图片')
+    expect(toolError('PT_PAGE_NUMBER_INVALID').message).toBe(
+      '页码参数无效，请检查格式、位置与起始页'
+    )
   })
 })

@@ -4,16 +4,26 @@ import { join } from 'node:path'
 import { PDFDocument } from 'pdf-lib'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
+  addPageNumbers,
+  centerImageAnchor,
   deletePages,
+  hexToRgb,
   inspectPdf,
   isValidOrder,
   mergePdf,
+  pageNumberPosition,
+  pageNumberText,
   reorderPages,
   rotatePages,
   runOp,
   splitPdf,
+  watermarkPdf,
   writeMetadata
 } from './pdf-ops'
+
+/** 1×1 透明 PNG（免 fixture） */
+const TINY_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
 
 const roots: string[] = []
 
@@ -250,7 +260,7 @@ describe('pdf-ops 读取与分发', () => {
     await expect(inspectPdf(asDir)).rejects.toMatchObject({ code: 'PT_PDF_CORRUPT' })
   })
 
-  it('runOp 分发六种 op', async () => {
+  it('runOp 分发八种 op', async () => {
     const dir = await tempDir()
     const a = join(dir, 'a.pdf')
     const b = join(dir, 'b.pdf')
@@ -274,6 +284,229 @@ describe('pdf-ops 读取与分发', () => {
     await expect(
       runOp({ op: 'metadata', payload: { inputPath: a, metadata: { title: 'T' } } }, noEmit)
     ).resolves.toBeDefined()
+    await expect(
+      runOp(
+        {
+          op: 'watermark',
+          payload: {
+            kind: 'text',
+            inputPath: a,
+            imageData: TINY_PNG_BASE64,
+            opacity: 0.3,
+            angle: 0,
+            scale: 20,
+            tile: false
+          }
+        },
+        noEmit
+      )
+    ).resolves.toBeDefined()
+    await expect(
+      runOp(
+        {
+          op: 'page-numbers',
+          payload: {
+            inputPath: a,
+            format: '{n}',
+            position: 'bottom-center',
+            startPage: 1,
+            fontSize: 12,
+            color: '#333333',
+            margin: 24
+          }
+        },
+        noEmit
+      )
+    ).resolves.toBeDefined()
+  })
+})
+
+describe('pdf-ops 水印（M17）', () => {
+  const textPayload = {
+    kind: 'text' as const,
+    inputPath: '',
+    imageData: TINY_PNG_BASE64,
+    opacity: 0.4,
+    angle: 45,
+    scale: 30,
+    tile: false
+  }
+
+  it('hexToRgb 分量换算', () => {
+    expect(hexToRgb('#ff8000').r).toBe(1)
+    expect(hexToRgb('#ff8000').g).toBeCloseTo(0.50196, 4)
+    expect(hexToRgb('#ff8000').b).toBe(0)
+  })
+
+  it('centerImageAnchor：0/45/90 度', () => {
+    expect(centerImageAnchor(300, 400, 100, 50, 0)).toEqual({ x: 100, y: 175 })
+    const right = centerImageAnchor(300, 400, 100, 50, 90)
+    expect(right.x).toBeCloseTo(175, 6)
+    expect(right.y).toBeCloseTo(150, 6)
+    const diag = centerImageAnchor(300, 400, 100, 50, 45)
+    expect(diag.x).toBeCloseTo(132.322, 2)
+    expect(diag.y).toBeCloseTo(146.967, 2)
+  })
+
+  it('文字水印：默认全页 + 命名', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '卷.pdf')
+    await makePdf(input, 3)
+    const result = await watermarkPdf({ ...textPayload, inputPath: input }, noEmit)
+    expect(result.outputPaths).toEqual([join(dir, '卷_水印.pdf')])
+    const output = await PDFDocument.load(await readBytes(result.outputPaths[0] as string))
+    expect(output.getPageCount()).toBe(3)
+  })
+
+  it('文字水印：平铺 + 页码范围 + 进度', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '卷.pdf')
+    await makePdf(input, 3)
+    const stages: number[] = []
+    const result = await watermarkPdf(
+      { ...textPayload, inputPath: input, tile: true, angle: 0, ranges: '2' },
+      (update) => stages.push(update.current)
+    )
+    expect(result.outputPaths).toEqual([join(dir, '卷_水印.pdf')])
+    expect(stages.length).toBeGreaterThan(0)
+  })
+
+  it('文字水印：损坏 base64 → PT_WATERMARK_INVALID', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '卷.pdf')
+    await makePdf(input, 1)
+    await expect(
+      watermarkPdf({ ...textPayload, inputPath: input, imageData: 'bm90LXBuZw==' }, noEmit)
+    ).rejects.toMatchObject({ code: 'PT_WATERMARK_INVALID' })
+  })
+
+  it('图片水印：PNG 文件可嵌入', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '卷.pdf')
+    const imagePath = join(dir, '印章.PNG')
+    await makePdf(input, 2)
+    await writeFile(imagePath, Buffer.from(TINY_PNG_BASE64, 'base64'))
+    const result = await watermarkPdf(
+      {
+        kind: 'image',
+        inputPath: input,
+        imagePath,
+        opacity: 0.5,
+        angle: 0,
+        scale: 20,
+        tile: false
+      },
+      noEmit
+    )
+    expect(result.outputPaths).toEqual([join(dir, '卷_水印.pdf')])
+  })
+
+  it('图片水印：缺失/损坏/非法区间', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '卷.pdf')
+    await makePdf(input, 1)
+    const imageBase = {
+      kind: 'image' as const,
+      inputPath: input,
+      opacity: 0.5,
+      angle: 0,
+      scale: 20,
+      tile: false
+    }
+    await expect(
+      watermarkPdf({ ...imageBase, imagePath: join(dir, '缺失.png') }, noEmit)
+    ).rejects.toMatchObject({ code: 'PT_WATERMARK_INVALID' })
+
+    const broken = join(dir, '坏.jpg')
+    await writeFile(broken, 'not an image')
+    await expect(
+      watermarkPdf({ ...imageBase, imagePath: broken }, noEmit)
+    ).rejects.toMatchObject({ code: 'PT_WATERMARK_INVALID' })
+
+    const valid = join(dir, '印章.png')
+    await writeFile(valid, Buffer.from(TINY_PNG_BASE64, 'base64'))
+    await expect(
+      watermarkPdf({ ...imageBase, imagePath: valid, ranges: '9' }, noEmit)
+    ).rejects.toMatchObject({ code: 'PT_RANGE_INVALID' })
+  })
+})
+
+describe('pdf-ops 页码（M17）', () => {
+  const pagePayload = {
+    inputPath: '',
+    format: '{n}/{total}',
+    position: 'bottom-center' as const,
+    startPage: 1,
+    fontSize: 12,
+    color: '#333333',
+    margin: 24
+  }
+
+  it('pageNumberText 替换占位符', () => {
+    expect(pageNumberText('{n}/{total}', 2, 10)).toBe('2/10')
+    expect(pageNumberText('- {n} -', 3, 5)).toBe('- 3 -')
+    expect(pageNumberText('Page {n} of {total}', 1, 1)).toBe('Page 1 of 1')
+  })
+
+  it('pageNumberPosition：六个位置坐标', () => {
+    const base = { pageWidth: 300, pageHeight: 300, textWidth: 60, fontSize: 12, margin: 24 }
+    expect(
+      pageNumberPosition('bottom-center', base.pageWidth, base.pageHeight, 60, 12, 24)
+    ).toEqual({ x: 120, y: 24 })
+    expect(
+      pageNumberPosition('bottom-left', base.pageWidth, base.pageHeight, 60, 12, 24)
+    ).toEqual({ x: 24, y: 24 })
+    expect(
+      pageNumberPosition('bottom-right', base.pageWidth, base.pageHeight, 60, 12, 24)
+    ).toEqual({ x: 216, y: 24 })
+    expect(
+      pageNumberPosition('top-center', base.pageWidth, base.pageHeight, 60, 12, 24)
+    ).toEqual({ x: 120, y: 264 })
+    expect(pageNumberPosition('top-left', base.pageWidth, base.pageHeight, 60, 12, 24)).toEqual({
+      x: 24,
+      y: 264
+    })
+    expect(pageNumberPosition('top-right', base.pageWidth, base.pageHeight, 60, 12, 24)).toEqual({
+      x: 216,
+      y: 264
+    })
+  })
+
+  it('默认全部页 + 命名', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '卷.pdf')
+    await makePdf(input, 3)
+    const result = await addPageNumbers({ ...pagePayload, inputPath: input }, noEmit)
+    expect(result.outputPaths).toEqual([join(dir, '卷_页码.pdf')])
+    const output = await PDFDocument.load(await readBytes(result.outputPaths[0] as string))
+    expect(output.getPageCount()).toBe(3)
+  })
+
+  it('startPage=2：仅第 2 页起加页码', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '卷.pdf')
+    await makePdf(input, 3)
+    const currents: number[] = []
+    const result = await addPageNumbers(
+      { ...pagePayload, inputPath: input, startPage: 2 },
+      (update) => {
+        if (update.stage === 'process') currents.push(update.current)
+      }
+    )
+    expect(result.outputPaths).toEqual([join(dir, '卷_页码.pdf')])
+    expect(currents).toEqual([1, 2])
+  })
+
+  it('ranges 与 startPage 交集为空 → PT_PAGE_NUMBER_INVALID', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '卷.pdf')
+    await makePdf(input, 3)
+    await expect(
+      addPageNumbers({ ...pagePayload, inputPath: input, startPage: 3, ranges: '1-2' }, noEmit)
+    ).rejects.toMatchObject({ code: 'PT_PAGE_NUMBER_INVALID' })
+    await expect(
+      addPageNumbers({ ...pagePayload, inputPath: input, ranges: '9' }, noEmit)
+    ).rejects.toMatchObject({ code: 'PT_RANGE_INVALID' })
   })
 })
 

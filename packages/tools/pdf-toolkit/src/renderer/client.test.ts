@@ -4,11 +4,13 @@ import {
   deletePages,
   info,
   merge,
+  pageNumbers,
   reorder,
   revealPath,
   rotate,
   saveMetadata,
-  split
+  split,
+  watermark
 } from './client'
 
 const invoke = vi.fn<(channel: string, payload?: unknown) => Promise<unknown>>(() =>
@@ -33,7 +35,7 @@ describe('pdf-toolkit client（通道名与壳一致）', () => {
     expect(invoke).toHaveBeenCalledWith('pdf-toolkit:info', { inputPath: 'C:/a.pdf' })
   })
 
-  it('六个任务通道前缀正确', async () => {
+  it('八个任务通道前缀正确', async () => {
     stubLumin()
     await merge({ inputPaths: ['C:/a.pdf', 'C:/b.pdf'] })
     await split({ inputPath: 'C:/a.pdf', ranges: '1' })
@@ -41,13 +43,33 @@ describe('pdf-toolkit client（通道名与壳一致）', () => {
     await rotate({ inputPath: 'C:/a.pdf', degrees: 90 })
     await reorder({ inputPath: 'C:/a.pdf', order: [1] })
     await saveMetadata({ inputPath: 'C:/a.pdf', metadata: { title: 'T' } })
+    await watermark({
+      kind: 'text',
+      inputPath: 'C:/a.pdf',
+      imageData: 'iVBORw0KGgo=',
+      opacity: 0.4,
+      angle: 0,
+      scale: 20,
+      tile: false
+    })
+    await pageNumbers({
+      inputPath: 'C:/a.pdf',
+      format: '{n}',
+      position: 'bottom-center',
+      startPage: 1,
+      fontSize: 12,
+      color: '#333333',
+      margin: 24
+    })
     expect(invoke.mock.calls.map((call) => call[0])).toEqual([
       'pdf-toolkit:merge',
       'pdf-toolkit:split',
       'pdf-toolkit:delete',
       'pdf-toolkit:rotate',
       'pdf-toolkit:reorder',
-      'pdf-toolkit:metadata'
+      'pdf-toolkit:metadata',
+      'pdf-toolkit:watermark',
+      'pdf-toolkit:page-numbers'
     ])
   })
 

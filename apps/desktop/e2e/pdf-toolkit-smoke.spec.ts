@@ -2,9 +2,9 @@
  * @file pdf-toolkit（PDF 工具集）e2e 冒烟：真实 Electron + 真实 worker
  * @author cuilanchao
  * @date 2026-11-19
- * @description 覆盖：页面加载/空态/六 Tab、合并（中文+空格路径 R2.1）、拆分/删页/越界、
- *              旋转/重排/元数据、损坏/不存在、占用（R2.2）、取消（R2.5）、并发（R2.6）、
- *              源目录不可写（R2.7）、强杀恢复（R2.8）。
+ * @description 覆盖：页面加载/空态/八 Tab、合并（中文+空格路径 R2.1）、拆分/删页/越界、
+ *              旋转/重排/元数据、水印/页码（M17）、损坏/不存在、占用（R2.2）、取消（R2.5）、
+ *              并发（R2.6）、源目录不可写（R2.7）、强杀恢复（R2.8）。
  *              样本 PDF 由同仓 pdf-images 工具生成（e2e 专用，不引入运行期依赖）。
  *              前置：pnpm -F @lumin/desktop build（playwright 启动 out/main/index.js）
  */
@@ -157,13 +157,13 @@ function expectPdf(file: string): void {
 }
 
 test.describe('pdf-toolkit（PDF 工具集）冒烟', () => {
-  test('页面加载 + 空态 + 六 Tab + 合并（R2.1 中文/空格路径）', async () => {
+  test('页面加载 + 空态 + 八 Tab + 合并（R2.1 中文/空格路径）', async () => {
     const { app, page } = await launch()
     const workDir = freshDir('lumin-pt-e2e-happy')
     try {
       await page.getByRole('link', { name: 'PDF 工具集' }).click()
       await expect(page.getByRole('heading', { name: 'PDF 工具集' })).toBeVisible()
-      for (const tab of ['合并', '拆分', '删页', '旋转', '重排', '元数据']) {
+      for (const tab of ['合并', '拆分', '删页', '旋转', '重排', '元数据', '水印', '页码']) {
         await expect(page.getByText(tab, { exact: true }).first()).toBeVisible()
       }
       await expect(page.getByText('添加至少 2 个 PDF 开始合并')).toBeVisible()
@@ -399,6 +399,150 @@ test.describe('pdf-toolkit（PDF 工具集）冒烟', () => {
         singles
       )
       expect(outcomes).toEqual(['done', 'done', 'done'])
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('水印：文字/平铺/图片缺失（R2.1 中文空格路径 + R2.3 损坏图片）', async () => {
+    const { app, page } = await launch()
+    const workDir = freshDir('lumin-pt-e2e-watermark')
+    try {
+      const input = await makePdf(page, workDir, '水印 卷', 3)
+      const stamp = path.join(workDir, '印章.png')
+      writePng(stamp, 40, 20, '#cc3333')
+      const imageData = fs.readFileSync(stamp).toString('base64')
+
+      // UI：水印 Tab 可见 + 空态 + 未选 PDF 时按钮禁用
+      await page.getByRole('link', { name: 'PDF 工具集' }).click()
+      await page.getByText('水印', { exact: true }).first().click()
+      await expect(page.getByText('添加 PDF 开始整理')).toBeVisible()
+      await expect(page.getByRole('button', { name: '添加水印' })).toBeDisabled()
+      await expect(page.getByText('透明度', { exact: true })).toBeVisible()
+
+      // 文字水印（主进程按 PNG 嵌入）
+      const single = await runTask(page, 'pdf-toolkit:watermark', {
+        kind: 'text',
+        inputPath: input,
+        imageData,
+        opacity: 0.4,
+        angle: 45,
+        scale: 30,
+        tile: false
+      })
+      const file = single.done?.outputPaths?.[0] ?? ''
+      expect(file).toBe(path.join(workDir, '水印 卷_水印.pdf'))
+      expectPdf(file)
+      expect((await infoOf(page, file)).pageCount).toBe(3)
+
+      // 平铺 + 区间 → 冲突递增 (1)
+      const tiled = await runTask(page, 'pdf-toolkit:watermark', {
+        kind: 'text',
+        inputPath: input,
+        imageData,
+        opacity: 0.1,
+        angle: 0,
+        scale: 10,
+        tile: true,
+        ranges: '1-2'
+      })
+      expect(tiled.done?.outputPaths?.[0]).toBe(path.join(workDir, '水印 卷_水印(1).pdf'))
+
+      // 图片水印：缺失图片 → PT_WATERMARK_INVALID
+      const missing = await runTask(page, 'pdf-toolkit:watermark', {
+        kind: 'image',
+        inputPath: input,
+        imagePath: path.join(workDir, '缺失.png'),
+        opacity: 0.4,
+        angle: 0,
+        scale: 20,
+        tile: false
+      })
+      expect(missing.error?.code).toBe('PT_WATERMARK_INVALID')
+
+      // 损坏图片（扩展名合法但内容非法）→ PT_WATERMARK_INVALID
+      const broken = path.join(workDir, '坏.png')
+      fs.writeFileSync(broken, Buffer.from('not an image'))
+      const corrupt = await runTask(page, 'pdf-toolkit:watermark', {
+        kind: 'image',
+        inputPath: input,
+        imagePath: broken,
+        opacity: 0.4,
+        angle: 0,
+        scale: 20,
+        tile: false
+      })
+      expect(corrupt.error?.code).toBe('PT_WATERMARK_INVALID')
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('页码：起始页/模板/中文与中文模板拦截（R2.3 边界）', async () => {
+    const { app, page } = await launch()
+    const workDir = freshDir('lumin-pt-e2e-page-numbers')
+    try {
+      const input = await makePdf(page, workDir, '页码 卷', 3)
+
+      const numbered = await runTask(page, 'pdf-toolkit:page-numbers', {
+        inputPath: input,
+        format: '{n}/{total}',
+        position: 'bottom-center',
+        startPage: 2,
+        fontSize: 12,
+        color: '#333333',
+        margin: 24
+      })
+      const file = numbered.done?.outputPaths?.[0] ?? ''
+      expect(file).toBe(path.join(workDir, '页码 卷_页码.pdf'))
+      expectPdf(file)
+      expect((await infoOf(page, file)).pageCount).toBe(3)
+
+      // 中文模板 → 仅 ASCII 限制
+      const chinese = await runTask(page, 'pdf-toolkit:page-numbers', {
+        inputPath: input,
+        format: '第 {n} 页',
+        position: 'bottom-center',
+        startPage: 1,
+        fontSize: 12,
+        color: '#333333',
+        margin: 24
+      })
+      expect(chinese.error?.code).toBe('INVALID_PAYLOAD')
+
+      // 缺 {n}
+      const noToken = await runTask(page, 'pdf-toolkit:page-numbers', {
+        inputPath: input,
+        format: 'abc',
+        position: 'bottom-center',
+        startPage: 1,
+        fontSize: 12,
+        color: '#333333',
+        margin: 24
+      })
+      expect(noToken.error?.code).toBe('INVALID_PAYLOAD')
+
+      // 起始页与区间无交集
+      const noTarget = await runTask(page, 'pdf-toolkit:page-numbers', {
+        inputPath: input,
+        format: '{n}',
+        position: 'top-right',
+        startPage: 99,
+        fontSize: 12,
+        color: '#333333',
+        margin: 24,
+        ranges: '1-2'
+      })
+      expect(noTarget.error?.code).toBe('PT_PAGE_NUMBER_INVALID')
+
+      // UI：页码 Tab 字段与按钮
+      await page.getByRole('link', { name: 'PDF 工具集' }).click()
+      await page.getByText('页码', { exact: true }).first().click()
+      await expect(page.getByText('起始页', { exact: true })).toBeVisible()
+      await expect(page.getByText('位置', { exact: true })).toBeVisible()
+      await expect(page.getByRole('button', { name: '添加页码' })).toBeDisabled()
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true })
       await app.close()
