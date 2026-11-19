@@ -45,3 +45,9 @@
 1. **Electron 45 `app.isPackaged` 语义变化**：`electron .`（含 e2e、pnpm dev）恒为 true → updater 改用 `process.defaultApp === true` 判定 dev，`isDev` 可注入。
 2. **settings 并发写竞态**：Windows 并发 `rename(tmp→settings.json)` 抛 EPERM → 写队列串行化 + EPERM/EACCES 短重试（5 次×50ms）+ `renameImpl` 依赖注入（50 并发 set 单测覆盖）。
 3. **损坏图片误分类**：ffprobe 对损坏 jpg 返回 exit 0 + 0×0 流 → probeStream 增加零尺寸校验抛 `IT_FILE_CORRUPT`，不再落入 schema 兜底误报 `IT_FILE_UNSUPPORTED`。
+
+## 6. 页签标签渲染修复（2026-11-19，M8 期间附带）
+
+- **现象**：三 Tab（压缩/转换/缩放）标签文字空白、页签宽度 0 —— 当前 `naive-ui@2.45.3` 构建下，自闭合 `NTabPane` 的 `tab` 文本不会被渲染（`normalizeSlots(undefined)` 产出空 default slot，走 comment 分支）。
+- **修复**：标签改走 `<template #tab>` 插槽（`packages/tools/image-toolbox/src/renderer/ToolView.vue`），与 `text-toolbox` 同范式。
+- **回归**：新增 e2e 用例「页签标签可见（naive-ui 自闭合 pane 渲染回归）」——断言三个页签 visible、文本正确、`getBoundingClientRect().width > 0`；image-toolbox 套件 **5/5 通过**（2026-11-19，`pnpm build` 产物）。

@@ -326,10 +326,17 @@ onUnmounted(detach)
     </div>
 
     <!-- 三 Tab：压缩/转换/缩放（切换不丢文件列表与输出目录） -->
+    <!-- 标签必须走 #tab 插槽：当前 naive-ui 构建下自闭合 pane 的 tab 文本不会渲染 -->
     <NTabs v-model:value="tab" type="line">
-      <NTabPane name="compress" tab="压缩" />
-      <NTabPane name="convert" tab="转换" />
-      <NTabPane name="resize" tab="缩放" />
+      <NTabPane name="compress">
+        <template #tab>压缩</template>
+      </NTabPane>
+      <NTabPane name="convert">
+        <template #tab>转换</template>
+      </NTabPane>
+      <NTabPane name="resize">
+        <template #tab>缩放</template>
+      </NTabPane>
     </NTabs>
 
     <!-- 文件列表区（空态 = 拖拽引导；非空时 DropZone 收窄为追加入口） -->

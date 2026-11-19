@@ -339,3 +339,23 @@ test.describe('image-toolbox（图片工具箱）冒烟', () => {
     }
   })
 })
+
+test('页签标签可见（naive-ui 自闭合 pane 渲染回归）', async () => {
+  const { app, page } = await launch()
+  await ensureReady(page)
+  try {
+    await page.getByRole('link', { name: '图片工具箱' }).click()
+    for (const [name, label] of [
+      ['compress', '压缩'],
+      ['convert', '转换'],
+      ['resize', '缩放']
+    ] as const) {
+      const tab = page.locator(`.n-tabs-tab[data-name="${name}"]`)
+      await expect(tab).toBeVisible()
+      await expect(tab).toHaveText(label)
+      expect(await tab.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(0)
+    }
+  } finally {
+    await app.close()
+  }
+})
