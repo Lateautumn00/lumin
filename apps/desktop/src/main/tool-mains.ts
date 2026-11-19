@@ -7,6 +7,7 @@ import { registerMain as fileHasherRegisterMain } from '@lumin/tool-file-hasher/
 import { registerMain as fileRenamerRegisterMain } from '@lumin/tool-file-renamer/node'
 import { registerMain as imageToolboxRegisterMain } from '@lumin/tool-image-toolbox/node'
 import { registerMain as mediaConvertRegisterMain } from '@lumin/tool-media-convert/node'
+import { registerMain as ocrTextRegisterMain } from '@lumin/tool-ocr-text/node'
 import { registerMain as pdfImagesRegisterMain } from '@lumin/tool-pdf-images/node'
 import { registerMain as pdfToolkitRegisterMain } from '@lumin/tool-pdf-toolkit/node'
 import { registerMain as qrCodeRegisterMain } from '@lumin/tool-qr-code/node'
@@ -21,6 +22,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'file-renamer': fileRenamerRegisterMain,
   'image-toolbox': imageToolboxRegisterMain,
   'media-convert': mediaConvertRegisterMain,
+  'ocr-text': ocrTextRegisterMain,
   'pdf-images': pdfImagesRegisterMain,
   'pdf-toolkit': pdfToolkitRegisterMain,
   'qr-code': qrCodeRegisterMain,

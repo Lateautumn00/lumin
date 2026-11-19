@@ -26,6 +26,7 @@
   "dependencies": {
     "@lucide/vue": "1.72.0",
     "@lumin/node-kit": "workspace:*",
+    "@lumin/ocr-kit": "workspace:*",
     "@lumin/plugin-api": "workspace:*",
     "@lumin/shared": "workspace:*",
     "@lumin/ui": "workspace:*",

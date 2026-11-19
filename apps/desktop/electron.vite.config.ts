@@ -11,6 +11,7 @@ const workspaceAlias = [
   { find: /^@lumin\/shared$/, replacement: r('../../packages/shared/src/index.ts') },
   { find: /^@lumin\/plugin-api$/, replacement: r('../../packages/plugin-api/src/index.ts') },
   { find: /^@lumin\/node-kit$/, replacement: r('../../packages/node-kit/src/index.ts') },
+  { find: /^@lumin\/ocr-kit$/, replacement: r('../../packages/ocr-kit/src/index.ts') },
   {
     find: /^@lumin\/node-kit\/pdf$/,
     replacement: r('../../packages/node-kit/src/pdf/index.ts')
@@ -87,6 +88,18 @@ const workspaceAlias = [
   {
     find: /^@lumin\/tool-qr-code\/renderer\/(.+)$/,
     replacement: r('../../packages/tools/qr-code/src/renderer/$1')
+  },
+  {
+    find: /^@lumin\/tool-ocr-text\/manifest$/,
+    replacement: r('../../packages/tools/ocr-text/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-ocr-text\/node$/,
+    replacement: r('../../packages/tools/ocr-text/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-ocr-text\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/ocr-text/src/renderer/$1')
   },
   {
     find: /^@lumin\/tool-file-renamer\/manifest$/,

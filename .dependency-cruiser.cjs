@@ -5,12 +5,12 @@ module.exports = {
   forbidden: [
     {
       name: 'tools-only-allowed-deps',
-      comment: '工具包只可依赖 plugin-api/shared/ui/node-kit（铁律 2）',
+      comment: '工具包只可依赖 plugin-api/shared/ui/node-kit/ocr-kit（铁律 2）',
       severity: 'error',
       from: { path: '^packages/tools/[^/]+' },
       to: {
         path: '^packages/',
-        pathNot: '^packages/(plugin-api|shared|ui|node-kit)/|^packages/tools/'
+        pathNot: '^packages/(plugin-api|shared|ui|node-kit|ocr-kit)/|^packages/tools/'
       }
     },
     {

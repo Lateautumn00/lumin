@@ -17,6 +17,7 @@ import {
   Info,
   QrCode,
   Ruler,
+  ScanText,
   Scissors,
   Settings,
   Wrench,
@@ -43,6 +44,7 @@ const iconMap: Record<string, LucideIcon> = {
   hash: Hash,
   braces: Braces,
   'qr-code': QrCode,
+  'scan-text': ScanText,
   copy: Copy,
   wrench: Wrench
 }
