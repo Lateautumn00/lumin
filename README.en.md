@@ -4,32 +4,33 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 
 ## Features
 
-| Tool             | Description                                                                                                            |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Calculator       | Expression evaluation (mathjs) with history                                                                            |
-| Unit converter   | Length, area, volume, mass, temperature, speed, pressure, energy, power, data (no FX rates)                            |
-| Office to PDF    | Batch-convert `.doc/.docx/.xls/.xlsx/.ppt/.pptx` to PDF, saved next to the source, auto `(1)` suffix on conflicts      |
-| Exam splitter    | PDF split/merge/delete/crop + OCR question slicing (images/PDF → per-question export)                                  |
-| Image toolbox    | Compress / convert / resize — JPG, PNG, WebP, AVIF, BMP, TIFF; GIF→WebP keeps animation                                |
-| Batch renamer    | Six stacked rules in one directory, live preview, conflict detection, single-step undo                                 |
-| Text toolbox     | JSON format/minify/validate, Base64/URL encode-decode, regex test & replace preview                                    |
-| Color toolbox    | HEX/RGB/HSL conversion, full-screen eyedropper (outside the app window)/picker and color scales, harmony palettes, WCAG contrast (AA/AAA) checks              |
-| Time toolbox     | Timestamp ↔ date conversion, 8 common time zones, duration math, Cron parsing with next 5 runs                                                          |
-| PDF images       | PDF pages → PNG/JPG (range/DPI), images → PDF in order (auto/A4 page size)                                             |
-| PDF toolkit      | Merge, split, delete, rotate, reorder pages, edit metadata, add watermarks and page numbers — output beside the source |
-| File hasher      | Batch MD5/SHA-1/SHA-256 with paste-to-verify against an expected digest, TSV copy                                      |
-| Duplicate finder | Scan a folder, confirm duplicate groups with two-stage SHA-256, keep the oldest and trash the rest                     |
-| Disk usage       | Recursively scan a folder, list entries by size with usage bars, drill down level by level (read-only)                 |
-| Folder compare   | Pair files by relative path across two folders, diff by size/mtime with filters and reveal (read-only, no content)     |
-| Zip tool         | Pack files/folders into ZIP (keeps relative structure) or extract ZIPs safely (zip-slip guarded, no overwrite)         |
-| Media converter  | Transcode (MP4/WebM/MKV), trim clips, extract audio, compress — reuses the bundled ffmpeg, fully offline               |
-| QR code tool     | Generate text/URL/WiFi/vCard QR codes (PNG/SVG) or decode content from local images                                    |
-| OCR text         | Offline PP-OCR text extraction from images, editable preview, copy and TXT export                                      |
-| Batch OCR        | Batch OCR over multiple images, per-image editable preview, copy or export one/merged TXT                              |
-| Image watermark  | Batch text/image watermarks on multiple images (9-grid, opacity, rotation, tiling); originals untouched                |
-| Image stitching  | Stitch multiple images into vertical/horizontal long images or a grid (spacing, margin, background color adjustable)   |
-| Video downloader | Bilibili/Douyin/YouTube presets (online, local parsing only; respect platform terms and copyright)                     |
-| Theme            | Follow system / light / dark, applied app-wide via design tokens with no per-tool overrides                            |
+| Tool               | Description                                                                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Calculator         | Expression evaluation (mathjs) with history                                                                                                      |
+| Unit converter     | Length, area, volume, mass, temperature, speed, pressure, energy, power, data (no FX rates)                                                      |
+| Office to PDF      | Batch-convert `.doc/.docx/.xls/.xlsx/.ppt/.pptx` to PDF, saved next to the source, auto `(1)` suffix on conflicts                                |
+| Exam splitter      | PDF split/merge/delete/crop + OCR question slicing (images/PDF → per-question export)                                                            |
+| Image toolbox      | Compress / convert / resize — JPG, PNG, WebP, AVIF, BMP, TIFF; GIF→WebP keeps animation                                                          |
+| Batch renamer      | Six stacked rules in one directory, live preview, conflict detection, single-step undo                                                           |
+| Text toolbox       | JSON format/minify/validate, Base64/URL encode-decode, regex test & replace preview                                                              |
+| Color toolbox      | HEX/RGB/HSL conversion, full-screen eyedropper (outside the app window)/picker and color scales, harmony palettes, WCAG contrast (AA/AAA) checks |
+| Time toolbox       | Timestamp ↔ date conversion, 8 common time zones, duration math, Cron parsing with next 5 runs                                                   |
+| Password generator | Strong random passwords (charsets/exclusions/entropy & strength), UUID v4, random strings and integers                                           |
+| PDF images         | PDF pages → PNG/JPG (range/DPI), images → PDF in order (auto/A4 page size)                                                                       |
+| PDF toolkit        | Merge, split, delete, rotate, reorder pages, edit metadata, add watermarks and page numbers — output beside the source                           |
+| File hasher        | Batch MD5/SHA-1/SHA-256 with paste-to-verify against an expected digest, TSV copy                                                                |
+| Duplicate finder   | Scan a folder, confirm duplicate groups with two-stage SHA-256, keep the oldest and trash the rest                                               |
+| Disk usage         | Recursively scan a folder, list entries by size with usage bars, drill down level by level (read-only)                                           |
+| Folder compare     | Pair files by relative path across two folders, diff by size/mtime with filters and reveal (read-only, no content)                               |
+| Zip tool           | Pack files/folders into ZIP (keeps relative structure) or extract ZIPs safely (zip-slip guarded, no overwrite)                                   |
+| Media converter    | Transcode (MP4/WebM/MKV), trim clips, extract audio, compress — reuses the bundled ffmpeg, fully offline                                         |
+| QR code tool       | Generate text/URL/WiFi/vCard QR codes (PNG/SVG) or decode content from local images                                                              |
+| OCR text           | Offline PP-OCR text extraction from images, editable preview, copy and TXT export                                                                |
+| Batch OCR          | Batch OCR over multiple images, per-image editable preview, copy or export one/merged TXT                                                        |
+| Image watermark    | Batch text/image watermarks on multiple images (9-grid, opacity, rotation, tiling); originals untouched                                          |
+| Image stitching    | Stitch multiple images into vertical/horizontal long images or a grid (spacing, margin, background color adjustable)                             |
+| Video downloader   | Bilibili/Douyin/YouTube presets (online, local parsing only; respect platform terms and copyright)                                               |
+| Theme              | Follow system / light / dark, applied app-wide via design tokens with no per-tool overrides                                                      |
 
 ## Requirements
 
