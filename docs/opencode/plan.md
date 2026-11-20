@@ -42,6 +42,7 @@
 | Q29 | 压缩包工具    | **新增 `zip-tool` 工具（2026-11-20 用户选定）**：ZIP 打包 / 解压双模式——打包（多选文件/文件夹、保留相对结构、产物冲突递增）/ 解压（zip slip 防护、拒绝符号链接、条目数与解压总大小上限防压缩炸弹、同名自动重命名或跳过）；worker 流式读写 + 进度 + 取消；新增依赖 fflate 0.8.3（纯 JS、MIT、无原生）；详见 §4.25           |
 | Q30 | 图片批量识别  | **新增 `batch-ocr` 工具（2026-11-20 用户选定）**：多选图片（PNG/JPG/WebP，1–50 张、单张 ≤20MB）→ 串行离线 PP-OCR → 逐张结果可编辑预览 → 复制 / 逐张导出 / 合并导出 TXT；单张失败不中断整批、逐张重试；OCR 引擎与行排序复用 `ocr-kit`（行排序纯函数本期上提），零新增第三方依赖；详见 §4.28 |
 | Q31 | 颜色工具箱    | **新增 `color-toolbox` 工具（2026-11-20 用户选定，同日增补屏幕吸管→整屏截图取色）**：HEX/RGB/HSL 互转与实时校验、原生取色器/随机取色/吸管取色（`desktopCapturer` 截屏 + 应用内预览点选，支持窗口外）、10 级色阶、四组调和色（互补/类似/三角/分裂互补）、前景背景 WCAG 对比度与 AA/AAA 判定、各颜色值复制；主进程单通道 `color-toolbox:capture-display`，零新增运行时第三方依赖；三态中加载态按「主体无长任务」豁免（吸管截屏按钮 loading）；详见 §4.29 |
+| Q32 | 时间工具箱    | **新增 `time-toolbox` 工具（2026-11-20 用户选定）**：Unix 时间戳（秒/毫秒自动识别 + 手动切换）与本地/UTC/ISO 8601 互转、日期时间反查时间戳、8 个常用 IANA 时区当前时间与 UTC 偏移（自定义时区 Intl 校验）、两日期时间时长差（进位 + 总秒/分/时/天）、5 字段 Cron 校验 + 中文描述 + 未来 5 次触发；纯 renderer、零 IPC、零新增第三方依赖；三态中加载态按「无长任务」豁免；详见 §4.30 |
 | —   | 硬约束        | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                     |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -482,6 +483,15 @@ lumin/
 - **三态**：空态（默认主色 `#3B82F6` + 示例色块 + 输入提示，无白屏）/ 加载态主体**不适用**（同步计算 <1ms，与 text-toolbox 同口径；吸管截屏为单次 IPC，按钮 loading，无进度/取消语义）/ 报错态（非法输入行内展示错误码 + 中文文案，主色保持上一个有效值；复制失败行内提示；截屏失败 `CT_CAPTURE_FAILED`）
 - **验收**：`color.ts`/`picker.ts`/`schema.ts`/`node.ts`/`renderer/client.ts`/`errors.ts`/`manifest.ts` 单测 ≥80%；e2e 3 用例（默认三格式与对比度 + 吸管预览层/Esc、非法输入报错与恢复、示例色/色阶联动 + 对比度徽标）；吸管真实拾色为 smoke 人工项；R2 八类映射见 `docs/smoke/color-toolbox.md`；chunk <200KB gzip；gate 全绿
 
+### 4.30 时间工具箱（M30，2026-11-20 R8 登记）
+
+- **决策（用户拍板 2026-11-20）**：新增 `time-toolbox` 工具——开发/测试常用的时间戳、时区、时长与 Cron 辅助，纯本地计算
+- **范围**：Tab1 时间戳转换——10 位秒 / 13 位毫秒自动识别与手动切换、本地时间 / UTC / ISO 8601 / UTC 偏移展示、日期时间反查秒/毫秒时间戳、逐项复制；Tab2 时区查看——8 个常用 IANA 时区当前时间与偏移（每秒刷新）+ 自定义时区 `Intl` 校验与去重；Tab3 时长计算——起止时间差（天/时/分/秒进位 + 总秒/分/时/天，负差取绝对并标记）+ 一键交换；Tab4 Cron 解析——5 字段（分 时 日 月 周）`*`/单值/区间/列表/步长校验、中文描述（分钟步长/每时第 N 分/每天/每周/每月/每年）、未来 5 次触发（本地时区，最多向后 60 天）
+- **不做**：农历/节假日、闹钟与提醒、历史时区规则数据库（仅用运行时 `Intl`）、Cron 反向生成、6/7 字段秒级 Cron、系统时区修改、历史持久化、联网
+- **形态**：**纯 renderer**（无 `node.ts` / IPC / 主进程逻辑）；纯函数集中在 `src/time.ts`（`detectTimestampUnit` / `parseTimestamp` / `parseLocalDateTime` / `formatDateTime` / `formatIso` / `formatOffset` / `isValidTimeZone` / `formatDuration` + `COMMON_TIME_ZONES`）与 `src/cron.ts`（`parseCronField` / `parseCron` / `describeCron` / `nextCronRuns`）；错误码 `TT_INVALID_INPUT` / `TT_OUT_OF_RANGE` / `TT_CLIPBOARD_FAILED`；**零新增运行时第三方依赖**
+- **三态**：空态（四页签均带默认值：当前时间戳 / 内置时区 / 当前起止时间 / `*/5 * * * *`，打开即出结果）/ 加载态**不适用**（全同步纯函数 <1ms，与 text-toolbox 同口径；时区列表仅 1s 定时刷新，`onUnmounted` 清理）/ 报错态（各页签独立 `role="alert"` 行内错误码 + 中文文案，互不阻塞；复制失败 `TT_CLIPBOARD_FAILED`）
+- **验收**：`time.ts`/`cron.ts`/`errors.ts`/`manifest.ts` 单测 ≥80%（37 例）；e2e 3 用例（四页签与默认结果、时间戳双向转换 + 非法输入报错恢复、Cron 默认描述/5 次触发 + 非法表达式报错恢复）；R2 八类映射见 `docs/smoke/time-toolbox.md`；chunk 42,160 B raw / 10,491 B gzip；gate 全绿
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -553,6 +563,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M27 v2.6**  | exam-split 命名模板可配（§4.27，2026-11-20）：五算子产物命名支持 `{name}/{op}/{label}/{date}` 模板，留空默认命名；`nameTemplateSchema` 校验 + 前端同规则禁用；渲染后自动去 `.pdf` 重复扩展名                                                                                                                                                    | §4.27 验收；e2e 五算子含 `splitNamed`；单测命名/模板 7 例；gate 全绿                    | 0.5 天   |
 | **M28 v2.7**  | 图片批量识别（§4.28，2026-11-20）：`batch-ocr` —— 多选图片批量离线 OCR → 逐张可编辑预览 → 复制 / 逐张导出 / 合并导出 TXT；单张失败不中断整批、逐张重试；OCR 行排序纯函数上提 `ocr-kit`；零新增依赖                                                                                                                                            | §4.28 验收；e2e 3 用例；R2 八类映射；chunk <200KB gzip；gate 全绿                       | 0.5–1 天 |
 | **M29 v2.8**  | 颜色工具箱（§4.29，2026-11-20）：`color-toolbox` —— HEX/RGB/HSL 互转 + 取色/随机色 + 10 级色阶 + 四组调和色 + WCAG 对比度（正文/大字 AA/AAA）；纯 renderer、零 IPC、零新增依赖                                                                                                                                                                 | §4.29 验收；e2e 3 用例；R2 八类映射；chunk <200KB gzip；gate 全绿                       | 0.5 天   |
+| **M30 v2.9**  | 时间工具箱（§4.30，2026-11-20）：`time-toolbox` —— 时间戳秒/毫秒互转、8 常用时区 + 自定义时区、时长计算、Cron 校验/中文描述/未来 5 次触发；纯 renderer、零 IPC、零新增依赖                                                                                                                                                                      | §4.30 验收；e2e 3 用例；R2 八类映射；chunk 10,491 B gzip；gate 全绿                     | 0.5 天   |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
