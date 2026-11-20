@@ -13,6 +13,7 @@ import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -127,8 +128,8 @@ test.describe('duplicate-finder（重复文件查找）冒烟', () => {
           minBytes: 1048576
         })
       )
-      await page.getByRole('link', { name: '计算器' }).click()
-      await page.getByRole('link', { name: '重复文件查找' }).click()
+      await clickSidebarTool(page, '计算器')
+      await clickSidebarTool(page, '重复文件查找')
       await expect(page.getByRole('heading', { name: '重复文件查找' })).toBeVisible()
       await expect(page.getByText('先选择要扫描的目录，再点击「开始扫描」')).toBeVisible()
       await expect(page.getByRole('button', { name: '开始扫描' })).toBeDisabled()
@@ -211,7 +212,7 @@ test.describe('duplicate-finder（重复文件查找）冒烟', () => {
       const old = new Date('2026-01-01T00:00:00Z')
       fs.utimesSync(first, old, old)
 
-      await page.getByRole('link', { name: '重复文件查找' }).click()
+      await clickSidebarTool(page, '重复文件查找')
       await page.evaluate(
         (root: string) =>
           window.lumin.invoke('duplicate-finder:set-config', {
@@ -222,8 +223,8 @@ test.describe('duplicate-finder（重复文件查找）冒烟', () => {
         dir
       )
       // 重新进入页面触达 mounted 读取记忆
-      await page.getByRole('link', { name: '计算器' }).click()
-      await page.getByRole('link', { name: '重复文件查找' }).click()
+      await clickSidebarTool(page, '计算器')
+      await clickSidebarTool(page, '重复文件查找')
       await expect(page.locator('input').first()).toHaveValue(dir)
 
       await page.getByRole('button', { name: '开始扫描' }).click()

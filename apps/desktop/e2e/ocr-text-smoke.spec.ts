@@ -18,6 +18,7 @@ import {
   type ElectronApplication,
   type Page
 } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -94,7 +95,7 @@ test.describe('ocr-text（图片文字识别）冒烟', () => {
       const big = path.join(workDir, 'big.png')
       fs.writeFileSync(big, Buffer.alloc(21 * 1024 * 1024))
 
-      await page.getByRole('link', { name: '图片文字识别' }).click()
+      await clickSidebarTool(page, '图片文字识别')
       await expect(page.getByRole('heading', { name: '图片文字识别' })).toBeVisible()
       await expect(page.getByText('拖拽图片到此处，或点击选择')).toBeVisible()
       await expect(page.getByText(/支持 PNG \/ JPG \/ WebP/)).toBeVisible()
@@ -124,7 +125,7 @@ test.describe('ocr-text（图片文字识别）冒烟', () => {
       const png = path.join(workDir, 'sample 1.png')
       writeTextPng(png, 'OCR TEST 2026')
 
-      await page.getByRole('link', { name: '图片文字识别' }).click()
+      await clickSidebarTool(page, '图片文字识别')
       await page.setInputFiles('input[type="file"]', png)
 
       const textarea = page.locator('textarea')

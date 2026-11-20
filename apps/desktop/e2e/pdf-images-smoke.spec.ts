@@ -21,6 +21,7 @@ import {
   type ElectronApplication,
   type Page
 } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -239,7 +240,7 @@ test.describe('pdf-images（PDF 图片转换）冒烟', () => {
     const { app, page } = await launch()
     const workDir = freshDir('lumin-pi-e2e-happy')
     try {
-      await page.getByRole('link', { name: 'PDF 图片转换' }).click()
+      await clickSidebarTool(page, 'PDF 图片转换')
       await expect(page.getByRole('heading', { name: 'PDF 图片转换' })).toBeVisible()
       await expect(page.getByText('PDF 转图片', { exact: true })).toBeVisible()
       await expect(page.getByText('图片转 PDF', { exact: true })).toBeVisible()

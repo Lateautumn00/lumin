@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file image-toolbox（图片工具箱）e2e 冒烟：真实 Electron + 真实 ffmpeg 二进制
  * @author cuilanchao
  * @date 2026-11-18
@@ -13,6 +13,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -80,7 +81,7 @@ test.describe('image-toolbox（图片工具箱）冒烟', () => {
     fs.rmSync(workDir, { recursive: true, force: true })
     fs.mkdirSync(workDir, { recursive: true })
     try {
-      await page.getByRole('link', { name: '图片工具箱' }).click()
+      await clickSidebarTool(page, '图片工具箱')
       await expect(page.getByRole('heading', { name: '图片工具箱' })).toBeVisible()
 
       await makeImage([
@@ -344,7 +345,7 @@ test('页签标签可见（naive-ui 自闭合 pane 渲染回归）', async () =>
   const { app, page } = await launch()
   await ensureReady(page)
   try {
-    await page.getByRole('link', { name: '图片工具箱' }).click()
+    await clickSidebarTool(page, '图片工具箱')
     for (const [name, label] of [
       ['compress', '压缩'],
       ['convert', '转换'],

@@ -7,6 +7,7 @@
  */
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -39,7 +40,7 @@ test.describe('text-toolbox（文本工具箱）冒烟', () => {
     const { app, page } = await launch()
     await ensureReady(page)
     try {
-      await page.getByRole('link', { name: '文本工具箱' }).click()
+      await clickSidebarTool(page, '文本工具箱')
       await expect(page.getByRole('heading', { name: '文本工具箱' })).toBeVisible()
 
       await page.getByPlaceholder('粘贴 JSON 文本').fill('{"name":"Lumin","tags":["工具"],"v":1}')
@@ -57,7 +58,7 @@ test.describe('text-toolbox（文本工具箱）冒烟', () => {
     const { app, page } = await launch()
     await ensureReady(page)
     try {
-      await page.getByRole('link', { name: '文本工具箱' }).click()
+      await clickSidebarTool(page, '文本工具箱')
       await page.getByPlaceholder('粘贴 JSON 文本').fill('{\n  "a": 1,\n}')
       await page.getByRole('button', { name: '压缩', exact: true }).click()
       await expect(page.getByText('JSON 格式不正确', { exact: false })).toBeVisible()
@@ -71,7 +72,7 @@ test.describe('text-toolbox（文本工具箱）冒烟', () => {
     const { app, page } = await launch()
     await ensureReady(page)
     try {
-      await page.getByRole('link', { name: '文本工具箱' }).click()
+      await clickSidebarTool(page, '文本工具箱')
       await page.locator('.n-tabs-tab[data-name="codec"]').click()
       await page.getByPlaceholder('粘贴要编码或解码的文本').fill('你好 Lumin')
       await page.getByRole('button', { name: '编码', exact: true }).click()
@@ -90,7 +91,7 @@ test.describe('text-toolbox（文本工具箱）冒烟', () => {
     const { app, page } = await launch()
     await ensureReady(page)
     try {
-      await page.getByRole('link', { name: '文本工具箱' }).click()
+      await clickSidebarTool(page, '文本工具箱')
       await page.locator('.n-tabs-tab[data-name="regex"]').click()
       await expect(
         page.getByText('输入模式与测试文本后点击「测试匹配」', { exact: false })

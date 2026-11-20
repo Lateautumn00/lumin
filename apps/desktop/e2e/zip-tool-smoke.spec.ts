@@ -11,6 +11,7 @@ import os from 'node:os'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -177,7 +178,7 @@ test.describe('zip-tool（压缩包工具）冒烟', () => {
           conflict: 'rename'
         })
       )
-      await page.getByRole('link', { name: '压缩包工具' }).click()
+      await clickSidebarTool(page, '压缩包工具')
       await expect(page.getByRole('heading', { name: '压缩包工具' })).toBeVisible()
       await expect(
         page.getByText('添加文件或文件夹后点击「开始打包」；目录会保留相对结构')
@@ -198,8 +199,8 @@ test.describe('zip-tool（压缩包工具）冒烟', () => {
           }),
         { source, outDir }
       )
-      await page.getByRole('link', { name: '计算器' }).click()
-      await page.getByRole('link', { name: '压缩包工具' }).click()
+      await clickSidebarTool(page, '计算器')
+      await clickSidebarTool(page, '压缩包工具')
       await expect(page.getByText('素材.txt', { exact: true })).toBeVisible()
 
       await page.getByRole('button', { name: '开始打包' }).click()
@@ -221,8 +222,8 @@ test.describe('zip-tool（压缩包工具）冒烟', () => {
           }),
         { archive: zipPath, targetDir: unpackDir }
       )
-      await page.getByRole('link', { name: '计算器' }).click()
-      await page.getByRole('link', { name: '压缩包工具' }).click()
+      await clickSidebarTool(page, '计算器')
+      await clickSidebarTool(page, '压缩包工具')
       await expect(page.getByText('已解压到', { exact: false })).toHaveCount(0)
       await page.getByRole('button', { name: '开始解压' }).click()
       await expect(page.getByText(`已解压到 ${unpackDir}`)).toBeVisible({ timeout: 30_000 })

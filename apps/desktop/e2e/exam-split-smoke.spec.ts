@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -405,7 +406,7 @@ test.describe('exam-split（试卷切割 · PDF 操作）冒烟', () => {
     const { app, page } = await launch()
     try {
       test.skip(!fs.existsSync(threePageFixture), '缺少三页 fixture')
-      await page.getByRole('link', { name: '试卷切割' }).click()
+      await clickSidebarTool(page, '试卷切割')
       await expect(page.getByRole('tab', { name: 'PDF 操作' })).toBeVisible()
 
       await page.locator('input[type="file"]').setInputFiles(threePageFixture)
@@ -548,7 +549,7 @@ test.describe('exam-split（OCR 切题 · M3b）冒烟', () => {
       const input = path.join(workDir, '样卷 图片.png')
       await makeSampleImage(input)
 
-      await page.getByRole('link', { name: '试卷切割' }).click()
+      await clickSidebarTool(page, '试卷切割')
       await page.getByRole('tab', { name: 'OCR 切题' }).click()
       const panel = page.locator('section[aria-label="OCR 切题"]')
       await panel.locator('input[type="file"]').setInputFiles(input)
@@ -710,7 +711,7 @@ test.describe('exam-split（OCR 切题 · M3b）冒烟', () => {
       const sideways = path.join(workDir, '侧拍.png')
       await makeSidewaysImage(upright, sideways)
 
-      await page.getByRole('link', { name: '试卷切割' }).click()
+      await clickSidebarTool(page, '试卷切割')
       await page.getByRole('tab', { name: 'OCR 切题' }).click()
       const panel = page.locator('section[aria-label="OCR 切题"]')
       await panel.locator('input[type="file"]').setInputFiles(sideways)

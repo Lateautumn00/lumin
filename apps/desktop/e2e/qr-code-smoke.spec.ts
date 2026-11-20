@@ -20,6 +20,7 @@ import {
   type ElectronApplication,
   type Page
 } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -114,7 +115,7 @@ test.describe('qr-code（二维码工具）冒烟', () => {
     const outDir = path.join(workDir, '中文 目录')
     try {
       await setOutputDir(page, outDir)
-      await page.getByRole('link', { name: '二维码工具' }).click()
+      await clickSidebarTool(page, '二维码工具')
       await expect(page.getByRole('heading', { name: '二维码工具' })).toBeVisible()
       await expect(page.getByText('生成', { exact: true })).toBeVisible()
       await expect(page.getByText('识别', { exact: true })).toBeVisible()
@@ -146,7 +147,7 @@ test.describe('qr-code（二维码工具）冒烟', () => {
       const blank = path.join(workDir, 'blank.png')
       writeBlankPng(blank)
 
-      await page.getByRole('link', { name: '二维码工具' }).click()
+      await clickSidebarTool(page, '二维码工具')
       await page.getByText('识别', { exact: true }).click()
       await expect(page.getByText('拖拽或选择一张包含二维码的图片')).toBeVisible()
 
@@ -171,7 +172,7 @@ test.describe('qr-code（二维码工具）冒烟', () => {
     const workDir = freshDir('lumin-qr-e2e-bounds')
     try {
       await setOutputDir(page, workDir)
-      await page.getByRole('link', { name: '二维码工具' }).click()
+      await clickSidebarTool(page, '二维码工具')
 
       const saveButton = page.getByRole('button', { name: '保存到文件' })
       await expect(saveButton).toBeDisabled()
@@ -255,7 +256,7 @@ test.describe('qr-code（二维码工具）冒烟', () => {
 
       const big = path.join(workDir, 'big.png')
       fs.writeFileSync(big, Buffer.alloc(21 * 1024 * 1024))
-      await page.getByRole('link', { name: '二维码工具' }).click()
+      await clickSidebarTool(page, '二维码工具')
       await page.getByText('识别', { exact: true }).click()
       await page.setInputFiles('input[type="file"]', big)
       await expect(page.getByText('图片超过 20MB，请压缩后重试')).toBeVisible()

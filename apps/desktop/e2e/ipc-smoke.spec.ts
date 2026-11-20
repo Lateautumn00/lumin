@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { TaskEvent } from '@lumin/shared'
 import type { LuminBridge } from '@lumin/plugin-api'
 
@@ -24,18 +25,17 @@ test.describe('IPC 冒烟（R3）', () => {
 
   test('启动渲染工具清单', async () => {
     const page = await app.firstWindow()
-    await expect(page.getByRole('link', { name: '计算器' })).toBeVisible()
-    await expect(page.getByRole('link', { name: '单位换算' })).toBeVisible()
-    await expect(page.getByRole('link', { name: '示例工具' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /计算与转换/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /其他/ })).toBeVisible()
     await expect(page.getByRole('heading', { name: '计算器' })).toBeVisible()
-    await page.getByRole('link', { name: '示例工具' }).click()
+    await clickSidebarTool(page, '示例工具')
     await expect(page.getByRole('heading', { name: '示例工具' })).toBeVisible()
   })
 
   test('单位换算：类别切换单位重置 + 实时换算 + 收藏', async () => {
     const page = await app.firstWindow()
     await page.evaluate(() => localStorage.removeItem('lumin.tool.unit-converter.favorites'))
-    await page.getByRole('link', { name: '单位换算' }).click()
+    await clickSidebarTool(page, '单位换算')
     await expect(page.getByRole('heading', { name: '单位换算' })).toBeVisible()
 
     const value = page.getByPlaceholder('输入数值')
@@ -63,7 +63,7 @@ test.describe('IPC 冒烟（R3）', () => {
     await expect(page.getByText('= -273.15').first()).toBeVisible()
 
     await page.reload()
-    await page.getByRole('link', { name: '单位换算' }).click()
+    await clickSidebarTool(page, '单位换算')
     await page.getByLabel('换算类别').click()
     await page.getByText('温度', { exact: true }).click()
     await expect(page.getByRole('button', { name: '取消收藏源单位' })).toBeVisible()
@@ -72,7 +72,7 @@ test.describe('IPC 冒烟（R3）', () => {
 
   test('计算器求值（白名单 + DEG 角度 + 历史）', async () => {
     const page = await app.firstWindow()
-    await page.getByRole('link', { name: '计算器' }).click()
+    await clickSidebarTool(page, '计算器')
     const input = page.getByPlaceholder('输入表达式，Enter 计算')
     await input.fill('sin(90)+2^8')
     await input.press('Enter')
@@ -83,7 +83,7 @@ test.describe('IPC 冒烟（R3）', () => {
     await expect(page.getByText('结果无效（除零或溢出）')).toBeVisible()
 
     await page.reload()
-    await page.getByRole('link', { name: '计算器' }).click()
+    await clickSidebarTool(page, '计算器')
     await expect(page.getByText('sin(90)+2^8').last()).toBeVisible()
   })
 

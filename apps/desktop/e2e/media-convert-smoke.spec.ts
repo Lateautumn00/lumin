@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file media-convert（音视频处理）e2e 冒烟：真实 Electron + 真实 ffmpeg 二进制
  * @author cuilanchao
  * @date 2026-11-19
@@ -12,6 +12,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -167,7 +168,7 @@ test.describe('media-convert（音视频处理）冒烟', () => {
     fs.rmSync(workDir, { recursive: true, force: true })
     fs.mkdirSync(workDir, { recursive: true })
     try {
-      await page.getByRole('link', { name: '音视频处理' }).click()
+      await clickSidebarTool(page, '音视频处理')
       await expect(page.getByRole('heading', { name: '音视频处理' })).toBeVisible()
       // 四 Tab 标签可见（naive-ui 自闭合 pane 渲染回归）
       for (const [name, label] of [

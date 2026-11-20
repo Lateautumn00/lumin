@@ -12,6 +12,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -116,7 +117,7 @@ test.describe('file-hasher（文件哈希校验）冒烟', () => {
     const { app, page } = await launch()
     await ensureReady(page)
     try {
-      await page.getByRole('link', { name: '文件哈希校验' }).click()
+      await clickSidebarTool(page, '文件哈希校验')
       await expect(page.getByRole('heading', { name: '文件哈希校验' })).toBeVisible()
       await expect(page.getByText('添加文件后点击「开始校验」，即可获得哈希值')).toBeVisible()
     } finally {
@@ -132,7 +133,7 @@ test.describe('file-hasher（文件哈希校验）冒烟', () => {
       const target = path.join(dir, '文件 一.txt')
       fs.writeFileSync(target, 'abc')
 
-      await page.getByRole('link', { name: '文件哈希校验' }).click()
+      await clickSidebarTool(page, '文件哈希校验')
       await expect(page.getByRole('heading', { name: '文件哈希校验' })).toBeVisible()
 
       // 通过设置通道预置三算法（页面 mounted 时读取记忆），再验证 UI 勾选态与切换
@@ -141,8 +142,8 @@ test.describe('file-hasher（文件哈希校验）冒烟', () => {
           algorithms: ['md5', 'sha1', 'sha256']
         })
       )
-      await page.getByRole('link', { name: '计算器' }).click()
-      await page.getByRole('link', { name: '文件哈希校验' }).click()
+      await clickSidebarTool(page, '计算器')
+      await clickSidebarTool(page, '文件哈希校验')
       const sha1Checkbox = page.locator('.n-checkbox', { hasText: 'SHA-1' }).first()
       await expect(sha1Checkbox).toHaveClass(/n-checkbox--checked/)
       await sha1Checkbox.click()

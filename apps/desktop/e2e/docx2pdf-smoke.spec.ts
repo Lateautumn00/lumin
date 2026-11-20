@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -64,7 +65,7 @@ test.describe('docx2pdf（Office 转 PDF）冒烟', () => {
   test('状态与自定义路径往返：status 枚举 + set-path 保存/清空', async () => {
     const { app, page } = await launch()
     try {
-      await page.getByRole('link', { name: 'Office 转 PDF' }).click()
+      await clickSidebarTool(page, 'Office 转 PDF')
       await expect(page.getByRole('heading', { name: 'Office 转 PDF' })).toBeVisible()
 
       const status = await getStatus(page)

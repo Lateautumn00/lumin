@@ -20,6 +20,7 @@ import {
   type ElectronApplication,
   type Page
 } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -161,7 +162,7 @@ test.describe('pdf-toolkit（PDF 工具集）冒烟', () => {
     const { app, page } = await launch()
     const workDir = freshDir('lumin-pt-e2e-happy')
     try {
-      await page.getByRole('link', { name: 'PDF 工具集' }).click()
+      await clickSidebarTool(page, 'PDF 工具集')
       await expect(page.getByRole('heading', { name: 'PDF 工具集' })).toBeVisible()
       for (const tab of ['合并', '拆分', '删页', '旋转', '重排', '元数据', '水印', '页码']) {
         await expect(page.getByText(tab, { exact: true }).first()).toBeVisible()
@@ -415,7 +416,7 @@ test.describe('pdf-toolkit（PDF 工具集）冒烟', () => {
       const imageData = fs.readFileSync(stamp).toString('base64')
 
       // UI：水印 Tab 可见 + 空态 + 未选 PDF 时按钮禁用
-      await page.getByRole('link', { name: 'PDF 工具集' }).click()
+      await clickSidebarTool(page, 'PDF 工具集')
       await page.getByText('水印', { exact: true }).first().click()
       await expect(page.getByText('添加 PDF 开始整理')).toBeVisible()
       await expect(page.getByRole('button', { name: '添加水印' })).toBeDisabled()
@@ -538,7 +539,7 @@ test.describe('pdf-toolkit（PDF 工具集）冒烟', () => {
       expect(noTarget.error?.code).toBe('PT_PAGE_NUMBER_INVALID')
 
       // UI：页码 Tab 字段与按钮
-      await page.getByRole('link', { name: 'PDF 工具集' }).click()
+      await clickSidebarTool(page, 'PDF 工具集')
       await page.getByText('页码', { exact: true }).first().click()
       await expect(page.getByText('起始页', { exact: true })).toBeVisible()
       await expect(page.getByText('位置', { exact: true })).toBeVisible()

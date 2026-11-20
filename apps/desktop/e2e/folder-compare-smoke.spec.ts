@@ -10,6 +10,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -149,7 +150,7 @@ test.describe('folder-compare（文件夹对比）冒烟', () => {
           compareMtime: true
         })
       )
-      await page.getByRole('link', { name: '文件夹对比' }).click()
+      await clickSidebarTool(page, '文件夹对比')
       await expect(page.getByRole('heading', { name: '文件夹对比' })).toBeVisible()
       await expect(
         page.getByText('先选择左右两个目录，再点击「开始对比」；仅比较文件元数据，不读取文件内容')
@@ -166,8 +167,8 @@ test.describe('folder-compare（文件夹对比）冒烟', () => {
           }),
         { left, right }
       )
-      await page.getByRole('link', { name: '计算器' }).click()
-      await page.getByRole('link', { name: '文件夹对比' }).click()
+      await clickSidebarTool(page, '计算器')
+      await clickSidebarTool(page, '文件夹对比')
       await expect(page.locator('input').first()).toHaveValue(left)
 
       await page.getByRole('button', { name: '开始对比' }).click()

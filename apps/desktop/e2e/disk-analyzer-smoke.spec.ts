@@ -10,6 +10,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -112,7 +113,7 @@ test.describe('disk-analyzer（磁盘空间分析）冒烟', () => {
       await page.evaluate(() =>
         window.lumin.invoke('disk-analyzer:set-config', { root: '', minFileBytes: 0 })
       )
-      await page.getByRole('link', { name: '磁盘空间分析' }).click()
+      await clickSidebarTool(page, '磁盘空间分析')
       await expect(page.getByRole('heading', { name: '磁盘空间分析' })).toBeVisible()
       // 空态：未选目录时开始扫描禁用
       await expect(
@@ -126,8 +127,8 @@ test.describe('disk-analyzer（磁盘空间分析）冒烟', () => {
           window.lumin.invoke('disk-analyzer:set-config', { root, minFileBytes: 0 }),
         dir
       )
-      await page.getByRole('link', { name: '计算器' }).click()
-      await page.getByRole('link', { name: '磁盘空间分析' }).click()
+      await clickSidebarTool(page, '计算器')
+      await clickSidebarTool(page, '磁盘空间分析')
       await expect(page.locator('input').first()).toHaveValue(dir)
 
       await page.getByRole('button', { name: '开始扫描' }).click()

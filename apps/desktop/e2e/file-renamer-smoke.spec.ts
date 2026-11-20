@@ -12,6 +12,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -72,7 +73,7 @@ test.describe('file-renamer（批量重命名）冒烟', () => {
     const { app, page } = await launch()
     await ensureReady(page)
     try {
-      await page.getByRole('link', { name: '批量重命名' }).click()
+      await clickSidebarTool(page, '批量重命名')
       await expect(page.getByRole('heading', { name: '批量重命名' })).toBeVisible()
       await expect(page.getByText('选择一个文件夹开始批量重命名')).toBeVisible()
     } finally {

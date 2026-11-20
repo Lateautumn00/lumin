@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execSync } from 'node:child_process'
 import { test, expect, _electron as electron } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 
 const appDir = path.resolve(__dirname, '..')
 const oldExe = path.join(appDir, 'release', 'win-unpacked-old', 'Lumin.exe')
@@ -38,7 +39,7 @@ test('更新冒烟：检测新版本 → 下载 → 静默安装 → 新版本�
   const app = await electron.launch({ executablePath: oldExe })
   try {
     const page = await app.firstWindow()
-    await page.getByRole('link', { name: '关于' }).click()
+    await clickSidebarTool(page, '关于')
     await page.getByRole('button', { name: '检查更新' }).click()
     await expect(page.getByText('已下载新版本')).toBeVisible({ timeout: 120_000 })
     await page.getByRole('button', { name: '安装并重启' }).click()

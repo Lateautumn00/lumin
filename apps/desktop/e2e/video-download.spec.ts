@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -68,7 +69,7 @@ test.describe('视频下载（假引擎）', () => {
 
   test('免责弹窗 → 同意后解锁主功能区（持久化）', async () => {
     const page = await app.firstWindow()
-    await page.getByRole('link', { name: '视频下载' }).click()
+    await clickSidebarTool(page, '视频下载')
     await expect(page.getByText('使用前须知')).toBeVisible()
     // 未同意时主功能区置灰（下载按钮禁用）
     await expect(page.getByRole('button', { name: '下载' })).toBeDisabled()
@@ -82,19 +83,19 @@ test.describe('视频下载（假引擎）', () => {
 
     // 持久化：重新进入不再弹窗
     await page.reload()
-    await page.getByRole('link', { name: '视频下载' }).click()
+    await clickSidebarTool(page, '视频下载')
     await expect(page.getByText('使用前须知')).toBeHidden()
   })
 
   test('probe 信息卡 + 下载进度 → 历史 DONE + 打开文件夹入口', async () => {
     const page = await app.firstWindow()
-    await page.getByRole('link', { name: '视频下载' }).click()
+    await clickSidebarTool(page, '视频下载')
     // 免责预置为已同意（本用例专注下载主链路）
     await page.evaluate(() =>
       window.lumin.settings.set('tools.video-download.disclaimerAccepted', true)
     )
     await page.reload()
-    await page.getByRole('link', { name: '视频下载' }).click()
+    await clickSidebarTool(page, '视频下载')
 
     const urlInput = page.getByPlaceholder('https://…')
     await urlInput.fill('https://example.com/watch/1')
@@ -112,12 +113,12 @@ test.describe('视频下载（假引擎）', () => {
 
   test('probe 报错态：结构化错误 + 详情 + 重试', async () => {
     const page = await app.firstWindow()
-    await page.getByRole('link', { name: '视频下载' }).click()
+    await clickSidebarTool(page, '视频下载')
     await page.evaluate(() =>
       window.lumin.settings.set('tools.video-download.disclaimerAccepted', true)
     )
     await page.reload()
-    await page.getByRole('link', { name: '视频下载' }).click()
+    await clickSidebarTool(page, '视频下载')
 
     await page.getByPlaceholder('https://…').fill('https://example.com/fail/1')
     await page.getByRole('button', { name: '获取信息' }).click()
@@ -129,7 +130,7 @@ test.describe('视频下载（假引擎）', () => {
 
   test('清空历史（二次确认）', async () => {
     const page = await app.firstWindow()
-    await page.getByRole('link', { name: '视频下载' }).click()
+    await clickSidebarTool(page, '视频下载')
     await page.evaluate(() =>
       window.lumin.settings.set('tools.video-download.disclaimerAccepted', true)
     )
@@ -147,7 +148,7 @@ test.describe('视频下载（假引擎）', () => {
       ])
     )
     await page.reload()
-    await page.getByRole('link', { name: '视频下载' }).click()
+    await clickSidebarTool(page, '视频下载')
     await expect(page.getByText('历史样例')).toBeVisible()
 
     await page.getByRole('button', { name: '清空历史' }).click()
@@ -158,7 +159,7 @@ test.describe('视频下载（假引擎）', () => {
 
   test('Cookie 管理：粘贴保存 → 平台独立 → 删除（spec §9.5）', async () => {
     const page = await app.firstWindow()
-    await page.getByRole('link', { name: '视频下载' }).click()
+    await clickSidebarTool(page, '视频下载')
     await page.getByRole('button', { name: '同意并继续' }).click()
     await page.getByRole('button', { name: 'Cookie 管理' }).click()
     await expect(page.getByText(/配置浏览器 Cookie 后可下载登录可见内容/)).toBeVisible()

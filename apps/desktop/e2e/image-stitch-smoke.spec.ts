@@ -19,6 +19,7 @@ import {
   type ElectronApplication,
   type Page
 } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -90,7 +91,7 @@ test.describe('image-stitch（图片拼接）冒烟', () => {
       const before = [sha256(first), sha256(second)]
       await setOutputDir(page, outDir)
 
-      await page.getByRole('link', { name: '图片拼接' }).click()
+      await clickSidebarTool(page, '图片拼接')
       await expect(page.getByRole('heading', { name: '图片拼接' })).toBeVisible()
       await expect(page.getByText('拖拽图片到此处，或点击选择（可多选）')).toBeVisible()
 
@@ -129,7 +130,7 @@ test.describe('image-stitch（图片拼接）冒烟', () => {
       writePng(valid, 1600, 1200)
       await setOutputDir(page, outDir)
 
-      await page.getByRole('link', { name: '图片拼接' }).click()
+      await clickSidebarTool(page, '图片拼接')
       await page.setInputFiles('input[type="file"]', broken)
       await page.getByRole('button', { name: '开始拼接' }).click()
       await expect(page.getByText('图片无法解码，可能已损坏')).toBeVisible({ timeout: 30_000 })

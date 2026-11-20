@@ -7,6 +7,7 @@
  */
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
 declare global {
@@ -25,7 +26,7 @@ async function launch(): Promise<ElectronApplication> {
 }
 
 async function openSettings(page: Page): Promise<void> {
-  await page.getByRole('link', { name: '设置' }).click()
+  await clickSidebarTool(page, '设置')
   await expect(page.getByText('主题模式')).toBeVisible()
 }
 
@@ -83,11 +84,11 @@ test.describe('深色主题切换（M19）', () => {
       expect(await tokenValue(page, '--lumin-color-text')).toBe('#e2e8f0')
 
       // 工具页复用 tokens：深色下壳背景应为暗色（无白底）
-      await page.getByRole('link', { name: '计算器' }).click()
+      await clickSidebarTool(page, '计算器')
       await expect.poll(() => currentTheme(page)).toBe('dark')
       const shellBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor)
       expect(shellBg).toBe('rgb(11, 18, 32)')
-      await page.getByRole('link', { name: '设置' }).click()
+      await clickSidebarTool(page, '设置')
 
       await expect
         .poll(() =>
