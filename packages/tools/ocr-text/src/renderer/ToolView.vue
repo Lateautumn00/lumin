@@ -11,7 +11,6 @@ import TaskProgress from '@lumin/ui/TaskProgress.vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import { isRetryable } from '../errors'
 import type { RecognizeResult } from '../schema'
-import { composeText } from '../text-lines'
 import { cancelTask, pickDirectory, revealPath, saveTxt, submitRecognize } from './client'
 
 const file = ref<File | null>(null)
@@ -68,7 +67,7 @@ function onEvent(event: TaskEvent): void {
     phase.value = 'idle'
     if (payload !== undefined) {
       result.value = payload
-      text.value = composeText(payload.lines)
+      text.value = payload.lines.map((line) => line.text).join('\n')
     }
     return
   }
@@ -238,7 +237,9 @@ onUnmounted(() => {
 
       <template v-if="phase === 'error' && error !== null">
         <NAlert type="error" :title="error.message">
-          <p class="text-xs opacity-80">{{ error.code }}<template v-if="error.detail"> · {{ error.detail }}</template></p>
+          <p class="text-xs opacity-80">
+            {{ error.code }}<template v-if="error.detail"> · {{ error.detail }}</template>
+          </p>
         </NAlert>
         <div class="flex gap-2">
           <NButton v-if="isRetryable(error.code)" type="primary" @click="retry">重试</NButton>
@@ -274,7 +275,10 @@ onUnmounted(() => {
         <p v-if="notice !== ''" class="text-sm text-[var(--lumin-color-text-secondary)]">
           {{ notice }}
         </p>
-        <p v-if="savedPath !== ''" class="break-all text-sm text-[var(--lumin-color-text-secondary)]">
+        <p
+          v-if="savedPath !== ''"
+          class="break-all text-sm text-[var(--lumin-color-text-secondary)]"
+        >
           已导出：{{ savedPath }}
           <NButton text type="primary" @click="reveal">打开所在文件夹</NButton>
         </p>

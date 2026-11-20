@@ -12,6 +12,7 @@ import {
   FileOutput,
   FilePen,
   FileImage,
+  FileScan,
   Files,
   Film,
   FlaskConical,
@@ -56,6 +57,7 @@ const iconMap: Record<string, LucideIcon> = {
   braces: Braces,
   'qr-code': QrCode,
   'scan-text': ScanText,
+  'file-scan': FileScan,
   copy: Copy,
   'hard-drive': HardDrive,
   'git-compare': GitCompare,
@@ -108,10 +110,7 @@ function linkClass(path: string): string {
         :aria-expanded="isOpen(group.category)"
         @click="toggle(group.category)"
       >
-        <NIcon
-          :component="isOpen(group.category) ? ChevronDown : ChevronRight"
-          :size="14"
-        />
+        <NIcon :component="isOpen(group.category) ? ChevronDown : ChevronRight" :size="14" />
         <span>{{ t(CATEGORY_LABEL[group.category]) }}</span>
         <span class="ml-auto opacity-60">{{ group.tools.length }}</span>
       </button>

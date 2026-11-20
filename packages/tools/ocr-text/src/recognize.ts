@@ -7,10 +7,10 @@
  */
 import { tail } from '@lumin/node-kit'
 import type { OcrEngine, RenderedPage } from '@lumin/ocr-kit'
+import { sortReadingOrder } from '@lumin/ocr-kit'
 import { isStructuredError } from '@lumin/shared'
 import { toolError } from './errors'
 import type { OcrTextLine, RecognizeResult } from './schema'
-import { sortReadingOrder } from './text-lines'
 
 /** worker 入参（binariesDir 由主进程预检后注入，renderer 不可指定） */
 export interface RecognizeRequest {

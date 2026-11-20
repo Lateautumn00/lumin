@@ -24,6 +24,7 @@
     "@lucide/vue": "1.72.0",
     "@lumin/plugin-api": "workspace:*",
     "@lumin/shared": "workspace:*",
+    "@lumin/tool-batch-ocr": "workspace:*",
     "@lumin/tool-calculator": "workspace:*",
     "@lumin/tool-disk-analyzer": "workspace:*",
     "@lumin/tool-docx2pdf": "workspace:*",
