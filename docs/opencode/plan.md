@@ -7,7 +7,7 @@
 
 ---
 
-## 1. 决策总表（Q1–Q28 锁定）
+## 1. 决策总表（Q1–Q29 锁定）
 
 | #   | 决策项     | 结论                                                                                                                                                                                                                                                         |
 | --- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -39,6 +39,7 @@
 | Q26 | 图片拼接 | **新增 `image-stitch` 工具（2026-11-20 用户选定）**：多选图片（PNG/JPG/WebP，1–100 张、单张 ≤40MB）→ 纵向长图 / 横向长图 / 网格拼图；基准尺寸（首图/最大/固定）、间距、外边距、背景色、输出格式与质量可调；输出单张、冲突递增；复用 `@napi-rs/canvas`，零新增第三方依赖；详见 §4.22 |
 | Q27 | 磁盘空间分析 | **新增 `disk-analyzer` 工具（2026-11-20 用户选定）**：选择目录（含子目录）扫描 → 直接子项（子目录递归汇总 + 文件）按大小降序 + 占比条 + 逐级下钻；最小文件显示阈值 0/1KB/100KB/1MB；单次 20 万文件上限、进度 + 取消；只读分析、绝不改删文件；worker 递归扫描、零新增第三方依赖；详见 §4.23 |
 | Q28 | 文件夹对比 | **新增 `folder-compare` 工具（2026-11-20 用户选定）**：左右两个目录递归扫描，按相对路径配对比较文件元数据（大小 + 修改时间，时间容差 2s、可关闭）；仅比较文件不列目录差异，不读文件内容/不算哈希；只读不改文件；单侧 20 万文件上限、结果 2 万条截断、进度 + 取消；worker 扫描、零新增第三方依赖；详见 §4.24                                     |
+| Q29 | 压缩包工具 | **新增 `zip-tool` 工具（2026-11-20 用户选定）**：ZIP 打包 / 解压双模式——打包（多选文件/文件夹、保留相对结构、产物冲突递增）/ 解压（zip slip 防护、拒绝符号链接、条目数与解压总大小上限防压缩炸弹、同名自动重命名或跳过）；worker 流式读写 + 进度 + 取消；新增依赖 fflate 0.8.3（纯 JS、MIT、无原生）；详见 §4.25 |
 | —   | 硬约束     | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                       |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -62,7 +63,7 @@
 | 校验/测试      | zod 4.6.7 · vitest 5.1.0 + @vitest/coverage-v8 5.1.0 · @vue/test-utils 2.5.1 · vue-tsc 3.3.14                                                                                                                                                                                              | vue-tsc peer 无上限（TS7 兼容待实测）                                                                                                                                                                                                                                                                                                  |
 | Lint/格式      | eslint 10.14.0 · @typescript-eslint/* 8.72.2 · eslint-plugin-vue 10.12.1 · vue-eslint-parser 10.4.2 · @vue/eslint-config-typescript 14.9.0 · @vue/eslint-config-prettier 10.2.0 · eslint-config-prettier 10.1.8 · prettier 3.10.1                                                          |                                                                                                                                                                                                                                                                                                                                        |
 | 工程化         | turbo 2.11.11 · dependency-cruiser 18.7.2 · electron-log 5.4.4                                                                                                                                                                                                                             | pnpm 12 为 Rust 重写，配置格式与 11 兼容；`--frozen-lockfile false` 语法已移除                                                                                                                                                                                                                                                         |
-| 后续里程碑     | mathjs 15.2.0（M1）· pdf-lib 1.17.1 + pdfjs-dist 6.5.438（M3）· **onnxruntime-web 1.31.1（M3b P0 钉版）→ onnxruntime-node 1.31.1（M3b P4 R1 复评切换，2026-11-18 `npm view` 复核 latest=1.31.1，`pnpm-workspace.yaml` `allowBuilds` 放行 postinstall）** · @playwright/test（M0 IPC 冒烟） | M3b P0 实测：worker_threads 内 import 23ms / session 创建 327ms / 320² 推理 62–90ms；模型与字典经 `scripts/fetch-binaries.mjs` 固定 URL+SHA256 拉取（det 4.7MB + rec 10.9MB + cls 0.6MB + 字典 6623 字符，合计 ≈16.2MB）；P4 真实样卷 wasm 3.3–4.7s/页超 R1 ≤3s 基线 → 切 onnxruntime-node 后 1.10–1.56s/页达标（提速 2.6–3.8×）       |
+| 后续里程碑     | mathjs 15.2.0（M1）· pdf-lib 1.17.1 + pdfjs-dist 6.5.438（M3）· **onnxruntime-web 1.31.1（M3b P0 钉版）→ onnxruntime-node 1.31.1（M3b P4 R1 复评切换，2026-11-18 `npm view` 复核 latest=1.31.1，`pnpm-workspace.yaml` `allowBuilds` 放行 postinstall）** · @playwright/test（M0 IPC 冒烟）· **fflate 0.8.3（M25，2026-11-20 `npm view` 复核 latest=0.8.3；纯 JS ZIP，MIT，无原生依赖）** | M3b P0 实测：worker_threads 内 import 23ms / session 创建 327ms / 320² 推理 62–90ms；模型与字典经 `scripts/fetch-binaries.mjs` 固定 URL+SHA256 拉取（det 4.7MB + rec 10.9MB + cls 0.6MB + 字典 6623 字符，合计 ≈16.2MB）；P4 真实样卷 wasm 3.3–4.7s/页超 R1 ≤3s 基线 → 切 onnxruntime-node 后 1.10–1.56s/页达标（提速 2.6–3.8×）       |
 
 ---
 
@@ -431,6 +432,19 @@ lumin/
 - **图标**：`@lucide/vue` `git-compare`（壳 iconMap 注册 `GitCompare`）
 - **验收**：本包覆盖率 ≥80%；e2e `apps/desktop/e2e/folder-compare-smoke.spec.ts` 2/2；R2 八类映射；chunk < 200KB gzip；零新增第三方依赖；gate 全绿
 
+### 4.25 压缩包工具（M25，2026-11-20 R8 登记）
+
+- **决策（用户拍板 2026-11-20）**：新增 `@lumin/tool-zip-tool`（「压缩包工具」）——ZIP 打包 / 解压双模式；离线、纯本机；**新增第三方依赖 `fflate@0.8.3`**（纯 JS、MIT、无原生，经 `npm view` 复核并登记 §1.1）
+- **形态**：`packages/tools/zip-tool` + `src/schema.ts`/`errors.ts`/`contract.ts`/`archive.ts`/`archive.worker.ts`/`node.ts` + `renderer/`
+- **IPC（4 通道）**：`zip-tool:config` / `zip-tool:set-config` 同步（记忆模式/源列表/输出目录与文件名/压缩包/目标目录/冲突策略）；`zip-tool:pack` 与 `zip-tool:unpack` 走 worker 三段式任务（`?modulePath` + `runTask`，900s，取消 terminate）
+- **打包语义**：源为文件 → 条目名 = 文件名；源为目录 → 条目名 = `{目录名}/{相对路径}`（保留相对结构）；不跟随符号链接、跳过非常规条目；条目名统一 `/` 分隔、UTF-8 标志；单次条目上限 10 万；同名条目冲突自动 `(1)` 递增；产物路径 = 输出目录 + 文件名（冲突递增，绝不覆盖既有文件）
+- **解压语义**：仅 `.zip`；流式解压逐条落盘；**zip slip 防护**（拒绝绝对路径、盘符、`..` 段，非法条目跳过并计数）；拒绝符号链接条目（跳过并计数）；条目上限 10 万、解压总大小上限 10GB（超限 → `ZP_ARCHIVE_TOO_LARGE`）；同名冲突策略：`rename`（默认，`{名} (1){扩展名}` 递增）/ `skip`（跳过并计数），**不提供覆盖**
+- **展示**：双 Tab（打包 / 解压）；打包源列表（拖拽 + 添加文件夹，去重、≤200 项）、输出目录 + 文件名；解压压缩包（拖拽 `.zip`）、目标目录（默认压缩包同目录同名文件夹）、冲突策略；进度 = 已完成条目 / 总条目 + 阶段；结果卡片展示文件数/目录数/字节数/跳过数/重命名数/耗时 + 定位按钮
+- **错误码**：`ZP_INVALID_PAYLOAD / ZP_SOURCE_INVALID / ZP_ARCHIVE_INVALID / ZP_TARGET_INVALID / ZP_TOO_MANY_ENTRIES / ZP_ARCHIVE_TOO_LARGE / ZP_TASK_FAILED`（可重试：SOURCE_INVALID / ARCHIVE_INVALID / TARGET_INVALID / TASK_FAILED）
+- **UI 三态（AGENTS §5.3）**：空态双 Tab 引导；加载态条目进度 + 取消；报错态结构化文案 + 重试/详情
+- **图标**：`@lucide/vue` `archive`（壳 iconMap 注册 `Archive`）
+- **验收**：本包覆盖率 ≥80%；e2e `apps/desktop/e2e/zip-tool-smoke.spec.ts` 2/2（UI 打包→解压回读；IPC zip slip 拒绝 / 非法 zip / 计数）；R2 八类映射；chunk（含 fflate）< 200KB gzip；gate 全绿
+
 
 ---
 
@@ -498,6 +512,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M22 v2.1**  | 图片拼接（§4.22，2026-11-20）：`image-stitch` —— 纵向/横向长图 + 网格拼图，基准尺寸/间距/外边距/背景色/格式质量可调，单张输出、冲突递增；复用 `@napi-rs/canvas` 零新增依赖                                                                                                                                                                   | §4.22 验收；e2e 2/2；R2 八类；chunk <200KB gzip；gate 全绿                              | 0.5–1 天 |
 | **M23 v2.2**  | 磁盘空间分析（§4.23，2026-11-20）：`disk-analyzer` —— 目录递归扫描 + 直接子项大小降序 + 占比条 + 逐级下钻，最小文件阈值可调、20 万文件上限、进度 + 取消；只读不改文件、零新增依赖                                                                                                                     | §4.23 验收；e2e 2/2；R2 八类；chunk < 200KB gzip；gate 全绿                             | 0.5–1 天 |
 | **M24 v2.3**  | 文件夹对比（§4.24，2026-11-20）：`folder-compare` —— 左右目录按相对路径配对比较文件元数据（大小/修改时间，容差 2s 可关闭），四类结果 + 筛选 + 筛选后定位；单侧 20 万上限、结果 2 万截断、进度 + 取消；只读不改文件、零新增依赖                                                                         | §4.24 验收；e2e 2/2；R2 八类；chunk < 200KB gzip；gate 全绿                             | 0.5–1 天 |
+| **M25 v2.4**  | 压缩包工具（§4.25，2026-11-20）：`zip-tool` —— ZIP 打包（多选文件/文件夹、保留相对结构、产物冲突递增）/ 解压（zip slip 防护、符号链接拒绝、条目与总大小上限、同名重命名/跳过）；worker 流式读写 + 进度 + 取消；新增 fflate 0.8.3                                                                 | §4.25 验收；e2e 2/2；R2 八类；chunk < 200KB gzip；gate 全绿                             | 1–2 天   |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
