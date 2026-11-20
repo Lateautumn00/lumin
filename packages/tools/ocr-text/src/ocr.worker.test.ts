@@ -16,7 +16,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@lumin/ocr-kit', () => ({
   renderOcrInput: mocks.render,
-  createOcrEngine: mocks.createEngine
+  createOcrEngine: mocks.createEngine,
+  sortReadingOrder: (lines: unknown[]) => lines
 }))
 
 function fakePage(): RenderedPage {
