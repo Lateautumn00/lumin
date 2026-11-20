@@ -173,6 +173,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/disk-analyzer/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-folder-compare\/manifest$/,
+    replacement: r('../../packages/tools/folder-compare/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-folder-compare\/node$/,
+    replacement: r('../../packages/tools/folder-compare/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-folder-compare\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/folder-compare/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-text-toolbox\/manifest$/,
     replacement: r('../../packages/tools/text-toolbox/src/manifest.ts')
   },

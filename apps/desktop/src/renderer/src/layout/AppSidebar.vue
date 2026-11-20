@@ -12,6 +12,7 @@ import {
   Files,
   Film,
   FlaskConical,
+  GitCompare,
   HardDrive,
   Hash,
   Image,
@@ -52,6 +53,7 @@ const iconMap: Record<string, LucideIcon> = {
   'scan-text': ScanText,
   copy: Copy,
   'hard-drive': HardDrive,
+  'git-compare': GitCompare,
   wrench: Wrench
 }
 

@@ -6,6 +6,7 @@ import { registerMain as exampleRegisterMain } from '@lumin/tool-example/node'
 import { registerMain as examSplitRegisterMain } from '@lumin/tool-exam-split/node'
 import { registerMain as fileHasherRegisterMain } from '@lumin/tool-file-hasher/node'
 import { registerMain as fileRenamerRegisterMain } from '@lumin/tool-file-renamer/node'
+import { registerMain as folderCompareRegisterMain } from '@lumin/tool-folder-compare/node'
 import { registerMain as imageToolboxRegisterMain } from '@lumin/tool-image-toolbox/node'
 import { registerMain as imageStitchRegisterMain } from '@lumin/tool-image-stitch/node'
 import { registerMain as imageWatermarkRegisterMain } from '@lumin/tool-image-watermark/node'
@@ -24,6 +25,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'exam-split': examSplitRegisterMain,
   'file-hasher': fileHasherRegisterMain,
   'file-renamer': fileRenamerRegisterMain,
+  'folder-compare': folderCompareRegisterMain,
   'image-toolbox': imageToolboxRegisterMain,
   'image-stitch': imageStitchRegisterMain,
   'image-watermark': imageWatermarkRegisterMain,
