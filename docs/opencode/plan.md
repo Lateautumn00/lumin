@@ -449,8 +449,8 @@ lumin/
 
 - **决策（用户拍板 2026-11-20）**：侧边栏工具过多（21 项），按分类折叠分组展示
 - **分类知识归属**：`ToolManifest` 新增必填字段 `category`（`plugin-api` 导出 `TOOL_CATEGORIES` 七类：`compute/text/image/document/media/file/misc`），由各工具 manifest 自行声明——壳零工具知识（AGENTS §2.1），新增工具仍只需「新包 + 清单 1 行」
-- **壳侧**：`layout/sidebar-groups.ts` 纯函数按固定分类序 + 组内 `order` 升序分组；`AppSidebar.vue` 渲染可折叠分组头（分类名 + 数量，默认全部展开，折叠状态仅存会话内，避免入口被隐藏）；分类标签走 `zh-CN` i18n；侧边栏改 `overflow-y-auto`
-- **验收**：`sidebar-groups` 单测 3 例 + `plugin-api` 清单 schema 拒绝未知分类；IPC 冒烟 6/6；gate 全绿
+- **壳侧**：`layout/sidebar-groups.ts` 纯函数按固定分类序 + 组内 `order` 升序分组；`AppSidebar.vue` 渲染分组头（分类名 + 数量）并实现**手风琴折叠**——默认全部折叠，展开某分类时其余分类自动收起（状态仅存会话内）；分类标签走 `zh-CN` i18n；侧边栏改 `overflow-y-auto`
+- **验收**：`sidebar-groups` 单测 3 例 + `plugin-api` 清单 schema 拒绝未知分类；e2e 统一走 `e2e/sidebar.ts` 的 `clickSidebarTool`（先展开所属分类再点击）；IPC 冒烟 6/6；gate 全绿
 
 
 ---
