@@ -8,6 +8,7 @@ const validManifest: ToolManifest = {
   name: '演示',
   description: '',
   icon: 'wrench',
+  category: 'misc',
   order: 1,
   version: '0.0.1'
 }

@@ -6,6 +6,7 @@ const valid = {
   name: '示例工具',
   description: 'M0 插拔链路验证占位工具',
   icon: 'flask-conical',
+  category: 'misc',
   order: 99,
   version: '0.1.0'
 } as const
@@ -34,6 +35,11 @@ describe('toolManifestSchema', () => {
   it('拒绝缺字段', () => {
     const { icon: _icon, ...rest } = valid
     expect(toolManifestSchema.safeParse(rest).success).toBe(false)
+  })
+
+  it('拒绝未知分类', () => {
+    expect(toolManifestSchema.safeParse({ ...valid, category: 'video' }).success).toBe(false)
+    expect(toolManifestSchema.safeParse({ ...valid, category: undefined }).success).toBe(false)
   })
 })
 
