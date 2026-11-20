@@ -7,7 +7,7 @@
 
 ---
 
-## 1. 决策总表（Q1–Q24 锁定）
+## 1. 决策总表（Q1–Q25 锁定）
 
 | #   | 决策项     | 结论                                                                                                                                                                                                                                                         |
 | --- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -35,6 +35,7 @@
 | Q22 | 重复文件查找 | **新增 `duplicate-finder` 工具**（2026-11-19 用户选定）：单目录（可含子目录）扫描 → 大小分组 + 64KB 前缀预筛 + 全量 SHA-256 确认 → 重复组展示与默认勾选 → 定位 / 移入回收站；新增壳通用能力 `lumin:shell:trash`（Electron `shell.trashItem`）；零新增第三方依赖；详见 §4.18 |
 | Q23 | 深色主题切换 | **壳级平台能力（2026-11-19 用户选定，无新工具包）**：跟随系统 / 浅色 / 深色三模式；tokens 单源新增暗色变量集（`html[data-theme='dark']` 覆盖），Naive UI 主题层切换 + 设置页持久化 `shell.theme.mode`；全工具零改动受益；零新增依赖、不新增 IPC；详见 §4.19 |
 | Q24 | 图片文字识别 | **新增 `ocr-text` 工具（2026-11-19 用户选定）**：单张图片（PNG/JPG/WebP，含截图）离线 PP-OCR 识别 → 可编辑文本预览 → 复制 / 导出 TXT（`{原名}-OCR.txt`，冲突递增）；引擎从 exam-split 上提为根 `packages/ocr-kit`（exam-split 薄壳零回归），`writeAtomic` 上提 `node-kit`；零新增第三方依赖；详见 §4.20 |
+| Q25 | 图片批量水印 | **新增 `image-watermark` 工具（2026-11-20 用户选定）**：多选图片（PNG/JPG/WebP，1–100 张、单张 ≤40MB）批量叠加文字/图片水印；九宫格位置、边距、透明度、大小、旋转、平铺可调；输出到指定目录 `{原名}_水印.{ext}`（冲突递增、绝不覆盖原图）；worker 串行 + 进度 + 取消；复用 `@napi-rs/canvas`，零新增第三方依赖；详见 §4.21 |
 | —   | 硬约束     | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                       |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -378,6 +379,18 @@ lumin/
 - **图标**：`@lucide/vue` `scan-text`
 - **验收**：本包与 `ocr-kit` 覆盖率 ≥80%；e2e `apps/desktop/e2e/ocr-text-smoke.spec.ts` 3/3；R2 八类映射；chunk < 200KB gzip；零新增第三方依赖；gate 全绿
 
+### 4.21 图片批量水印（M21，2026-11-20 R8 登记）
+
+- **决策（用户拍板 2026-11-20）**：新增 `@lumin/tool-image-watermark`（「图片批量水印」）——多选图片批量叠加文字/图片水印；不做 PDF 水印（pdf-toolkit）、不做转码/缩放（image-toolbox）、不做多水印叠加与模板库
+- **引擎**：复用既有 `@napi-rs/canvas@1.1.1`（中文水印字体复用 `@lumin/node-kit/pdf` 的 `ensureCjkFont`），worker 内逐张解码 → 画布绘制 → 原格式编码（png/jpeg q90/webp q90）→ `.tmp` + rename 原子写；**零新增第三方依赖**
+- **布局纯函数**：`contract.ts` 单一真相源（短边百分比、九宫格锚点、旋转包围盒、平铺步长 1.6×/2.0×、点数上限 2000、旋转归一、命名 `{原名}_水印`、扩展名 → 编码器），renderer 预览与 worker 出图共用
+- **IPC（3 通道）**：`image-watermark:config` / `image-watermark:set-output-dir`（目录记忆，缺省 `userData/image-watermark`）/ `image-watermark:watermark`（三段式任务，`runTask` + worker，600s 超时、可取消）；取消走壳通用 `lumin:task:cancel`
+- **容错**：单张失败记入 `failures` 不中断整批；全部失败抛首个结构化错误；预检（存在/占用/40MB）在 `node.ts`，水印图缺失/超 5MB 分别归 `IW_WATERMARK_MISSING` / `IW_WATERMARK_INVALID`
+- **错误码**：`IW_INVALID_PAYLOAD / IW_INPUT_INVALID / IW_FILE_LOCKED / IW_IMAGE_TOO_LARGE / IW_IMAGE_CORRUPT / IW_WATERMARK_MISSING / IW_WATERMARK_INVALID / IW_OUTPUT_DIR_INVALID / IW_WRITE_FAILED / IW_PROCESS_FAILED / OP_TIMEOUT / CANCELLED`
+- **UI 三态（AGENTS §5.3）**：空态 DropZone 多选；加载态逐张进度 + 取消；报错态结构化文案 + 重试/返回；结果态成功/失败分组 + 打开目录；第一张图 Canvas 参数化预览（防抖 200ms）
+- **图标**：`@lucide/vue` `stamp`（壳 iconMap 注册 `Stamp`）
+- **验收**：本包覆盖率 ≥80%（contract/schema/errors/node/worker/client）；e2e `apps/desktop/e2e/image-watermark-smoke.spec.ts` 2/2；R2 八类映射；chunk 21,132 B gzip（raw 90,487 B）；零新增第三方依赖；gate 全绿
+
 
 ---
 
@@ -441,6 +454,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M18 v1.7**  | 重复文件查找（§4.18，2026-11-19）：`duplicate-finder` —— 目录扫描（可递归）+ 大小分组 + 64KB 前缀预筛 + 全量 SHA-256 + 重复组默认勾选 + 定位/移入回收站；壳新增 `shell:trash` 通用能力                                                                                                                                                          | §4.18 验收；e2e 覆盖三态与扫描/取消/并发；R2 八类；chunk < 200KB gzip；gate 全绿        | 1–2 天   |
 | **M19 v1.8**  | 深色主题切换（§4.19，2026-11-19）：跟随系统/浅色/深色三模式、tokens 暗色变量集、Naive 主题层切换、设置页持久化、启动防白闪；全工具零改动                                                                                                                                                                                                         | §4.19 验收；e2e 3/3；R2 八类映射；纯函数覆盖率 ≥80%；gate 全绿                          | 0.5 天   |
 | **M20 v1.9**  | 图片文字识别（§4.20，2026-11-19）：`ocr-text` —— 单图 OCR → 可编辑文本 → 复制 / 导出 TXT；OCR 引擎上提 `packages/ocr-kit`（exam-split 薄壳零回归），`writeAtomic` 上提 `node-kit`                                                                                                                                                              | §4.20 验收；e2e 3/3；R2 八类；chunk 4,163 B gzip；gate 全绿                             | 0.5–1 天 |
+| **M21 v2.0**  | 图片批量水印（§4.21，2026-11-20）：`image-watermark` —— 多选图片批量文字/图片水印（九宫格/边距/透明度/大小/旋转/平铺），原图不修改、冲突递增；复用 `@napi-rs/canvas` 零新增依赖                                                                                                                                                                 | §4.21 验收；e2e 2/2；R2 八类；chunk 21,132 B gzip；gate 全绿                            | 0.5–1 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
