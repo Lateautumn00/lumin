@@ -87,6 +87,11 @@ test.describe('exam-split（试卷切割 · PDF 操作）冒烟', () => {
                 })
               void (async () => {
                 await runOne('split', 'exam-split:split', { inputPath: a, ranges: '1-2,3' })
+                await runOne('splitNamed', 'exam-split:split', {
+                  inputPath: a,
+                  ranges: '1',
+                  nameTemplate: '{name}-{op}-{label}'
+                })
                 await runOne('merge', 'exam-split:merge', { inputPaths: [a, b] })
                 await runOne('delete', 'exam-split:delete', { inputPath: a, ranges: '2' })
                 await runOne('rotate', 'exam-split:rotate', { inputPath: a, degrees: 180 })
@@ -113,12 +118,14 @@ test.describe('exam-split（试卷切割 · PDF 操作）冒烟', () => {
         path.join(workDir, '期中 卷甲_p1-2.pdf'),
         path.join(workDir, '期中 卷甲_p3.pdf')
       ])
+      // 自定义命名模板（spec §7.2）：{name}-{op}-{label}
+      expect(pathsOf('splitNamed')).toEqual([path.join(workDir, '期中 卷甲-拆分-1.pdf')])
       expect(pathsOf('merge')).toEqual([path.join(workDir, '期中 卷甲_合并.pdf')])
       expect(pathsOf('delete')).toEqual([path.join(workDir, '期中 卷甲_删p2.pdf')])
       expect(pathsOf('rotate')).toEqual([path.join(workDir, '期中 卷甲_旋转180.pdf')])
       expect(pathsOf('crop')).toEqual([path.join(workDir, '期中 卷甲_裁剪.pdf')])
 
-      for (const key of ['split', 'merge', 'delete', 'rotate', 'crop']) {
+      for (const key of ['split', 'splitNamed', 'merge', 'delete', 'rotate', 'crop']) {
         for (const output of pathsOf(key)) {
           expect(fs.existsSync(output), output).toBe(true)
           expect(pdfHead(output), output).toBe('%PDF-')
