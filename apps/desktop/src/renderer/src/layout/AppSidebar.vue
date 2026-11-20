@@ -75,21 +75,15 @@ const CATEGORY_LABEL: Record<ToolCategory, MessageKey> = {
 
 const groups = computed(() => groupToolsByCategory(toolManifests))
 
-/** 折叠状态仅保留在本次会话：默认全部展开，避免入口被隐藏 */
-const collapsed = ref<ReadonlySet<ToolCategory>>(new Set<ToolCategory>())
+/** 手风琴折叠：默认全部折叠，展开某分类时其余分类自动收起 */
+const openCategory = ref<ToolCategory | null>(null)
 
-function isCollapsed(category: ToolCategory): boolean {
-  return collapsed.value.has(category)
+function isOpen(category: ToolCategory): boolean {
+  return openCategory.value === category
 }
 
 function toggle(category: ToolCategory): void {
-  const next = new Set(collapsed.value)
-  if (next.has(category)) {
-    next.delete(category)
-  } else {
-    next.add(category)
-  }
-  collapsed.value = next
+  openCategory.value = openCategory.value === category ? null : category
 }
 
 function iconFor(name: string): LucideIcon {
@@ -111,17 +105,17 @@ function linkClass(path: string): string {
       <button
         type="button"
         class="flex items-center gap-1 rounded-[var(--lumin-radius-md)] px-2 py-1 text-xs font-medium text-[var(--lumin-color-text-secondary)] hover:bg-[var(--lumin-color-surface)]"
-        :aria-expanded="!isCollapsed(group.category)"
+        :aria-expanded="isOpen(group.category)"
         @click="toggle(group.category)"
       >
         <NIcon
-          :component="isCollapsed(group.category) ? ChevronRight : ChevronDown"
+          :component="isOpen(group.category) ? ChevronDown : ChevronRight"
           :size="14"
         />
         <span>{{ t(CATEGORY_LABEL[group.category]) }}</span>
         <span class="ml-auto opacity-60">{{ group.tools.length }}</span>
       </button>
-      <div v-show="!isCollapsed(group.category)" class="flex flex-col gap-1">
+      <div v-show="isOpen(group.category)" class="flex flex-col gap-1">
         <RouterLink
           v-for="tool in group.tools"
           :key="tool.id"
