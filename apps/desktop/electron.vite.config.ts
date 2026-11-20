@@ -54,6 +54,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/image-toolbox/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-image-rotate\/manifest$/,
+    replacement: r('../../packages/tools/image-rotate/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-image-rotate\/node$/,
+    replacement: r('../../packages/tools/image-rotate/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-image-rotate\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/image-rotate/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-image-stitch\/manifest$/,
     replacement: r('../../packages/tools/image-stitch/src/manifest.ts')
   },

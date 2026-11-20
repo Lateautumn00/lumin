@@ -36,6 +36,7 @@
     "@lumin/tool-file-renamer": "workspace:*",
     "@lumin/tool-folder-compare": "workspace:*",
     "@lumin/tool-image-toolbox": "workspace:*",
+    "@lumin/tool-image-rotate": "workspace:*",
     "@lumin/tool-image-stitch": "workspace:*",
     "@lumin/tool-image-watermark": "workspace:*",
     "@lumin/tool-media-convert": "workspace:*",

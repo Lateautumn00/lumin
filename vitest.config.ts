@@ -112,6 +112,12 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
+        'packages/tools/image-rotate/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
         'packages/tools/file-renamer/src/**/*.ts': {
           lines: 80,
           functions: 80,

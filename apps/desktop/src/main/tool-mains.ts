@@ -10,6 +10,7 @@ import { registerMain as fileHasherRegisterMain } from '@lumin/tool-file-hasher/
 import { registerMain as fileRenamerRegisterMain } from '@lumin/tool-file-renamer/node'
 import { registerMain as folderCompareRegisterMain } from '@lumin/tool-folder-compare/node'
 import { registerMain as imageToolboxRegisterMain } from '@lumin/tool-image-toolbox/node'
+import { registerMain as imageRotateRegisterMain } from '@lumin/tool-image-rotate/node'
 import { registerMain as imageStitchRegisterMain } from '@lumin/tool-image-stitch/node'
 import { registerMain as imageWatermarkRegisterMain } from '@lumin/tool-image-watermark/node'
 import { registerMain as mediaConvertRegisterMain } from '@lumin/tool-media-convert/node'
@@ -32,6 +33,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'file-renamer': fileRenamerRegisterMain,
   'folder-compare': folderCompareRegisterMain,
   'image-toolbox': imageToolboxRegisterMain,
+  'image-rotate': imageRotateRegisterMain,
   'image-stitch': imageStitchRegisterMain,
   'image-watermark': imageWatermarkRegisterMain,
   'media-convert': mediaConvertRegisterMain,
