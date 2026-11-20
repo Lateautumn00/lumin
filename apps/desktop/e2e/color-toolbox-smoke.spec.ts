@@ -46,6 +46,7 @@ test.describe('color-toolbox（颜色工具箱）冒烟', () => {
       await expect(page.getByText('rgb(59, 130, 246)', { exact: true })).toBeVisible()
       await expect(page.getByText('hsl(217, 91%, 60%)', { exact: true })).toBeVisible()
       await expect(page.getByText('3.68 : 1', { exact: true })).toBeVisible()
+      await expect(page.getByRole('button', { name: '吸管取色' })).toBeVisible()
     } finally {
       await app.close()
     }

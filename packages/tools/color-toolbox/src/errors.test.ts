@@ -4,7 +4,11 @@ import { COLOR_TOOLBOX_ERROR_CODES, errorMessage, toolError } from './errors'
 
 describe('color-toolbox errors', () => {
   it('错误码全集与顺序', () => {
-    expect(COLOR_TOOLBOX_ERROR_CODES).toEqual(['CT_INVALID_COLOR', 'CT_CLIPBOARD_FAILED'])
+    expect(COLOR_TOOLBOX_ERROR_CODES).toEqual([
+      'CT_INVALID_COLOR',
+      'CT_CLIPBOARD_FAILED',
+      'CT_EYEDROPPER_FAILED'
+    ])
   })
 
   it('构造结构化错误：无 detail 时省略字段', () => {
