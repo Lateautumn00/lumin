@@ -7,6 +7,7 @@ import { manifest as examSplitManifest } from '@lumin/tool-exam-split/manifest'
 import { manifest as fileHasherManifest } from '@lumin/tool-file-hasher/manifest'
 import { manifest as fileRenamerManifest } from '@lumin/tool-file-renamer/manifest'
 import { manifest as imageToolboxManifest } from '@lumin/tool-image-toolbox/manifest'
+import { manifest as imageStitchManifest } from '@lumin/tool-image-stitch/manifest'
 import { manifest as imageWatermarkManifest } from '@lumin/tool-image-watermark/manifest'
 import { manifest as mediaConvertManifest } from '@lumin/tool-media-convert/manifest'
 import { manifest as ocrTextManifest } from '@lumin/tool-ocr-text/manifest'
@@ -24,6 +25,7 @@ export const toolManifests: readonly ToolManifest[] = [
   docx2pdfManifest,
   examSplitManifest,
   imageToolboxManifest,
+  imageStitchManifest,
   imageWatermarkManifest,
   pdfImagesManifest,
   pdfToolkitManifest,

@@ -54,10 +54,21 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/image-toolbox/src/renderer/$1')
   },
   {
-    find: /^@lumin\/tool-image-watermark\/manifest$/,
-    replacement: r('../../packages/tools/image-watermark/src/manifest.ts')
+    find: /^@lumin\/tool-image-stitch\/manifest$/,
+    replacement: r('../../packages/tools/image-stitch/src/manifest.ts')
   },
   {
+    find: /^@lumin\/tool-image-stitch\/node$/,
+    replacement: r('../../packages/tools/image-stitch/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-image-stitch\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/image-stitch/src/renderer/$1')
+  },
+  {
+    find: /^@lumin\/tool-image-watermark\/manifest$/,
+    replacement: r('../../packages/tools/image-watermark/src/manifest.ts')
+  },  {
     find: /^@lumin\/tool-image-watermark\/node$/,
     replacement: r('../../packages/tools/image-watermark/src/node.ts')
   },
