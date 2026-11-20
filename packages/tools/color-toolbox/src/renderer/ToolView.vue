@@ -3,8 +3,8 @@
  * 颜色工具箱（color-toolbox）：HEX/RGB/HSL 互转 + 色阶/配色方案 + WCAG 对比度。
  * 三态：空态（默认主色 + 示例色引导）/ 加载态（无长任务，同步计算豁免）/ 报错态（结构化错误码 + 中文文案）。
  */
-import { computed, onUnmounted, ref } from 'vue'
-import { ArrowLeftRight, Copy, Dices } from '@lucide/vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { ArrowLeftRight, Copy, Dices, Pipette } from '@lucide/vue'
 import { NButton, NInput, NSelect } from 'naive-ui'
 import { toStructuredError, type StructuredError } from '@lumin/shared'
 
@@ -24,6 +24,7 @@ import {
   type WcagVerdict
 } from '../color'
 import { toolError, type ColorToolboxErrorCode } from '../errors'
+import { getEyeDropper, isEyedropperCancel, type EyeDropperConstructorLike } from '../eyedropper'
 
 const WHITE_RGB: Rgb = { r: 255, g: 255, b: 255 }
 
@@ -47,6 +48,9 @@ const inputText = ref(formatColor(DEFAULT_COLOR, 'hex'))
 const inputError = ref<StructuredError | null>(null)
 const backgroundColor = ref('#FFFFFF')
 const clipboardError = ref<StructuredError | null>(null)
+const eyedropperCtor = ref<EyeDropperConstructorLike | null>(null)
+const eyedropperBusy = ref(false)
+const eyedropperError = ref<StructuredError | null>(null)
 const copied = ref('')
 
 let copiedTimer: ReturnType<typeof setTimeout> | undefined
@@ -124,6 +128,24 @@ function onRandom(): void {
   applyColor(randomColor())
 }
 
+async function onPickScreen(): Promise<void> {
+  const ctor = eyedropperCtor.value
+  if (ctor === null || eyedropperBusy.value) return
+  eyedropperError.value = null
+  eyedropperBusy.value = true
+  try {
+    const result = await new ctor().open()
+    const parsed = parseHex(result.sRGBHex)
+    if (parsed !== null) applyColor(parsed)
+  } catch (err) {
+    if (!isEyedropperCancel(err)) {
+      eyedropperError.value = toolError('CT_EYEDROPPER_FAILED', toStructuredError(err).message)
+    }
+  } finally {
+    eyedropperBusy.value = false
+  }
+}
+
 function onSwapContrast(): void {
   const previous = backgroundRgb.value
   backgroundColor.value = rgbToHex(main.value)
@@ -163,6 +185,10 @@ function badgeClass(pass: boolean): string {
 function swatchClass(): string {
   return 'rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)]'
 }
+
+onMounted(() => {
+  eyedropperCtor.value = getEyeDropper()
+})
 
 onUnmounted(() => {
   if (copiedTimer !== undefined) clearTimeout(copiedTimer)
@@ -212,14 +238,32 @@ onUnmounted(() => {
           <template #icon><Dices :size="16" /></template>
           随机
         </NButton>
+        <NButton
+          :disabled="eyedropperCtor === null"
+          :loading="eyedropperBusy"
+          :title="eyedropperCtor === null ? '当前环境不支持吸管取色' : '在屏幕上拾取颜色'"
+          @click="onPickScreen"
+        >
+          <template #icon><Pipette :size="16" /></template>
+          吸管取色
+        </NButton>
       </div>
 
       <p v-if="inputError !== null" role="alert" class="text-sm text-[var(--lumin-color-error)]">
         {{ inputError.message }}
         <span class="ml-2 text-xs opacity-70">{{ inputError.code }}</span>
       </p>
+      <p
+        v-else-if="eyedropperError !== null"
+        role="alert"
+        class="text-sm text-[var(--lumin-color-error)]"
+      >
+        {{ eyedropperError.message }}
+        <span class="ml-2 text-xs opacity-70">{{ eyedropperError.code }}</span>
+      </p>
       <p v-else class="text-xs text-[var(--lumin-color-text-secondary)]">
         输入格式随右侧切换：HEX（#3B82F6）/ RGB（rgb(59, 130, 246)）/ HSL（hsl(217, 91%, 60%)）
+        <template v-if="eyedropperCtor === null">；吸管取色不可用（当前环境不支持）</template>
       </p>
 
       <div class="flex flex-wrap items-center gap-2">

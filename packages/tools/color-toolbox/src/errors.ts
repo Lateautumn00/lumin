@@ -7,14 +7,19 @@
 import type { StructuredError } from '@lumin/shared'
 
 /** color-toolbox 错误码全集（spec §4） */
-export const COLOR_TOOLBOX_ERROR_CODES = ['CT_INVALID_COLOR', 'CT_CLIPBOARD_FAILED'] as const
+export const COLOR_TOOLBOX_ERROR_CODES = [
+  'CT_INVALID_COLOR',
+  'CT_CLIPBOARD_FAILED',
+  'CT_EYEDROPPER_FAILED'
+] as const
 
 export type ColorToolboxErrorCode = (typeof COLOR_TOOLBOX_ERROR_CODES)[number]
 
 /** 错误码 → 中文文案（renderer 展示；spec §4 同源） */
 const MESSAGES: Record<ColorToolboxErrorCode, string> = {
   CT_INVALID_COLOR: '颜色格式不正确，请输入 HEX / RGB / HSL 值',
-  CT_CLIPBOARD_FAILED: '复制失败，请手动选择文本复制'
+  CT_CLIPBOARD_FAILED: '复制失败，请手动选择文本复制',
+  CT_EYEDROPPER_FAILED: '吸管取色失败，请重试或改用取色器'
 }
 
 /**
