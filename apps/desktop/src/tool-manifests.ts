@@ -15,6 +15,7 @@ import { manifest as imageStitchManifest } from '@lumin/tool-image-stitch/manife
 import { manifest as imageWatermarkManifest } from '@lumin/tool-image-watermark/manifest'
 import { manifest as mediaConvertManifest } from '@lumin/tool-media-convert/manifest'
 import { manifest as ocrTextManifest } from '@lumin/tool-ocr-text/manifest'
+import { manifest as passwordGeneratorManifest } from '@lumin/tool-password-generator/manifest'
 import { manifest as pdfImagesManifest } from '@lumin/tool-pdf-images/manifest'
 import { manifest as pdfToolkitManifest } from '@lumin/tool-pdf-toolkit/manifest'
 import { manifest as qrCodeManifest } from '@lumin/tool-qr-code/manifest'
@@ -49,5 +50,6 @@ export const toolManifests: readonly ToolManifest[] = [
   zipToolManifest,
   colorToolboxManifest,
   timeToolboxManifest,
+  passwordGeneratorManifest,
   exampleManifest
 ]

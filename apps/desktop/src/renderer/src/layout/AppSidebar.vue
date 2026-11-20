@@ -22,6 +22,7 @@ import {
   Hash,
   Image,
   Info,
+  KeyRound,
   LayoutGrid,
   Palette,
   QrCode,
@@ -65,6 +66,7 @@ const iconMap: Record<string, LucideIcon> = {
   'git-compare': GitCompare,
   archive: Archive,
   clock: Clock,
+  'key-round': KeyRound,
   palette: Palette,
   wrench: Wrench
 }
