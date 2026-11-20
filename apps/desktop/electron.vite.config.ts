@@ -246,6 +246,14 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/password-generator/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-text-diff\/manifest$/,
+    replacement: r('../../packages/tools/text-diff/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-text-diff\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/text-diff/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-video-download\/manifest$/,
     replacement: r('../../packages/tools/video-download/src/manifest.ts')
   },
