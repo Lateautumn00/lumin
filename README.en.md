@@ -11,6 +11,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | Office to PDF      | Batch-convert `.doc/.docx/.xls/.xlsx/.ppt/.pptx` to PDF, saved next to the source, auto `(1)` suffix on conflicts                                |
 | Exam splitter      | PDF split/merge/delete/crop + OCR question slicing (images/PDF → per-question export)                                                            |
 | Image toolbox      | Compress / convert / resize — JPG, PNG, WebP, AVIF, BMP, TIFF; GIF→WebP keeps animation                                                          |
+| Image rotate       | Batch rotate (90°/180°/270°) and horizontal/vertical flip, combinable; remembers output folder, never overwrites originals                       |
 | Batch renamer      | Six stacked rules in one directory, live preview, conflict detection, single-step undo                                                           |
 | Text toolbox       | JSON format/minify/validate, Base64/URL encode-decode, regex test & replace preview                                                              |
 | Color toolbox      | HEX/RGB/HSL conversion, full-screen eyedropper (outside the app window)/picker and color scales, harmony palettes, WCAG contrast (AA/AAA) checks |
