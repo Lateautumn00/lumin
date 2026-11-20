@@ -1,8 +1,9 @@
-import { execSync, spawn, type ChildProcess } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { holdExclusiveLock, type FileLockHandle } from './file-lock'
 import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
@@ -266,19 +267,15 @@ test.describe('docx2pdf（Office 转 PDF）冒烟', () => {
     const inputPath = path.join(workDir, '占用 样例.docx')
     fs.copyFileSync(fixtureFile, inputPath)
 
-    const scriptPath = path.join(workDir, 'hold.ps1')
-    fs.writeFileSync(
-      scriptPath,
-      "$fs = [System.IO.File]::Open($args[0], 'Open', 'ReadWrite', 'None')\n" +
-        'Start-Sleep -Seconds 60\n' +
-        '$fs.Close()\n'
-    )
-    let holder: ChildProcess | null = null
+    let lock: FileLockHandle | null = null
     try {
-      holder = spawn('powershell.exe', ['-NoProfile', '-File', scriptPath, inputPath], {
-        windowsHide: true
-      })
-      await new Promise((resolve) => setTimeout(resolve, 1500)) // 等句柄持有生效
+      const status = await getStatus(page)
+      test.skip(
+        status.source === 'none',
+        '本机无 LibreOffice：转换前置检测会先报 SOFFICE_NOT_FOUND，无法进入占用检测分支'
+      )
+      lock = await holdExclusiveLock(inputPath)
+      test.skip(!lock.acquired, '本环境未能建立独占句柄（PowerShell 启动失败/被策略拦截）')
 
       const error = await page.evaluate(
         (input: string) =>
@@ -309,7 +306,7 @@ test.describe('docx2pdf（Office 转 PDF）冒烟', () => {
       expect(error.code).toBe('INPUT_LOCKED')
       expect(error.message).toContain('文件被其他程序占用')
     } finally {
-      holder?.kill()
+      lock?.release()
       await new Promise((resolve) => setTimeout(resolve, 500))
       fs.rmSync(workDir, { recursive: true, force: true })
       await app.close()

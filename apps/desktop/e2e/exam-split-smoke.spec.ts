@@ -1,8 +1,9 @@
-import { execSync, spawn, type ChildProcess } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import { holdExclusiveLock, type FileLockHandle } from './file-lock'
 import { clickSidebarTool } from './sidebar'
 import type { LuminBridge } from '@lumin/plugin-api'
 
@@ -179,19 +180,10 @@ test.describe('exam-split（试卷切割 · PDF 操作）冒烟', () => {
     const workDir = makeWorkDir('lumin-exam-locked')
     const input = path.join(workDir, '占用卷.pdf')
     fs.copyFileSync(threePageFixture, input)
-    const scriptPath = path.join(workDir, 'hold.ps1')
-    fs.writeFileSync(
-      scriptPath,
-      "$fs = [System.IO.File]::Open($args[0], 'Open', 'ReadWrite', 'None')\n" +
-        'Start-Sleep -Seconds 60\n' +
-        '$fs.Close()\n'
-    )
-    let holder: ChildProcess | null = null
+    let lock: FileLockHandle | null = null
     try {
-      holder = spawn('powershell.exe', ['-NoProfile', '-File', scriptPath, input], {
-        windowsHide: true
-      })
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      lock = await holdExclusiveLock(input)
+      test.skip(!lock.acquired, '本环境未能建立独占句柄（PowerShell 启动失败/被策略拦截）')
 
       const error = await page.evaluate(
         (file: string) =>
@@ -223,7 +215,7 @@ test.describe('exam-split（试卷切割 · PDF 操作）冒烟', () => {
       expect(error.message).toContain('占用')
       expect(fs.existsSync(path.join(workDir, '占用卷_p1.pdf'))).toBe(false)
     } finally {
-      holder?.kill()
+      lock?.release()
       await new Promise((resolve) => setTimeout(resolve, 500))
       fs.rmSync(workDir, { recursive: true, force: true })
       await app.close()
