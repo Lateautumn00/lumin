@@ -6,6 +6,7 @@ import { registerMain as examSplitRegisterMain } from '@lumin/tool-exam-split/no
 import { registerMain as fileHasherRegisterMain } from '@lumin/tool-file-hasher/node'
 import { registerMain as fileRenamerRegisterMain } from '@lumin/tool-file-renamer/node'
 import { registerMain as imageToolboxRegisterMain } from '@lumin/tool-image-toolbox/node'
+import { registerMain as imageWatermarkRegisterMain } from '@lumin/tool-image-watermark/node'
 import { registerMain as mediaConvertRegisterMain } from '@lumin/tool-media-convert/node'
 import { registerMain as ocrTextRegisterMain } from '@lumin/tool-ocr-text/node'
 import { registerMain as pdfImagesRegisterMain } from '@lumin/tool-pdf-images/node'
@@ -21,6 +22,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'file-hasher': fileHasherRegisterMain,
   'file-renamer': fileRenamerRegisterMain,
   'image-toolbox': imageToolboxRegisterMain,
+  'image-watermark': imageWatermarkRegisterMain,
   'media-convert': mediaConvertRegisterMain,
   'ocr-text': ocrTextRegisterMain,
   'pdf-images': pdfImagesRegisterMain,

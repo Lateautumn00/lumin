@@ -20,6 +20,7 @@ import {
   ScanText,
   Scissors,
   Settings,
+  Stamp,
   Wrench,
   type LucideIcon
 } from '@lucide/vue'
@@ -39,6 +40,7 @@ const iconMap: Record<string, LucideIcon> = {
   image: Image,
   'file-pen': FilePen,
   'file-image': FileImage,
+  stamp: Stamp,
   files: Files,
   film: Film,
   hash: Hash,

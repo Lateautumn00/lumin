@@ -32,6 +32,7 @@
     "@lumin/tool-file-hasher": "workspace:*",
     "@lumin/tool-file-renamer": "workspace:*",
     "@lumin/tool-image-toolbox": "workspace:*",
+    "@lumin/tool-image-watermark": "workspace:*",
     "@lumin/tool-media-convert": "workspace:*",
     "@lumin/tool-ocr-text": "workspace:*",
     "@lumin/tool-pdf-images": "workspace:*",
