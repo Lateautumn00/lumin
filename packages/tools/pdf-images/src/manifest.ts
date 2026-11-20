@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: 'PDF 图片转换',
   description: 'PDF 逐页转图片（PNG/JPG），图片批量合成 PDF',
   icon: 'file-image',
+  category: 'document',
   order: 70,
   version: '0.1.0'
 })

@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: '音视频处理',
   description: '音视频转码、片段截取、提取音频与压缩（基于 ffmpeg）',
   icon: 'film',
+  category: 'media',
   order: 70,
   version: '0.1.0'
 })

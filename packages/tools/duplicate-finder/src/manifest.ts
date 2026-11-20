@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: '重复文件查找',
   description: '扫描目录找出内容完全相同的文件，保留一份，其余可移入回收站',
   icon: 'copy',
+  category: 'file',
   order: 65,
   version: '0.1.0'
 })

@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: '磁盘空间分析',
   description: '扫描目录查看各子项占用大小，按大小排序并逐级下钻（只读，不改文件）',
   icon: 'hard-drive',
+  category: 'file',
   order: 66,
   version: '0.1.0'
 })

@@ -5,6 +5,7 @@ export const manifest = defineManifest({
   name: '示例工具',
   description: '验证插件链路的占位工具（ping 与三段式长任务）',
   icon: 'flask-conical',
+  category: 'misc',
   order: 90,
   version: '0.1.0'
 })

@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: '文件夹对比',
   description: '按相对路径对比左右两个目录的文件（大小/修改时间），只读不修改文件',
   icon: 'git-compare',
+  category: 'file',
   order: 67,
   version: '0.1.0'
 })

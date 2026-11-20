@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: 'PDF 工具集',
   description: 'PDF 合并、拆分、删页、旋转、重排、元数据、水印与页码',
   icon: 'files',
+  category: 'document',
   order: 75,
   version: '0.1.0'
 })

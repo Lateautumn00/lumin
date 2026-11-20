@@ -11,6 +11,7 @@ export const manifest = defineManifest({
   name: 'Office 转 PDF',
   description: '将 .doc/.docx/.xls/.xlsx/.ppt/.pptx 批量转换为 PDF（LibreOffice 转换组件按需下载）',
   icon: 'file-output',
+  category: 'document',
   order: 30,
   version: '0.2.0'
 })

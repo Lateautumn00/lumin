@@ -5,6 +5,7 @@ export const manifest = defineManifest({
   name: '试卷切割',
   description: 'PDF 拆分、合并、删页、旋转与裁剪（OCR 切题敬请期待）',
   icon: 'scissors',
+  category: 'document',
   order: 40,
   version: '0.1.0'
 })

@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: '图片批量水印',
   description: '批量给图片添加文字或图片水印（位置/透明度/大小/旋转/平铺）',
   icon: 'stamp',
+  category: 'image',
   order: 85,
   version: '0.1.0'
 })

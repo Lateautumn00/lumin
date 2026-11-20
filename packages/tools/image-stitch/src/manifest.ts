@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: '图片拼接',
   description: '多张图片拼成纵向/横向长图或网格拼图（间距/外边距/背景色可调）',
   icon: 'layout-grid',
+  category: 'image',
   order: 86,
   version: '0.1.0'
 })

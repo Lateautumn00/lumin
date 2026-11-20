@@ -1,6 +1,13 @@
 const zhCN = {
   'shell.sidebar.settings': '设置',
   'shell.sidebar.about': '关于',
+  'shell.sidebar.category.compute': '计算与转换',
+  'shell.sidebar.category.text': '文本与编码',
+  'shell.sidebar.category.image': '图片处理',
+  'shell.sidebar.category.document': '文档与 PDF',
+  'shell.sidebar.category.media': '音视频',
+  'shell.sidebar.category.file': '文件管理',
+  'shell.sidebar.category.misc': '其他',
   'shell.status.offline': '离线优先 · 本地运行',
   'shell.settings.title': '设置',
   'shell.settings.concurrency': '任务并发数',

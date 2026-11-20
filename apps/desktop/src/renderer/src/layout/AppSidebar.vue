@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Archive,
   Braces,
   Calculator,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Download,
   FileOutput,
@@ -29,8 +31,10 @@ import {
   type LucideIcon
 } from '@lucide/vue'
 import { NIcon } from 'naive-ui'
+import type { ToolCategory } from '@lumin/plugin-api'
 import { toolManifests } from '../../../tool-manifests'
-import { t } from '../i18n/zh-CN'
+import { t, type MessageKey } from '../i18n/zh-CN'
+import { groupToolsByCategory } from './sidebar-groups'
 
 const route = useRoute()
 
@@ -59,7 +63,34 @@ const iconMap: Record<string, LucideIcon> = {
   wrench: Wrench
 }
 
-const sortedTools = computed(() => [...toolManifests].sort((a, b) => a.order - b.order))
+const CATEGORY_LABEL: Record<ToolCategory, MessageKey> = {
+  compute: 'shell.sidebar.category.compute',
+  text: 'shell.sidebar.category.text',
+  image: 'shell.sidebar.category.image',
+  document: 'shell.sidebar.category.document',
+  media: 'shell.sidebar.category.media',
+  file: 'shell.sidebar.category.file',
+  misc: 'shell.sidebar.category.misc'
+}
+
+const groups = computed(() => groupToolsByCategory(toolManifests))
+
+/** 折叠状态仅保留在本次会话：默认全部展开，避免入口被隐藏 */
+const collapsed = ref<ReadonlySet<ToolCategory>>(new Set<ToolCategory>())
+
+function isCollapsed(category: ToolCategory): boolean {
+  return collapsed.value.has(category)
+}
+
+function toggle(category: ToolCategory): void {
+  const next = new Set(collapsed.value)
+  if (next.has(category)) {
+    next.delete(category)
+  } else {
+    next.add(category)
+  }
+  collapsed.value = next
+}
 
 function iconFor(name: string): LucideIcon {
   return iconMap[name] ?? Wrench
@@ -75,24 +106,43 @@ function linkClass(path: string): string {
 </script>
 
 <template>
-  <nav class="flex h-full flex-col gap-1 p-3">
-    <RouterLink
-      v-for="tool in sortedTools"
-      :key="tool.id"
-      :to="`/tools/${tool.id}`"
-      :class="linkClass(`/tools/${tool.id}`)"
-    >
-      <NIcon :component="iconFor(tool.icon)" :size="16" />
-      <span>{{ tool.name }}</span>
-    </RouterLink>
+  <nav class="flex h-full flex-col gap-2 overflow-y-auto p-3">
+    <section v-for="group in groups" :key="group.category" class="flex flex-col gap-1">
+      <button
+        type="button"
+        class="flex items-center gap-1 rounded-[var(--lumin-radius-md)] px-2 py-1 text-xs font-medium text-[var(--lumin-color-text-secondary)] hover:bg-[var(--lumin-color-surface)]"
+        :aria-expanded="!isCollapsed(group.category)"
+        @click="toggle(group.category)"
+      >
+        <NIcon
+          :component="isCollapsed(group.category) ? ChevronRight : ChevronDown"
+          :size="14"
+        />
+        <span>{{ t(CATEGORY_LABEL[group.category]) }}</span>
+        <span class="ml-auto opacity-60">{{ group.tools.length }}</span>
+      </button>
+      <div v-show="!isCollapsed(group.category)" class="flex flex-col gap-1">
+        <RouterLink
+          v-for="tool in group.tools"
+          :key="tool.id"
+          :to="`/tools/${tool.id}`"
+          :class="linkClass(`/tools/${tool.id}`)"
+        >
+          <NIcon :component="iconFor(tool.icon)" :size="16" />
+          <span>{{ tool.name }}</span>
+        </RouterLink>
+      </div>
+    </section>
 
-    <RouterLink to="/settings" class="mt-auto" :class="linkClass('/settings')">
-      <NIcon :component="Settings" :size="16" />
-      <span>{{ t('shell.sidebar.settings') }}</span>
-    </RouterLink>
-    <RouterLink to="/about" :class="linkClass('/about')">
-      <NIcon :component="Info" :size="16" />
-      <span>{{ t('shell.sidebar.about') }}</span>
-    </RouterLink>
+    <div class="mt-auto flex flex-col gap-1 pt-2">
+      <RouterLink to="/settings" :class="linkClass('/settings')">
+        <NIcon :component="Settings" :size="16" />
+        <span>{{ t('shell.sidebar.settings') }}</span>
+      </RouterLink>
+      <RouterLink to="/about" :class="linkClass('/about')">
+        <NIcon :component="Info" :size="16" />
+        <span>{{ t('shell.sidebar.about') }}</span>
+      </RouterLink>
+    </div>
   </nav>
 </template>

@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: '图片工具箱',
   description: '图片批量压缩、格式转换与缩放（基于 ffmpeg）',
   icon: 'image',
+  category: 'image',
   order: 50,
   version: '0.1.0'
 })

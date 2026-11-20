@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: '文本工具箱',
   description: 'JSON 格式化压缩、Base64/URL 编解码、正则测试与替换预览',
   icon: 'braces',
+  category: 'text',
   order: 60,
   version: '0.1.0'
 })

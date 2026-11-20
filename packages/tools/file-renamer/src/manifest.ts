@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: '批量重命名',
   description: '按规则批量重命名文件：查找替换、序号、日期、大小写与扩展名',
   icon: 'file-pen',
+  category: 'file',
   order: 55,
   version: '0.1.0'
 })

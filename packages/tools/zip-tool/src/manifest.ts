@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: '压缩包工具',
   description: 'ZIP 打包与解压（保留目录结构、冲突自动重命名、路径穿越防护）',
   icon: 'archive',
+  category: 'file',
   order: 68,
   version: '0.1.0'
 })

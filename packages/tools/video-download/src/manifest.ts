@@ -12,6 +12,7 @@ export const manifest = defineManifest({
   name: '视频下载',
   description: '通过 yt-dlp 下载视频（仅供个人学习与研究使用）',
   icon: 'download',
+  category: 'media',
   order: 40,
   version: '0.1.0'
 })
