@@ -445,6 +445,13 @@ lumin/
 - **图标**：`@lucide/vue` `archive`（壳 iconMap 注册 `Archive`）
 - **验收**：本包覆盖率 ≥80%；e2e `apps/desktop/e2e/zip-tool-smoke.spec.ts` 2/2（UI 打包→解压回读；IPC zip slip 拒绝 / 非法 zip / 计数）；R2 八类映射；chunk（含 fflate）< 200KB gzip；gate 全绿
 
+### 4.26 侧边栏分类分组（M26，2026-11-20 R8 登记）
+
+- **决策（用户拍板 2026-11-20）**：侧边栏工具过多（21 项），按分类折叠分组展示
+- **分类知识归属**：`ToolManifest` 新增必填字段 `category`（`plugin-api` 导出 `TOOL_CATEGORIES` 七类：`compute/text/image/document/media/file/misc`），由各工具 manifest 自行声明——壳零工具知识（AGENTS §2.1），新增工具仍只需「新包 + 清单 1 行」
+- **壳侧**：`layout/sidebar-groups.ts` 纯函数按固定分类序 + 组内 `order` 升序分组；`AppSidebar.vue` 渲染可折叠分组头（分类名 + 数量，默认全部展开，折叠状态仅存会话内，避免入口被隐藏）；分类标签走 `zh-CN` i18n；侧边栏改 `overflow-y-auto`
+- **验收**：`sidebar-groups` 单测 3 例 + `plugin-api` 清单 schema 拒绝未知分类；IPC 冒烟 6/6；gate 全绿
+
 
 ---
 
@@ -513,6 +520,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M23 v2.2**  | 磁盘空间分析（§4.23，2026-11-20）：`disk-analyzer` —— 目录递归扫描 + 直接子项大小降序 + 占比条 + 逐级下钻，最小文件阈值可调、20 万文件上限、进度 + 取消；只读不改文件、零新增依赖                                                                                                                     | §4.23 验收；e2e 2/2；R2 八类；chunk < 200KB gzip；gate 全绿                             | 0.5–1 天 |
 | **M24 v2.3**  | 文件夹对比（§4.24，2026-11-20）：`folder-compare` —— 左右目录按相对路径配对比较文件元数据（大小/修改时间，容差 2s 可关闭），四类结果 + 筛选 + 筛选后定位；单侧 20 万上限、结果 2 万截断、进度 + 取消；只读不改文件、零新增依赖                                                                         | §4.24 验收；e2e 2/2；R2 八类；chunk < 200KB gzip；gate 全绿                             | 0.5–1 天 |
 | **M25 v2.4**  | 压缩包工具（§4.25，2026-11-20）：`zip-tool` —— ZIP 打包（多选文件/文件夹、保留相对结构、产物冲突递增）/ 解压（zip slip 防护、符号链接拒绝、条目与总大小上限、同名重命名/跳过）；worker 流式读写 + 进度 + 取消；新增 fflate 0.8.3                                                                 | §4.25 验收；e2e 2/2；R2 八类；chunk < 200KB gzip；gate 全绿                             | 1–2 天   |
+| **M26 v2.5**  | 侧边栏分类分组（§4.26，2026-11-20）：`ToolManifest` 新增 `category`（七类，工具清单自声明）；侧边栏可折叠分组 + 分类数量；纯函数分组单测                                                                                                         | §4.26 验收；IPC 冒烟 6/6；gate 全绿                                                     | 0.5 天   |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
