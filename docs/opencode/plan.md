@@ -36,6 +36,7 @@
 | Q23 | 深色主题切换 | **壳级平台能力（2026-11-19 用户选定，无新工具包）**：跟随系统 / 浅色 / 深色三模式；tokens 单源新增暗色变量集（`html[data-theme='dark']` 覆盖），Naive UI 主题层切换 + 设置页持久化 `shell.theme.mode`；全工具零改动受益；零新增依赖、不新增 IPC；详见 §4.19 |
 | Q24 | 图片文字识别 | **新增 `ocr-text` 工具（2026-11-19 用户选定）**：单张图片（PNG/JPG/WebP，含截图）离线 PP-OCR 识别 → 可编辑文本预览 → 复制 / 导出 TXT（`{原名}-OCR.txt`，冲突递增）；引擎从 exam-split 上提为根 `packages/ocr-kit`（exam-split 薄壳零回归），`writeAtomic` 上提 `node-kit`；零新增第三方依赖；详见 §4.20 |
 | Q25 | 图片批量水印 | **新增 `image-watermark` 工具（2026-11-20 用户选定）**：多选图片（PNG/JPG/WebP，1–100 张、单张 ≤40MB）批量叠加文字/图片水印；九宫格位置、边距、透明度、大小、旋转、平铺可调；输出到指定目录 `{原名}_水印.{ext}`（冲突递增、绝不覆盖原图）；worker 串行 + 进度 + 取消；复用 `@napi-rs/canvas`，零新增第三方依赖；详见 §4.21 |
+| Q26 | 图片拼接 | **新增 `image-stitch` 工具（2026-11-20 用户选定）**：多选图片（PNG/JPG/WebP，1–100 张、单张 ≤40MB）→ 纵向长图 / 横向长图 / 网格拼图；基准尺寸（首图/最大/固定）、间距、外边距、背景色、输出格式与质量可调；输出单张、冲突递增；复用 `@napi-rs/canvas`，零新增第三方依赖；详见 §4.22 |
 | —   | 硬约束     | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                       |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -391,6 +392,19 @@ lumin/
 - **图标**：`@lucide/vue` `stamp`（壳 iconMap 注册 `Stamp`）
 - **验收**：本包覆盖率 ≥80%（contract/schema/errors/node/worker/client）；e2e `apps/desktop/e2e/image-watermark-smoke.spec.ts` 2/2；R2 八类映射；chunk 21,132 B gzip（raw 90,487 B）；零新增第三方依赖；gate 全绿
 
+### 4.22 图片拼接（M22，2026-11-20 R8 登记）
+
+- **决策（用户拍板 2026-11-20）**：新增 `@lumin/tool-image-stitch`（「图片拼接」）——多选图片拼成单张长图/网格图；不做自由画布拖拽排版、不做水印（image-watermark）、不做转码/压缩（image-toolbox）
+- **引擎**：复用 `@napi-rs/canvas@1.1.1`；worker 两遍处理（先量尺寸 → 再逐张绘制）→ 一次编码 → `.tmp` + rename 原子写；**零新增第三方依赖**
+- **布局纯函数**：`contract.ts` 的 `planLayout` 为单一真相源（纵向统一宽、横向统一高、网格等宽单元格 contain 居中；间距/外边距/基准尺寸），renderer 预览与 worker 出图共用
+- **上限**：输出单边 ≤30,000 px 且总像素 ≤1 亿（超限 `IS_OUTPUT_TOO_LARGE`）；网格列数 2–8；间距/外边距 0–100 px；固定基准尺寸 100–10,000 px
+- **IPC（3 通道）**：`image-stitch:config` / `image-stitch:set-output-dir`（目录记忆，缺省 `userData/image-stitch`）/ `image-stitch:stitch`（三段式任务，`runTask` + worker，600s 超时、可取消）
+- **命名**：`拼接_{yyyyMMdd-HHmmss}.{ext}`，冲突 `(n)` 递增，绝不覆盖既有文件
+- **错误码**：`IS_INVALID_PAYLOAD / IS_INPUT_INVALID / IS_FILE_LOCKED / IS_IMAGE_TOO_LARGE / IS_IMAGE_CORRUPT / IS_OUTPUT_TOO_LARGE / IS_OUTPUT_DIR_INVALID / IS_WRITE_FAILED / IS_PROCESS_FAILED / OP_TIMEOUT / CANCELLED`
+- **UI 三态（AGENTS §5.3）**：空态 DropZone 多选；加载态两阶段（量尺寸/绘制）进度 + 取消；报错态结构化文案 + 重试/返回；结果态尺寸与路径 + 打开目录 + 再拼一次；布局缩略预览（防抖 200ms）
+- **图标**：`@lucide/vue` `layout-grid`（壳 iconMap 注册 `LayoutGrid`）
+- **验收**：本包覆盖率 ≥80%；e2e `apps/desktop/e2e/image-stitch-smoke.spec.ts` 2/2；R2 八类映射；chunk < 200KB gzip；零新增第三方依赖；gate 全绿
+
 
 ---
 
@@ -455,6 +469,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M19 v1.8**  | 深色主题切换（§4.19，2026-11-19）：跟随系统/浅色/深色三模式、tokens 暗色变量集、Naive 主题层切换、设置页持久化、启动防白闪；全工具零改动                                                                                                                                                                                                         | §4.19 验收；e2e 3/3；R2 八类映射；纯函数覆盖率 ≥80%；gate 全绿                          | 0.5 天   |
 | **M20 v1.9**  | 图片文字识别（§4.20，2026-11-19）：`ocr-text` —— 单图 OCR → 可编辑文本 → 复制 / 导出 TXT；OCR 引擎上提 `packages/ocr-kit`（exam-split 薄壳零回归），`writeAtomic` 上提 `node-kit`                                                                                                                                                              | §4.20 验收；e2e 3/3；R2 八类；chunk 4,163 B gzip；gate 全绿                             | 0.5–1 天 |
 | **M21 v2.0**  | 图片批量水印（§4.21，2026-11-20）：`image-watermark` —— 多选图片批量文字/图片水印（九宫格/边距/透明度/大小/旋转/平铺），原图不修改、冲突递增；复用 `@napi-rs/canvas` 零新增依赖                                                                                                                                                                 | §4.21 验收；e2e 2/2；R2 八类；chunk 21,132 B gzip；gate 全绿                            | 0.5–1 天 |
+| **M22 v2.1**  | 图片拼接（§4.22，2026-11-20）：`image-stitch` —— 纵向/横向长图 + 网格拼图，基准尺寸/间距/外边距/背景色/格式质量可调，单张输出、冲突递增；复用 `@napi-rs/canvas` 零新增依赖                                                                                                                                                                   | §4.22 验收；e2e 2/2；R2 八类；chunk <200KB gzip；gate 全绿                              | 0.5–1 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
