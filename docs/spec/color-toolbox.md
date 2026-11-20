@@ -1,15 +1,15 @@
 # 颜色工具箱（color-toolbox）字段级功能清单
 
-> 版本：v0.1.0 · 定稿日期：2026-11-20（R8；吸管取色为同日增补）· 工具 id：`color-toolbox` · 里程碑 M29
+> 版本：v0.1.0 · 定稿日期：2026-11-20（R8；吸管取色为同日增补，改为整屏截图取色）· 工具 id：`color-toolbox` · 里程碑 M29
 > 本文件为该里程碑验收附件；实现与本文件不一致时以本文件为准，变更须走 R8 流程。
 
 ## 1. 范围与边界
 
-**做**：HEX / RGB / HSL 三种格式互转与实时校验、原生取色器与随机取色、**屏幕吸管取色（EyeDropper API，2026-11-20 增补）**、10 级色阶生成、四组调和色（互补 / 类似 / 三角 / 分裂互补）、前景/背景 WCAG 2.1 对比度计算与 AA/AAA 判定、各颜色值复制。
+**做**：HEX / RGB / HSL 三种格式互转与实时校验、原生取色器与随机取色、**屏幕吸管取色（整屏截图 + 应用内预览点选，2026-11-20 增补）**、10 级色阶生成、四组调和色（互补 / 类似 / 三角 / 分裂互补）、前景/背景 WCAG 2.1 对比度计算与 AA/AAA 判定、各颜色值复制。
 
 **不做**：从图片文件取色（读取图片像素）、CSS 颜色名称识别（CSS named colors）、色盲模拟、调色板文件导入导出（ASE/ACO）、历史记录持久化、联网能力。
 
-**形态**：纯 renderer 工具，**零 IPC、零主进程代码、零新增第三方依赖**（仅复用 vue / naive-ui / @lucide/vue / @lumin/shared）。
+**形态**：renderer + 主进程 `node.ts`（单通道 `color-toolbox:capture-display`，`desktopCapturer` 截屏）；仅复用 vue / naive-ui / @lucide/vue / @lumin/shared / zod 与 Electron 内置模块，**零新增运行时第三方依赖**（`electron` 仅作类型 devDependency）。
 
 ## 2. 页面字段清单
 
@@ -23,9 +23,9 @@
 | 格式选择 | `NSelect`（HEX / RGB / HSL）   | 切换输入格式，并把当前主色按新格式回填输入框、清空错误                                              | HEX                      |
 | 输入框   | `NInput`                       | 随格式变化 placeholder：`#3B82F6` / `rgb(59, 130, 246)` / `hsl(217, 91%, 60%)`；实时解析            | 当前主色 HEX             |
 | 操作     | `[随机]`（`Dices` 图标）       | 生成随机 RGB 并同步全部结果                                                                         | 可点                     |
-| 操作     | `[吸管取色]`（`Pipette` 图标） | 调用 `EyeDropper.open()` 在屏幕任意位置拾色（Esc 取消视为正常，不报错）；环境不支持时按钮禁用并提示 | 支持时可点               |
+| 操作     | `[吸管取色]`（`Pipette` 图标） | 主进程截取当前显示器 → 应用内全屏预览层，点击任意位置取色（**支持应用窗口外**）；Esc 或取消按钮关闭；多显示器可下拉切换 | 可点                     |
 | 错误行   | `role="alert"` 文本 + 错误码   | 输入非空且解析失败 → `CT_INVALID_COLOR` 中文文案 + 码；主色保持不变                                 | 隐藏                     |
-| 提示行   | 文本                           | 无错误时显示三种输入示例；吸管不可用时追加说明                                                      | 常显                     |
+| 提示行   | 文本                           | 无错误时显示三种输入示例 + 吸管取色说明                                                             | 常显                     |
 | 示例色   | 5 个圆形色块按钮               | `#3B82F6` 蓝 / `#EF4444` 红 / `#22C55E` 绿 / `#F59E0B` 橙 / `#8B5CF6` 紫；点击设为主色              | 常显（空态引导与主操作） |
 
 ### 2.2 颜色值卡片（只读三行）
@@ -70,10 +70,10 @@
 | 状态   | 实现                                                                                                                                                           |
 | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 空态   | 默认主色 `#3B82F6` + 示例色块 + 提示行，页面无白屏；不属于「无输入」页面，默认即出结果                                                                         |
-| 加载态 | **不适用**：全部为同步纯函数计算（<1ms），无长任务、无进度/取消语义（与 text-toolbox §4 同口径）；吸管取色为系统模态交互，按钮自带 loading 态但无进度/取消概念 |
-| 报错态 | 非法颜色 → `CT_INVALID_COLOR` 行内结构化提示（码 + 中文文案）；复制失败 → `CT_CLIPBOARD_FAILED`；吸管异常 → `CT_EYEDROPPER_FAILED`（Esc 取消不报错）           |
+| 加载态 | 主体计算**不适用**（同步纯函数 <1ms）；吸管取色截屏走 IPC，按钮 loading + 预览层内显示器切换禁用，无进度/取消语义（Esc 即时关闭）                              |
+| 报错态 | 非法颜色 → `CT_INVALID_COLOR` 行内结构化提示（码 + 中文文案）；复制失败 → `CT_CLIPBOARD_FAILED`；截屏失败 → `CT_CAPTURE_FAILED`，Esc 取消不报错               |
 
-## 3. 纯函数契约（`src/color.ts` / `src/eyedropper.ts`，≥80% 覆盖）
+## 3. 纯函数契约（`src/color.ts` / `src/picker.ts` / `src/schema.ts`，≥80% 覆盖）
 
 | 函数                              | 入参            | 输出 / 行为                                                                        |
 | --------------------------------- | --------------- | ---------------------------------------------------------------------------------- |
@@ -92,36 +92,38 @@
 | `rotateHue(rgb, degrees)`         | `Rgb` + 角度    | 仅旋转 HSL 色相，s/l 不变                                                          |
 | `harmonies(base)`                 | `Rgb`           | 四组方案数组（`id/name/colors`），顺序与 §2.4 一致                                 |
 | `randomColor(random?)`            | 可选随机源      | 三分量 `floor(random()*256)`（clamp 255）；注入随机源便于单测                      |
-| `getEyeDropper(source?)`          | 可选检测源      | 运行时探测 `EyeDropper` 构造器（`src/eyedropper.ts`）；缺失/非函数 → `null`        |
-| `isEyedropperCancel(error)`       | 吸管异常        | `name === 'AbortError'` → `true`（用户 Esc 取消，不展示错误）                      |
+| `mapPointToPixel(point, rect, size)` | 点击坐标 + 图片矩形 + 截图像素尺寸 | 按比例换算原始像素坐标；越界/无效矩形 → `null`（`src/picker.ts`）        |
+| `selectDisplay(displays, requestedId, currentId)` | 显示器列表 + 请求 id + 当前 id | 请求命中 → 当前窗口所在 → 首个；空列表 → `null`（`src/node.ts`） |
+| `captureDisplayPayloadSchema` / `captureDisplayResultSchema` | zod | 入参 `{ displayId?: string }`；回包 `{ displayId, displayName, width, height, dataUrl, displays[] }`，dataUrl 必须 `data:image/png;base64,` 前缀（`src/schema.ts`） |
 
 常量：`DEFAULT_COLOR`（`{ r: 59, g: 130, b: 246 }`）、`COLOR_FORMATS`。
 
 ## 4. 错误码（`src/errors.ts`）
 
-| 码                     | 中文文案                                  | 触发来源                              |
-| ---------------------- | ----------------------------------------- | ------------------------------------- |
-| `CT_INVALID_COLOR`     | 颜色格式不正确，请输入 HEX / RGB / HSL 值 | 输入框实时解析失败（detail 带格式名） |
-| `CT_CLIPBOARD_FAILED`  | 复制失败，请手动选择文本复制              | 渲染层剪贴板写入失败                  |
-| `CT_EYEDROPPER_FAILED` | 吸管取色失败，请重试或改用取色器          | `EyeDropper.open()` 非取消异常        |
+| 码                    | 中文文案                                  | 触发来源                                       |
+| --------------------- | ----------------------------------------- | ---------------------------------------------- |
+| `CT_INVALID_COLOR`    | 颜色格式不正确，请输入 HEX / RGB / HSL 值 | 输入框实时解析失败（detail 带格式名）          |
+| `CT_CLIPBOARD_FAILED` | 复制失败，请手动选择文本复制              | 渲染层剪贴板写入失败                           |
+| `CT_CAPTURE_FAILED`   | 屏幕取色失败，请重试                      | 截屏通道 zod 校验失败 / 无显示器 / 截图异常    |
 
-## 5. 壳接线（固定 5 处）
+## 5. 壳接线（固定 6 处）
 
-1. `apps/desktop/electron.vite.config.ts`：`@lumin/tool-color-toolbox/manifest`、`/renderer/*` 两条别名（无 node 别名）。
+1. `apps/desktop/electron.vite.config.ts`：`@lumin/tool-color-toolbox/manifest`、`/node`、`/renderer/*` 三条别名。
 2. `apps/desktop/package.json`：`"@lumin/tool-color-toolbox": "workspace:*"`。
-3. `apps/desktop/src/tool-manifests.ts`：import + 数组末尾新增 1 行（`example` 之前）。
-4. `apps/desktop/src/renderer/src/tools/color-toolbox.vue`：薄页面。
-5. `apps/desktop/src/renderer/src/layout/AppSidebar.vue`：iconMap 新增 `palette: Palette`。
+3. `apps/desktop/src/main/tool-mains.ts`：import `colorToolboxRegisterMain` 并映射 `'color-toolbox'`。
+4. `apps/desktop/src/tool-manifests.ts`：import + 数组末尾新增 1 行（`example` 之前）。
+5. `apps/desktop/src/renderer/src/tools/color-toolbox.vue`：薄页面。
+6. `apps/desktop/src/renderer/src/layout/AppSidebar.vue`：iconMap 新增 `palette: Palette`。
 
 清单：`id: color-toolbox`、`name: 颜色工具箱`、`icon: palette`、`category: misc`、`order: 80`、`version: 0.1.0`。
 
 ## 6. R5 体积口径
 
-纯 renderer，无 worker / wasm / 模型 / 图片资产；仅复用共享 vendor（naive-ui / vue）。交付时以 `pnpm build` 产物实测 `color-toolbox-*.js` 的 raw/gzip 记录到 `docs/smoke/color-toolbox.md`，独占依赖 chunk 预期为 0，上限 200KB gzip。
+无 worker / wasm / 模型 / 图片资产；仅复用共享 vendor（naive-ui / vue）。交付时以 `pnpm build` 产物实测 `color-toolbox-*.js` 的 raw/gzip 记录到 `docs/smoke/color-toolbox.md`，独占依赖 chunk 预期为 0，上限 200KB gzip。
 
 ## 7. 验收
 
-- 本包单测（color / errors / manifest / eyedropper）通过，覆盖率 ≥80%（root `vitest.config.ts` 增加 `packages/tools/color-toolbox/src/**/*.ts` 阈值）。
-- e2e `apps/desktop/e2e/color-toolbox-smoke.spec.ts` 3 用例：默认色三格式展示（含吸管按钮可见）、非法输入报错与恢复、示例色/色阶联动 + 对比度数值与徽标；吸管真实拾色依赖系统交互，列入 smoke 人工项。
+- 本包单测（color / errors / manifest / picker / schema / node / client）通过，覆盖率 ≥80%（root `vitest.config.ts` 增加 `packages/tools/color-toolbox/src/**/*.ts` 阈值）。
+- e2e `apps/desktop/e2e/color-toolbox-smoke.spec.ts` 3 用例：默认色三格式展示、非法输入报错与恢复、示例色/色阶联动 + 对比度数值与徽标；第 1 用例覆盖吸管：点击 → 预览层提示可见 → Esc 关闭。
 - R2 八类映射记录于 `docs/smoke/color-toolbox.md`。
 - `pnpm gate` / `pnpm coverage` / `pnpm build` 全绿。

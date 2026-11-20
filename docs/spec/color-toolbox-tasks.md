@@ -53,7 +53,7 @@
 - [x] 3 个中文提交：`feat(tool): 新增颜色工具箱 color-toolbox` / `test(color-toolbox): 补充单元与 e2e 冒烟用例` / `docs(color-toolbox): 同步规格、冒烟记录与路线图`
 - [x] 不推送、不建 MR（等用户指令）
 
-## T8 增补：屏幕吸管取色（2026-11-20）
+## T8 增补：屏幕吸管取色（2026-11-20，**已被 T9 替换**）
 
 - [x] `src/eyedropper.ts`：`getEyeDropper` / `isEyedropperCancel`（最小 EyeDropper 类型，运行时探测）
 - [x] `src/eyedropper.test.ts` 3 用例；`errors.ts` 增加 `CT_EYEDROPPER_FAILED` 并更新单测
@@ -61,3 +61,16 @@
 - [x] e2e 用例 1 增加吸管按钮可见断言
 - [x] 文档同步：spec §1/§2.1/§3/§4/§7、plan Q31/§4.29、CHANGELOG、README 中英、smoke（人工项）
 - [x] 验证：32 单测、`pnpm gate` 绿、coverage 绿、build + e2e 3/3、chunk 30,647 B raw / 8,636 B gzip
+
+## T9 改版：整屏截图取色（2026-11-20）
+
+- [x] 删除 `src/eyedropper.ts` / `eyedropper.test.ts`；`errors.ts` 改为 `CT_INVALID_COLOR` / `CT_CLIPBOARD_FAILED` / `CT_CAPTURE_FAILED`
+- [x] `src/schema.ts`：`captureDisplayPayloadSchema` / `captureDisplayResultSchema`
+- [x] `src/picker.ts`：`mapPointToPixel`（点击位置 → 原始像素，越界 null）
+- [x] `src/node.ts`：`selectDisplay` / `registerWith` / `createNodeDeps` / `registerMain`（`desktopCapturer` + `screen` + `BrowserWindow`，deps 可注入）
+- [x] `src/renderer/client.ts`：`captureDisplay` 类型化 invoke
+- [x] `ToolView.vue`：`[吸管取色]` → 主进程截屏 → 应用内全屏预览层（提示文案 + 多显示器 `NSelect` + 取消按钮 + `<img @click>` 像素采样）；Esc 关闭；失败 `CT_CAPTURE_FAILED`
+- [x] 壳接线：`/node` 别名、`tool-mains.ts` 注册 `'color-toolbox'`；`package.json` 加 `./node`/`./schema` exports、`zod` 依赖与 `electron` devDependency
+- [x] 单测：`picker` 5 / `schema` 6 / `node` 16 / `client` 2（共 59，7 文件）；e2e 用例 1 增加「预览层可见 + Esc 关闭」
+- [x] 文档同步：spec、plan Q31/§4.29、CHANGELOG、smoke
+- [x] 验证：`pnpm gate` / `pnpm coverage` / `pnpm build` / e2e 3/3；chunk 34,215 B raw / 9,656 B gzip
