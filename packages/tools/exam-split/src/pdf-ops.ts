@@ -112,12 +112,13 @@ async function writeOutput(path: string, doc: PDFDocument): Promise<void> {
 export async function splitPdf(
   inputPath: string,
   rangesText: string,
-  progress: EmitProgress
+  progress: EmitProgress,
+  nameTemplate?: string
 ): Promise<OpResult> {
   progress({ stage: 'load', current: 0, message: '读取 PDF…' })
   const src = await loadSource(inputPath)
   const groups = parseSplitRanges(rangesText, src.getPageCount())
-  const desired = splitDesiredPaths(inputPath, groups)
+  const desired = splitDesiredPaths(inputPath, groups, nameTemplate)
   const outputPaths: string[] = []
   const total = groups.length
   for (const [index, pages] of groups.entries()) {
@@ -142,7 +143,8 @@ export async function splitPdf(
 /** 合并：按序复制全部页到首个输入所在目录（spec §3.2）；progress current/total = 已合并文件数 */
 export async function mergePdf(
   inputPaths: readonly string[],
-  progress: EmitProgress
+  progress: EmitProgress,
+  nameTemplate?: string
 ): Promise<OpResult> {
   progress({ stage: 'load', current: 0, message: '读取 PDF…' })
   const out = await PDFDocument.create()
@@ -155,7 +157,7 @@ export async function mergePdf(
     merged += 1
     progress({ stage: 'process', current: merged, total, message: `已合并 ${merged}/${total}` })
   }
-  const outputPath = resolveOutput(mergeDesiredPath(inputPaths))
+  const outputPath = resolveOutput(mergeDesiredPath(inputPaths, nameTemplate))
   progress({ stage: 'write', current: total, total, message: '写出文件…' })
   await writeOutput(outputPath, out)
   progress({ stage: 'done', current: total, total, message: '完成' })
@@ -166,7 +168,8 @@ export async function mergePdf(
 export async function deletePages(
   inputPath: string,
   rangesText: string,
-  progress: EmitProgress
+  progress: EmitProgress,
+  nameTemplate?: string
 ): Promise<OpResult> {
   progress({ stage: 'load', current: 0, message: '读取 PDF…' })
   const src = await loadSource(inputPath)
@@ -178,7 +181,7 @@ export async function deletePages(
   const out = await PDFDocument.create()
   const copied = await out.copyPages(src, keep)
   for (const page of copied) out.addPage(page)
-  const outputPath = resolveOutput(deleteDesiredPath(inputPath, pages))
+  const outputPath = resolveOutput(deleteDesiredPath(inputPath, pages, nameTemplate))
   progress({ stage: 'process', current: 1, message: '处理页面…' })
   progress({ stage: 'write', current: 2, message: '写出文件…' })
   await writeOutput(outputPath, out)
@@ -191,7 +194,8 @@ export async function rotatePages(
   inputPath: string,
   rangesText: string | undefined,
   delta: 90 | 180 | 270,
-  progress: EmitProgress
+  progress: EmitProgress,
+  nameTemplate?: string
 ): Promise<OpResult> {
   progress({ stage: 'load', current: 0, message: '读取 PDF…' })
   const src = await loadSource(inputPath)
@@ -204,7 +208,7 @@ export async function rotatePages(
     const current = page.getRotation().angle
     page.setRotation(degrees((current + delta) % 360))
   }
-  const outputPath = resolveOutput(rotateDesiredPath(inputPath, delta))
+  const outputPath = resolveOutput(rotateDesiredPath(inputPath, delta, nameTemplate))
   progress({ stage: 'process', current: 1, message: '处理页面…' })
   progress({ stage: 'write', current: 2, message: '写出文件…' })
   await writeOutput(outputPath, src)
@@ -220,7 +224,8 @@ export async function cropPages(
   inputPath: string,
   rangesText: string | undefined,
   box: CropPayload['box'],
-  progress: EmitProgress
+  progress: EmitProgress,
+  nameTemplate?: string
 ): Promise<OpResult> {
   progress({ stage: 'load', current: 0, message: '读取 PDF…' })
   const src = await loadSource(inputPath)
@@ -237,7 +242,7 @@ export async function cropPages(
     const height = box.height * media.height
     page.setCropBox(x, y, width, height)
   }
-  const outputPath = resolveOutput(cropDesiredPath(inputPath))
+  const outputPath = resolveOutput(cropDesiredPath(inputPath, nameTemplate))
   progress({ stage: 'process', current: 1, message: '处理页面…' })
   progress({ stage: 'write', current: 2, message: '写出文件…' })
   await writeOutput(outputPath, src)
@@ -256,24 +261,36 @@ export type WorkerRequest =
 export async function runOp(request: WorkerRequest, progress: EmitProgress): Promise<OpResult> {
   switch (request.op) {
     case 'split':
-      return splitPdf(request.payload.inputPath, request.payload.ranges, progress)
+      return splitPdf(
+        request.payload.inputPath,
+        request.payload.ranges,
+        progress,
+        request.payload.nameTemplate
+      )
     case 'merge':
-      return mergePdf(request.payload.inputPaths, progress)
+      return mergePdf(request.payload.inputPaths, progress, request.payload.nameTemplate)
     case 'delete':
-      return deletePages(request.payload.inputPath, request.payload.ranges, progress)
+      return deletePages(
+        request.payload.inputPath,
+        request.payload.ranges,
+        progress,
+        request.payload.nameTemplate
+      )
     case 'rotate':
       return rotatePages(
         request.payload.inputPath,
         request.payload.ranges,
         request.payload.degrees,
-        progress
+        progress,
+        request.payload.nameTemplate
       )
     case 'crop':
       return cropPages(
         request.payload.inputPath,
         request.payload.ranges,
         request.payload.box,
-        progress
+        progress,
+        request.payload.nameTemplate
       )
   }
 }

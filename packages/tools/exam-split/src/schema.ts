@@ -11,23 +11,51 @@ const pdfPathSchema = z.string().min(1).regex(PDF_INPUT_RE, '仅支持 .pdf 文�
 /** 页码区间文本（如 `1-3,5,7-9`；空串 = 全部页，由调用方按操作语义处理） */
 export const rangesSchema = z.string().regex(RANGE_RE, '页码区间仅含数字、逗号与连字符')
 
+/** 命名模板占位符白名单（spec §7.2） */
+export const NAME_TEMPLATE_TOKENS = ['name', 'op', 'label', 'date'] as const
+
+const NAME_TEMPLATE_FORBIDDEN_RE = /[\\/:*?"<>|]/
+const NAME_TEMPLATE_BRACE_RE = /\{([^{}]*)\}/g
+
+/**
+ * 产物命名模板（选填；spec §7.2）：必须含 `{name}`，仅允许白名单占位符，
+ * 禁止路径分隔符与 Windows 非法文件名字符；上限 120 字符。
+ */
+export const nameTemplateSchema = z
+  .string()
+  .trim()
+  .min(1, '命名模板不能为空')
+  .max(120, '命名模板最多 120 个字符')
+  .refine((text) => !NAME_TEMPLATE_FORBIDDEN_RE.test(text), '命名模板不能包含 \\ / : * ? " < > |')
+  .refine((text) => text.includes('{name}'), '命名模板必须包含 {name}')
+  .refine(
+    (text) =>
+      [...text.matchAll(NAME_TEMPLATE_BRACE_RE)].every((match) =>
+        NAME_TEMPLATE_TOKENS.includes((match[1] ?? '') as (typeof NAME_TEMPLATE_TOKENS)[number])
+      ),
+    '命名模板包含不支持的占位符'
+  )
+
 export const splitPayloadSchema = z.object({
   inputPath: pdfPathSchema,
-  ranges: z.string().min(1, '页码区间不能为空').regex(RANGE_RE, '页码区间仅含数字、逗号与连字符')
+  ranges: z.string().min(1, '页码区间不能为空').regex(RANGE_RE, '页码区间仅含数字、逗号与连字符'),
+  nameTemplate: nameTemplateSchema.optional()
 })
 
 export type SplitPayload = z.infer<typeof splitPayloadSchema>
 
 /** 合并：2–100 个有序文件（spec §1） */
 export const mergePayloadSchema = z.object({
-  inputPaths: z.array(pdfPathSchema).min(2, '至少选择 2 个文件').max(100, '最多合并 100 个文件')
+  inputPaths: z.array(pdfPathSchema).min(2, '至少选择 2 个文件').max(100, '最多合并 100 个文件'),
+  nameTemplate: nameTemplateSchema.optional()
 })
 
 export type MergePayload = z.infer<typeof mergePayloadSchema>
 
 export const deletePayloadSchema = z.object({
   inputPath: pdfPathSchema,
-  ranges: z.string().min(1, '请填写要删除的页码').regex(RANGE_RE, '页码区间仅含数字、逗号与连字符')
+  ranges: z.string().min(1, '请填写要删除的页码').regex(RANGE_RE, '页码区间仅含数字、逗号与连字符'),
+  nameTemplate: nameTemplateSchema.optional()
 })
 
 export type DeletePayload = z.infer<typeof deletePayloadSchema>
@@ -35,7 +63,8 @@ export type DeletePayload = z.infer<typeof deletePayloadSchema>
 export const rotatePayloadSchema = z.object({
   inputPath: pdfPathSchema,
   ranges: rangesSchema.optional(),
-  degrees: z.union([z.literal(90), z.literal(180), z.literal(270)])
+  degrees: z.union([z.literal(90), z.literal(180), z.literal(270)]),
+  nameTemplate: nameTemplateSchema.optional()
 })
 
 export type RotatePayload = z.infer<typeof rotatePayloadSchema>
@@ -58,7 +87,8 @@ export const cropBoxSchema = z
 export const cropPayloadSchema = z.object({
   inputPath: pdfPathSchema,
   ranges: rangesSchema.optional(),
-  box: cropBoxSchema
+  box: cropBoxSchema,
+  nameTemplate: nameTemplateSchema.optional()
 })
 
 export type CropPayload = z.infer<typeof cropPayloadSchema>

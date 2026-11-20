@@ -6,7 +6,13 @@ import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
 import { isRetryable } from '../errors'
-import type { RotatePayload, CropPayload } from '../schema'
+import type {
+  CropPayload,
+  DeletePayload,
+  MergePayload,
+  RotatePayload,
+  SplitPayload
+} from '../schema'
 import {
   FULL_PAGE_BOX,
   mmToRatio,
@@ -100,6 +106,22 @@ const mmY = ref(0)
 const mmW = ref(0)
 const mmH = ref(0)
 
+// 产物命名模板（选填，留空 = 默认命名；spec §7.2）
+const nameTemplate = ref('')
+const TEMPLATE_TOKENS = ['name', 'op', 'label', 'date']
+const templateError = computed(() => {
+  const text = nameTemplate.value.trim()
+  if (text === '') return ''
+  if (text.length > 120) return '命名模板最多 120 个字符'
+  if (/[\\/:*?"<>|]/.test(text)) return '命名模板不能包含 \\ / : * ? " < > |'
+  if (!text.includes('{name}')) return '命名模板必须包含 {name}'
+  const invalid = [...text.matchAll(/\{([^{}]*)\}/g)].find(
+    (match) => !TEMPLATE_TOKENS.includes(match[1] ?? '')
+  )
+  if (invalid !== undefined) return `命名模板包含不支持的占位符 ${invalid[0]}`
+  return ''
+})
+
 // 任务态（spec §6 三态）
 const progress = ref<{ current?: number; total?: number; message: string } | null>(null)
 const error = ref<StructuredError | null>(null)
@@ -111,7 +133,7 @@ let currentTaskId = ''
 const busy = computed(() => phase.value === 'running')
 const retryable = computed(() => error.value !== null && isRetryable(error.value.code))
 const canSubmit = computed(() => {
-  if (busy.value) return false
+  if (busy.value || templateError.value !== '') return false
   switch (op.value) {
     case 'split':
     case 'delete':
@@ -167,16 +189,44 @@ function onEvent(event: TaskEvent): void {
   progress.value = null
 }
 
+/** 非空时附加命名模板（spec §7.2） */
+/** 非空模板的载荷片段（spec §7.2） */
+function templateFields(): { nameTemplate?: string } {
+  const template = nameTemplate.value.trim()
+  return template === '' ? {} : { nameTemplate: template }
+}
+
 function submit(): Promise<SubmitResult> {
   switch (op.value) {
-    case 'split':
-      return submitSplit({ inputPath: inputPath.value, ranges: rangesText.value })
-    case 'merge':
-      return submitMerge({ inputPaths: mergeItems.value.map((item) => item.path) })
-    case 'delete':
-      return submitDelete({ inputPath: inputPath.value, ranges: rangesText.value })
+    case 'split': {
+      const payload: SplitPayload = {
+        inputPath: inputPath.value,
+        ranges: rangesText.value,
+        ...templateFields()
+      }
+      return submitSplit(payload)
+    }
+    case 'merge': {
+      const payload: MergePayload = {
+        inputPaths: mergeItems.value.map((item) => item.path),
+        ...templateFields()
+      }
+      return submitMerge(payload)
+    }
+    case 'delete': {
+      const payload: DeletePayload = {
+        inputPath: inputPath.value,
+        ranges: rangesText.value,
+        ...templateFields()
+      }
+      return submitDelete(payload)
+    }
     case 'rotate': {
-      const payload: RotatePayload = { inputPath: inputPath.value, degrees: degrees.value }
+      const payload: RotatePayload = {
+        inputPath: inputPath.value,
+        degrees: degrees.value,
+        ...templateFields()
+      }
       const text = rangesText.value.trim()
       if (text !== '') payload.ranges = text
       return submitRotate(payload)
@@ -184,7 +234,8 @@ function submit(): Promise<SubmitResult> {
     case 'crop': {
       const payload: CropPayload = {
         inputPath: inputPath.value,
-        box: cropRatio.value ?? FULL_PAGE_BOX
+        box: cropRatio.value ?? FULL_PAGE_BOX,
+        ...templateFields()
       }
       const text = rangesText.value.trim()
       if (text !== '') payload.ranges = text
@@ -668,6 +719,26 @@ onUnmounted(detach)
         <div v-if="op === 'merge'" class="text-xs text-[var(--lumin-color-text-secondary)]">
           合并将按左侧顺序拼接，产物写入首个文件所在目录。
         </div>
+
+        <!-- 产物命名模板（选填，spec §7.2；空 = 默认命名） -->
+        <label class="flex flex-col gap-2">
+          <span class="text-xs text-[var(--lumin-color-text-secondary)]">
+            产物命名模板（选填，留空 = 默认命名）
+          </span>
+          <NInput
+            v-model:value="nameTemplate"
+            :status="templateError !== '' ? 'error' : undefined"
+            placeholder="如 {name}-{label}"
+            :disabled="busy"
+            clearable
+          />
+          <NText v-if="templateError !== ''" type="error" class="text-xs">
+            {{ templateError }}
+          </NText>
+          <NText v-else depth="3" class="text-xs">
+            占位符：{name} 原名 · {op} 操作 · {label} 标签 · {date} 日期（自动补 .pdf）
+          </NText>
+        </label>
 
         <!-- 主按钮 -->
         <NButton type="primary" :disabled="!canSubmit" :loading="busy" @click="start">

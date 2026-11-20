@@ -4,6 +4,7 @@ import {
   cropPayloadSchema,
   deletePayloadSchema,
   mergePayloadSchema,
+  nameTemplateSchema,
   ocrDetectPayloadSchema,
   ocrDetectResultSchema,
   ocrExportPayloadSchema,
@@ -14,6 +15,48 @@ import {
 } from './schema'
 
 const PDF = 'C:/试卷/卷.pdf'
+
+describe('nameTemplateSchema（spec §7.2 命名模板）', () => {
+  it('接受白名单占位符组合并去除首尾空白', () => {
+    const parsed = nameTemplateSchema.parse('  {name}_{op}_{label}_{date}  ')
+    expect(parsed).toBe('{name}_{op}_{label}_{date}')
+  })
+
+  it('拒绝缺少 {name} / 非法字符 / 未知占位符 / 超长 / 空串', () => {
+    expect(nameTemplateSchema.safeParse('{op}-{label}').success).toBe(false)
+    expect(nameTemplateSchema.safeParse('{name}/副本').success).toBe(false)
+    expect(nameTemplateSchema.safeParse('{name}_{foo}').success).toBe(false)
+    expect(nameTemplateSchema.safeParse(`{name}${'x'.repeat(120)}`).success).toBe(false)
+    expect(nameTemplateSchema.safeParse('   ').success).toBe(false)
+  })
+
+  it('五操作 payload 接受可选模板，非法模板整包拒绝', () => {
+    const tpl = '{name}-{label}'
+    expect(
+      splitPayloadSchema.safeParse({ inputPath: PDF, ranges: '1', nameTemplate: tpl }).success
+    ).toBe(true)
+    expect(
+      mergePayloadSchema.safeParse({ inputPaths: [PDF, 'D:/b.pdf'], nameTemplate: tpl }).success
+    ).toBe(true)
+    expect(
+      deletePayloadSchema.safeParse({ inputPath: PDF, ranges: '1', nameTemplate: tpl }).success
+    ).toBe(true)
+    expect(
+      rotatePayloadSchema.safeParse({ inputPath: PDF, degrees: 90, nameTemplate: tpl }).success
+    ).toBe(true)
+    expect(
+      cropPayloadSchema.safeParse({
+        inputPath: PDF,
+        box: { x: 0, y: 0, width: 1, height: 1 },
+        nameTemplate: tpl
+      }).success
+    ).toBe(true)
+    expect(
+      splitPayloadSchema.safeParse({ inputPath: PDF, ranges: '1', nameTemplate: 'no-token' })
+        .success
+    ).toBe(false)
+  })
+})
 
 describe('splitPayloadSchema', () => {
   it('接受合法拆分入参', () => {

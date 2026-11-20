@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   cropDesiredPath,
   deleteDesiredPath,
+  formatDate,
   mergeDesiredPath,
   ocrPdfDesiredPath,
   ocrPngDesiredPath,
+  renderName,
   rotateDesiredPath,
   splitDesiredPaths
 } from './naming'
@@ -54,5 +56,40 @@ describe('naming（spec §7.2 命名模板）', () => {
   it('无扩展名路径原样保留；空分组标签为空（边界分支）', () => {
     expect(splitDesiredPaths('C:/试卷/无扩展名', [[1]])).toEqual(['C:/试卷/无扩展名_p1.pdf'])
     expect(splitDesiredPaths(INPUT, [[]])).toEqual(['C:/试卷/2026 期末卷_p.pdf'])
+  })
+
+  it('自定义模板：{name}/{op}/{label} 渲染，自动去除模板尾部 .pdf 再补 .pdf', () => {
+    expect(splitDesiredPaths(INPUT, [[1, 2], [5]], '{name}-{op}-{label}')).toEqual([
+      'C:/试卷/2026 期末卷-拆分-1-2.pdf',
+      'C:/试卷/2026 期末卷-拆分-5.pdf'
+    ])
+    expect(mergeDesiredPath([INPUT, 'D:/other/b.pdf'], '{name}-{op}')).toBe(
+      'C:/试卷/2026 期末卷-合并.pdf'
+    )
+    expect(deleteDesiredPath(INPUT, [2, 3, 7], '{name}-{op}-{label}')).toBe(
+      'C:/试卷/2026 期末卷-删页-2-3,7.pdf'
+    )
+    expect(rotateDesiredPath(INPUT, 90, '{name}.PDF')).toBe('C:/试卷/2026 期末卷.pdf')
+    expect(cropDesiredPath(INPUT, '{name}-{op}')).toBe('C:/试卷/2026 期末卷-裁剪.pdf')
+  })
+
+  it('空模板/纯空白回落默认命名；未知占位符原样保留', () => {
+    expect(splitDesiredPaths(INPUT, [[1]], '   ')).toEqual(['C:/试卷/2026 期末卷_p1.pdf'])
+    expect(mergeDesiredPath([INPUT, 'D:/b.pdf'], '')).toBe('C:/试卷/2026 期末卷_合并.pdf')
+    expect(renderName('{name}_{foo}', { name: 'x', op: '', label: '', date: '' })).toBe('x_{foo}')
+  })
+
+  it('date 占位符：本地日期 YYYYMMDD', () => {
+    expect(formatDate(new Date(2026, 0, 2))).toBe('20260102')
+    expect(formatDate(new Date(2026, 11, 31))).toBe('20261231')
+    expect(renderName('{name}-{date}', { name: 'a', op: '', label: '', date: '20260102' })).toBe(
+      'a-20260102'
+    )
+  })
+
+  it('Windows 路径：模板产物保持原目录分隔符', () => {
+    expect(splitDesiredPaths('C:\\试卷\\卷.pdf', [[1]], '{name}-{label}')).toEqual([
+      'C:\\试卷\\卷-1.pdf'
+    ])
   })
 })
