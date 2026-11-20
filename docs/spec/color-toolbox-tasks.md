@@ -52,3 +52,12 @@
 - [x] `pnpm build`（chunk 27,357 B raw / 7,799 B gzip）+ e2e 3/3
 - [x] 3 个中文提交：`feat(tool): 新增颜色工具箱 color-toolbox` / `test(color-toolbox): 补充单元与 e2e 冒烟用例` / `docs(color-toolbox): 同步规格、冒烟记录与路线图`
 - [x] 不推送、不建 MR（等用户指令）
+
+## T8 增补：屏幕吸管取色（2026-11-20）
+
+- [x] `src/eyedropper.ts`：`getEyeDropper` / `isEyedropperCancel`（最小 EyeDropper 类型，运行时探测）
+- [x] `src/eyedropper.test.ts` 3 用例；`errors.ts` 增加 `CT_EYEDROPPER_FAILED` 并更新单测
+- [x] `ToolView.vue`：`[吸管取色]` 按钮（不支持禁用并提示、Esc 取消静默、异常结构化提示）
+- [x] e2e 用例 1 增加吸管按钮可见断言
+- [x] 文档同步：spec §1/§2.1/§3/§4/§7、plan Q31/§4.29、CHANGELOG、README 中英、smoke（人工项）
+- [x] 验证：32 单测、`pnpm gate` 绿、coverage 绿、build + e2e 3/3、chunk 30,647 B raw / 8,636 B gzip

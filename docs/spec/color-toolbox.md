@@ -1,227 +1,127 @@
-# 图片文字识别（ocr-text）字段级功能清单
+# 颜色工具箱（color-toolbox）字段级功能清单
 
-> 里程碑：M20（待登记 plan §1 Q24 / §4.20 / §6）
-> 状态：**待用户批准后实施**
-> 关联规范：`AGENTS.md` §2（零耦合/公共代码上提）、§5（三态/tokens/图标）、§6（IPC 三段式）、§7（测试门禁）、§8（性能）
+> 版本：v0.1.0 · 定稿日期：2026-11-20（R8；吸管取色为同日增补）· 工具 id：`color-toolbox` · 里程碑 M29
+> 本文件为该里程碑验收附件；实现与本文件不一致时以本文件为准，变更须走 R8 流程。
 
----
+## 1. 范围与边界
+
+**做**：HEX / RGB / HSL 三种格式互转与实时校验、原生取色器与随机取色、**屏幕吸管取色（EyeDropper API，2026-11-20 增补）**、10 级色阶生成、四组调和色（互补 / 类似 / 三角 / 分裂互补）、前景/背景 WCAG 2.1 对比度计算与 AA/AAA 判定、各颜色值复制。
 
-## 1. 目标与边界
+**不做**：从图片文件取色（读取图片像素）、CSS 颜色名称识别（CSS named colors）、色盲模拟、调色板文件导入导出（ASE/ACO）、历史记录持久化、联网能力。
 
-### 1.1 目标
+**形态**：纯 renderer 工具，**零 IPC、零主进程代码、零新增第三方依赖**（仅复用 vue / naive-ui / @lucide/vue / @lumin/shared）。
 
-新增独立工具包 `ocr-text`（名称「图片文字识别」）：选择**一张图片**（PNG / JPG / WebP，含截图），离线 OCR 识别 → 可编辑文本预览 → 一键复制 / 导出 TXT。全程无网络请求，不新增第三方依赖。
+## 2. 页面字段清单
+
+单页（无页签），自上而下 5 个卡片；所有计算同步完成（<1ms），无任务队列。
 
-### 1.2 做
+### 2.1 主颜色卡片
 
-| 能力     | 说明                                                                         |
-| -------- | ---------------------------------------------------------------------------- |
-| 输入     | 拖拽或选择单张图片；`.png/.jpg/.jpeg/.webp`，大小写不敏感，≤20MB             |
-| 识别     | 主进程 worker 复用 PP-OCR（det 行检测 + rec 文本识别）                       |
-| 阅读顺序 | 识别行按「先行后列」重排（同行按 x），文本以换行拼接                         |
-| 预览编辑 | `NInput` textarea 可自由编辑识别结果                                         |
-| 复制     | `navigator.clipboard.writeText`，成功后提示「已复制」                        |
-| 导出 TXT | 选择目录 → 主进程原子写盘（临时文件 + rename），重名自动 `(n)`，UTF-8 无 BOM |
-| 目录记忆 | settings `outputDir`，缺省 `userData/ocr-text`                               |
-| 取消     | 长任务三段式（invoke → progress → done/error），`lumin:task:cancel`          |
+| 区域     | 控件                           | 行为                                                                                                | 空/默认                  |
+| -------- | ------------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------ |
+| 取色行   | 原生 `<input type="color">`    | 拖动/点选后立即生效（`input` 事件），同步 HEX 输入框与全部结果                                      | `#3B82F6`（蓝 500）      |
+| 格式选择 | `NSelect`（HEX / RGB / HSL）   | 切换输入格式，并把当前主色按新格式回填输入框、清空错误                                              | HEX                      |
+| 输入框   | `NInput`                       | 随格式变化 placeholder：`#3B82F6` / `rgb(59, 130, 246)` / `hsl(217, 91%, 60%)`；实时解析            | 当前主色 HEX             |
+| 操作     | `[随机]`（`Dices` 图标）       | 生成随机 RGB 并同步全部结果                                                                         | 可点                     |
+| 操作     | `[吸管取色]`（`Pipette` 图标） | 调用 `EyeDropper.open()` 在屏幕任意位置拾色（Esc 取消视为正常，不报错）；环境不支持时按钮禁用并提示 | 支持时可点               |
+| 错误行   | `role="alert"` 文本 + 错误码   | 输入非空且解析失败 → `CT_INVALID_COLOR` 中文文案 + 码；主色保持不变                                 | 隐藏                     |
+| 提示行   | 文本                           | 无错误时显示三种输入示例；吸管不可用时追加说明                                                      | 常显                     |
+| 示例色   | 5 个圆形色块按钮               | `#3B82F6` 蓝 / `#EF4444` 红 / `#22C55E` 绿 / `#F59E0B` 橙 / `#8B5CF6` 紫；点击设为主色              | 常显（空态引导与主操作） |
 
-### 1.3 不做（防范围膨胀）
+### 2.2 颜色值卡片（只读三行）
 
-- PDF 输入、多图批量识别、截图热键/框选截图
-- 版面还原（表格、段落缩进、坐标可视化）、翻译、竖排/手写专项优化
-- 语言切换（仅中文 + 英文 + 数字的通用 PP-OCR 字典）
-- 历史记录、云同步
+| 行  | 内容                           | 操作                               |
+| --- | ------------------------------ | ---------------------------------- |
+| HEX | `#RRGGBB`（大写）              | `[复制]`，成功后按钮文案「已复制」 |
+| RGB | `rgb(r, g, b)`                 | 同上                               |
+| HSL | `hsl(h, s%, l%)`（h/s/l 取整） | 同上                               |
 
-### 1.4 与既有工具边界
+剪贴板失败 → 卡片内 `CT_CLIPBOARD_FAILED` 中文提示（不阻塞其它操作）。
 
-- 与 `exam-split`（试卷切割）能力重叠仅限「OCR 引擎」，**必须上提公共包**，禁止 `tools/*` 互相 import。
-- 本工具只做「整图 → 文本」；不做切题、不做 PDF 拆分。
-- 复用：`@lumin/ui/DropZone.vue`、`@lumin/ui/TaskProgress.vue`、`@lumin/node-kit`（`runTask`/`resolveConflictPath`/`classifyPrecheckError`）、`@lumin/shared`（结构化错误）。
+### 2.3 色阶卡片
 
----
+- 基于主色生成 **10 个色块**：5 个浅色（与白色按 90/72/54/36/18% 混合）→ 主色 → 4 个深色（与黑色按 18/36/54/72% 混合）。
+- 每块显示颜色 + HEX 小字；点击色块 → 设为主色（联动全部结果）。
+- `[复制整组]` → 复制 `#A, #B, …`（10 个 HEX，逗号分隔）。
 
-## 2. 工具清单（manifest）
+### 2.4 配色方案卡片
 
-| 字段        | 值                                                     |
-| ----------- | ------------------------------------------------------ |
-| id          | `ocr-text`                                             |
-| name        | `图片文字识别`                                         |
-| description | `图片 OCR：提取文字、可编辑预览、复制与导出 TXT`       |
-| icon        | `scan-text`（壳 `AppSidebar` iconMap 注册 `ScanText`） |
-| order       | `90`                                                   |
-| version     | `0.1.0`                                                |
+| 方案     | 色数 | 构成                    |
+| -------- | ---- | ----------------------- |
+| 互补色   | 2    | 主色 + 色相 +180°       |
+| 类似色   | 3    | 色相 −30° + 主色 + +30° |
+| 三角配色 | 3    | 主色 + +120° + +240°    |
+| 分裂互补 | 3    | 主色 + +150° + +210°    |
 
-settings 命名空间：`tools.ocr-text.outputDir`（键名 `outputDir`）。
+每张方案卡展示色块行 + HEX 列表；点击任一色块 → 设为主色。
 
----
+### 2.5 对比度卡片
 
-## 3. OCR 引擎上提（`packages/ocr-kit`）
+| 区域     | 控件                                   | 行为                                                                                         |
+| -------- | -------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 背景色   | 原生 `<input type="color">` + HEX 文本 | 默认 `#FFFFFF`；改动实时重算                                                                 |
+| 交换     | `[⇄]`（`ArrowLeftRight` 图标）         | 主色 ↔ 背景色互换（主色同步输入框格式）                                                      |
+| 对比度   | 大号数值 `X.XX : 1`                    | WCAG 2.1 相对亮度公式，保留 2 位小数                                                         |
+| 判定徽标 | 4 枚                                   | 正文 AA（≥4.5）/ 正文 AAA（≥7）/ 大字 AA（≥3）/ 大字 AAA（≥4.5），通过=success、未通过=error |
+| 预览区   | 背景色底 + 主色文字的示例段落          | 含普通字号与大字两行，直观验证                                                               |
 
-### 3.1 动因
+### 2.6 三态
 
-AGENTS §2.2/§2.3：工具间禁止互相 import；两个及以上工具复用的逻辑必须上提根 `packages/`。`ocr-text` 与 `exam-split` 共用 PP-OCR 引擎，故新建 `packages/ocr-kit`。
+| 状态   | 实现                                                                                                                                                           |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 空态   | 默认主色 `#3B82F6` + 示例色块 + 提示行，页面无白屏；不属于「无输入」页面，默认即出结果                                                                         |
+| 加载态 | **不适用**：全部为同步纯函数计算（<1ms），无长任务、无进度/取消语义（与 text-toolbox §4 同口径）；吸管取色为系统模态交互，按钮自带 loading 态但无进度/取消概念 |
+| 报错态 | 非法颜色 → `CT_INVALID_COLOR` 行内结构化提示（码 + 中文文案）；复制失败 → `CT_CLIPBOARD_FAILED`；吸管异常 → `CT_EYEDROPPER_FAILED`（Esc 取消不报错）           |
 
-### 3.2 迁移清单（代码原样搬移，行为零回归）
+## 3. 纯函数契约（`src/color.ts` / `src/eyedropper.ts`，≥80% 覆盖）
 
-| 源（`packages/tools/exam-split/src/`） | 目标（`packages/ocr-kit/src/`） | 说明                                                              |
-| -------------------------------------- | ------------------------------- | ----------------------------------------------------------------- |
-| `ocr-preproc.ts`                       | `preproc.ts`                    | 纯函数，逐字搬移                                                  |
-| `ocr-post.ts`                          | `post.ts`                       | 纯函数，逐字搬移                                                  |
-| `ocr-model.ts`                         | `model.ts`                      | onnxruntime-node 动态 import，逐字搬移                            |
-| `ocr-assets.ts`                        | `assets.ts`                     | 资产表 + SHA256 预检，逐字搬移                                    |
-| `ocr-render.ts`                        | `render.ts`                     | 仅 `scale` 改为 `options.scale ?? DEFAULT_RENDER_SCALE`（默认 2） |
+| 函数                              | 入参            | 输出 / 行为                                                                        |
+| --------------------------------- | --------------- | ---------------------------------------------------------------------------------- |
+| `parseHex(text)`                  | 字符串          | 接受 `#RGB`/`#RRGGBB`（`#` 可省、大小写不敏感）→ `Rgb`；否则 `null`                |
+| `parseRgb(text)`                  | 字符串          | 接受 `rgb(r, g, b)` 或裸 `r, g, b`（逗号/空白分隔）→ `Rgb`；分量越界/非数 → `null` |
+| `parseHsl(text)`                  | 字符串          | 接受 `hsl(h, s%, l%)` 或裸值（s/l 的 `%` 可省）→ `Hsl`；h 取模 360；非法 → `null`  |
+| `parseColor(text, format)`        | 字符串 + 格式   | 按格式分派；HSL 输入经 `hslToRgb` 归一为 `Rgb`；失败 `null`                        |
+| `rgbToHex(rgb)`                   | `Rgb`           | `#RRGGBB` 大写；分量先 clamp 到 0–255 并取整                                       |
+| `formatColor(rgb, format)`        | `Rgb` + 格式    | `#RRGGBB` / `rgb(r, g, b)` / `hsl(h, s%, l%)`（HSL 取整）                          |
+| `rgbToHsl(rgb)` / `hslToRgb(hsl)` | 颜色            | 标准 HSL 互转；内部保留精度，展示时取整；h 归一 [0,360)                            |
+| `relativeLuminance(rgb)`          | `Rgb`           | WCAG 2.1：分量 sRGB 线性化后按 0.2126/0.7152/0.0722 加权                           |
+| `contrastRatio(a, b)`             | 两个 `Rgb`      | `(L亮+0.05)/(L暗+0.05)`，保留 2 位小数；同色 = 1                                   |
+| `wcagVerdict(ratio, largeText)`   | 比值 + 是否大字 | `'AAA'` / `'AA'` / `'FAIL'`（大字阈值 4.5/3，正文 7/4.5）                          |
+| `mix(base, target, weight)`       | 两色 + 0–1 权重 | 线性混合，权重越界自动 clamp                                                       |
+| `generateScale(base)`             | `Rgb`           | 固定 10 色：5 浅 + 主色 + 4 深（权重见 §2.3）                                      |
+| `rotateHue(rgb, degrees)`         | `Rgb` + 角度    | 仅旋转 HSL 色相，s/l 不变                                                          |
+| `harmonies(base)`                 | `Rgb`           | 四组方案数组（`id/name/colors`），顺序与 §2.4 一致                                 |
+| `randomColor(random?)`            | 可选随机源      | 三分量 `floor(random()*256)`（clamp 255）；注入随机源便于单测                      |
+| `getEyeDropper(source?)`          | 可选检测源      | 运行时探测 `EyeDropper` 构造器（`src/eyedropper.ts`）；缺失/非函数 → `null`        |
+| `isEyedropperCancel(error)`       | 吸管异常        | `name === 'AbortError'` → `true`（用户 Esc 取消，不展示错误）                      |
 
-- 新增 `packages/ocr-kit/src/errors.ts`：`OcrErrorCode` / `ocrToolError(code, detail?)`，**码值与中文文案与 exam-split 现有表逐字一致**（`MODEL_MISSING`/`OCR_INPUT_INVALID`/`OCR_FAILED`/`PDF_NOT_FOUND`/`PDF_LOCKED`/`PDF_ENCRYPTED`/`PDF_INVALID`/`INVALID_PAYLOAD`），保证 exam-split 行为零回归。
-- 新增 `packages/ocr-kit/src/index.ts`：统一 re-export（`preproc`/`post`/`model`/`assets`/`render`/`errors`）。
+常量：`DEFAULT_COLOR`（`{ r: 59, g: 130, b: 246 }`）、`COLOR_FORMATS`。
 
-### 3.3 exam-split 改造（薄壳化，测试路径不变）
+## 4. 错误码（`src/errors.ts`）
 
-将以下文件改为仅 re-export `@lumin/ocr-kit`（保留原导出名，既有单测与 import 路径不动）：
+| 码                     | 中文文案                                  | 触发来源                              |
+| ---------------------- | ----------------------------------------- | ------------------------------------- |
+| `CT_INVALID_COLOR`     | 颜色格式不正确，请输入 HEX / RGB / HSL 值 | 输入框实时解析失败（detail 带格式名） |
+| `CT_CLIPBOARD_FAILED`  | 复制失败，请手动选择文本复制              | 渲染层剪贴板写入失败                  |
+| `CT_EYEDROPPER_FAILED` | 吸管取色失败，请重试或改用取色器          | `EyeDropper.open()` 非取消异常        |
 
-- `src/ocr-preproc.ts`、`src/ocr-post.ts`、`src/ocr-model.ts`、`src/ocr-assets.ts`
-- `src/ocr-render.ts`：re-export 全部，并**保留本地包装** `renderOcrInput`，注入 `scale: PDF_RENDER_SCALE`（来自 `./preview`），保证 PDF 渲染倍率与现状一致；继续 re-export `PDF_RENDER_SCALE`、`ensureCjkFont`。
+## 5. 壳接线（固定 5 处）
 
-`ocr-ops.ts` / `ocr.worker.ts` / `node.ts` / `schema.ts` 不动。
+1. `apps/desktop/electron.vite.config.ts`：`@lumin/tool-color-toolbox/manifest`、`/renderer/*` 两条别名（无 node 别名）。
+2. `apps/desktop/package.json`：`"@lumin/tool-color-toolbox": "workspace:*"`。
+3. `apps/desktop/src/tool-manifests.ts`：import + 数组末尾新增 1 行（`example` 之前）。
+4. `apps/desktop/src/renderer/src/tools/color-toolbox.vue`：薄页面。
+5. `apps/desktop/src/renderer/src/layout/AppSidebar.vue`：iconMap 新增 `palette: Palette`。
 
-### 3.4 工程接线
+清单：`id: color-toolbox`、`name: 颜色工具箱`、`icon: palette`、`category: misc`、`order: 80`、`version: 0.1.0`。
 
-- `packages/ocr-kit/package.json`：`@lumin/ocr-kit`，exports `.`；依赖 `@lumin/node-kit`、`@lumin/shared`、`@napi-rs/canvas@1.1.1`、`onnxruntime-node@1.31.1`；devDep `pdfjs-dist@6.5.438`。
-- `packages/ocr-kit/tsconfig.json`：extends 根 `tsconfig.base.json`。
-- `packages/tools/exam-split/package.json`：新增 `"@lumin/ocr-kit": "workspace:*"`。
-- `.dependency-cruiser.cjs`：`tools-only-allowed-deps` 白名单加入 `ocr-kit`。
-- `apps/desktop/electron.vite.config.ts`：新增 `@lumin/ocr-kit` 别名 → `packages/ocr-kit/src/index.ts`。
-- `vitest.config.ts`：新增 `packages/ocr-kit/src/**/*.ts` 与 `packages/tools/ocr-text/src/**/*.ts` 的 80% 阈值（`packages/tools/*` 已自动纳入 projects，`packages/ocr-kit` 不单独建 project——其代码由 exam-split/ocr-text 测试覆盖，纳入 coverage include 统计）。
-- `AGENTS.md` §2.2：允许依赖列表加入 `ocr-kit`（仅 OCR 类工具），并同步 `plan.md`。
+## 6. R5 体积口径
 
----
+纯 renderer，无 worker / wasm / 模型 / 图片资产；仅复用共享 vendor（naive-ui / vue）。交付时以 `pnpm build` 产物实测 `color-toolbox-*.js` 的 raw/gzip 记录到 `docs/smoke/color-toolbox.md`，独占依赖 chunk 预期为 0，上限 200KB gzip。
 
-## 4. 界面规格（单页，三态强制）
+## 7. 验收
 
-页面标题「图片文字识别」，副标题「离线识别图片中的文字，可编辑后复制或导出 TXT」。
-
-### 4.1 空态
-
-- `DropZone`：accept `.png,.jpg,.jpeg,.webp`，提示「拖拽图片到此处，或点击选择」。
-- 辅助说明：「支持 PNG / JPG / WebP，单张不超过 20MB；识别全程离线」。
-- 不渲染空白区域/白屏。
-
-### 4.2 加载态
-
-- 选中图片后立即提交 `ocr-text:recognize`，展示 `TaskProgress`（`cancellable`）。
-- 进度文案：`读取图片…`（render）→ `识别文字…`（detect）；无 total 时显示不确定进度。
-- 「取消」调用 `lumin:task:cancel`，回包错误 `CANCELLED` 时回到空态并保留已选图片。
-
-### 4.3 报错态
-
-- 卡片展示 `error.message`（中文）+ 错误码；`isRetryable(code)` 为真时显示「重试」，否则显示「重新选择图片」。
-- 结构化错误码见 §6。
-
-### 4.4 结果态
-
-| 元素       | 行为                                                                                      |
-| ---------- | ----------------------------------------------------------------------------------------- |
-| 图片缩略图 | `URL.createObjectURL(file)`，切换/卸载时 `revokeObjectURL`                                |
-| 文本框     | `NInput type="textarea"`，行数 ≥10，绑定识别文本，可编辑                                  |
-| 行/字统计  | 只读文案：`识别 {n} 行 · {m} 字`                                                          |
-| 复制文本   | `navigator.clipboard.writeText`；成功提示「已复制到剪贴板」                               |
-| 导出 TXT   | `window.lumin.pickDirectory('选择 TXT 导出目录')` → `ocr-text:save-txt`；成功显示输出路径 |
-| 重新识别   | 用当前图片重跑一次任务                                                                    |
-| 重新选择   | 清空结果回到空态                                                                          |
-
----
-
-## 5. IPC 契约（通道 `ocr-text:{action}`）
-
-| 通道                 | 类型 | 入参（zod）                      | 回包                                      |
-| -------------------- | ---- | -------------------------------- | ----------------------------------------- |
-| `ocr-text:recognize` | task | `{ inputPath: string }`          | `{ width, height, lines: OcrTextLine[] }` |
-| `ocr-text:save-txt`  | sync | `{ outputDir, inputPath, text }` | `{ output: string }`                      |
-| `ocr-text:config`    | sync | `{}`                             | `{ outputDir: string }`                   |
-
-### 5.1 schema（`packages/tools/ocr-text/src/schema.ts`）
-
-- `IMAGE_INPUT_RE = /\.(png|jpe?g|webp)$/i`
-- `recognizePayloadSchema = { inputPath: z.string().min(1).regex(IMAGE_INPUT_RE, '仅支持 PNG/JPG/WebP 图片') }`
-- `ocrTextLineSchema = { text: z.string().min(1), x/y/width/height: 0–1 ratio, x+width ≤ 1+1e-9, y+height ≤ 1+1e-9 }`
-- `recognizeResultSchema = { width: int>0, height: int>0, lines: z.array(ocrTextLineSchema).min(1) }`
-- `saveTxtPayloadSchema = { outputDir: min(1), inputPath: 同图片校验, text: min(1,'文本不能为空').max(1_000_000) }`
-- `saveTxtResultSchema = { output: min(1) }`
-- `configResultSchema = { outputDir: min(1) }`
-
-### 5.2 主进程（`node.ts`）
-
-- `recognize`（task）：zod 校验 → `stat` 体积 >20MB 抛 `OCR_IMAGE_TOO_LARGE` → `access(R_OK)`/`open('r')` 预检（ENOENT→`OCR_FILE_NOT_FOUND`，EBUSY/EPERM/EACCES→`OCR_FILE_LOCKED`）→ `verifyOcrAssets(ocrModelDir(paths.binaries))` → `runTask({ workerPath: ocrWorkerPath, payload: { inputPath, binariesDir }, timeoutMs: 120_000, signal, onUpdate })`。
-- 错误映射：`TaskTimeoutError`→`OP_TIMEOUT`；`TaskCrashError`→`OCR_FAILED`（detail=尾部）；kit 错误码归一（`PDF_NOT_FOUND`→`OCR_FILE_NOT_FOUND`、`PDF_LOCKED`→`OCR_FILE_LOCKED`、`PDF_INVALID`/`PDF_ENCRYPTED`→`OCR_INPUT_INVALID`）；其余结构化错误透传。
-- `save-txt`（sync）：zod 校验 → `mkdirSync(outputDir, { recursive: true })` → 基名 `path.parse(inputPath).name + '-OCR'` → `resolveConflictPath(join(outputDir, base + '.txt'))` → 写 `${target}.tmp` 后 `rename`；任一步失败清理临时文件并抛 `OUTPUT_WRITE_FAILED`（detail=errno）→ `settings.set('outputDir', outputDir)`。
-- `config`（sync）：读取 settings `outputDir`，缺省 `join(paths.userData, 'ocr-text')`。
-- 依赖注入：`OcrTextDeps { workerPath, checkReadable, checkExclusive, statSize, run, ocrBinariesDir, fs? }`，`registerWith(ctx, deps)` 供单测注入假件。
-
-### 5.3 worker（`packages/tools/ocr-text/src/ocr.worker.ts` + `recognize.ts`）
-
-- worker 保持工具本地（`?modulePath` 语义不变），只编排：`render(单页)` → `createEngine` → `detectLines` → `sortReadingOrder` → `composeText`。
-- 进度：`{ stage: 'render'|'detect', current, total }`。
-- 空结果（0 行）→ `OCR_NO_TEXT`。
-- 纯函数 `sortReadingOrder(lines)` / `composeText(lines)` 放 `src/text-lines.ts`，单测 ≥80%。
-
----
-
-## 6. 错误码表（`packages/tools/ocr-text/src/errors.ts`）
-
-| 码                    | 文案                                   | 可重试 |
-| --------------------- | -------------------------------------- | ------ |
-| `OCR_INVALID_PAYLOAD` | 参数无效                               | 否     |
-| `OCR_FILE_NOT_FOUND`  | 图片不存在，请重新选择                 | 否     |
-| `OCR_FILE_LOCKED`     | 图片被其他程序占用，请关闭后重试       | 是     |
-| `OCR_IMAGE_TOO_LARGE` | 图片超过 20MB，请压缩后重试            | 否     |
-| `OCR_INPUT_INVALID`   | 图片无法读取，请换一张清晰的图片       | 否     |
-| `OCR_NO_TEXT`         | 未识别到文字，请换更清晰的图片         | 是     |
-| `MODEL_MISSING`       | 识别模型缺失，请重新安装应用后重试     | 是     |
-| `OCR_FAILED`          | 识别失败，请重试或查看详情             | 是     |
-| `OP_TIMEOUT`          | 处理超时（120 秒），已终止             | 是     |
-| `OUTPUT_WRITE_FAILED` | 无法写出 TXT，请检查目录权限与剩余空间 | 是     |
-| `CANCELLED`           | 已取消                                 | 否     |
-
----
-
-## 7. 性能与规范符合
-
-| 项             | 要求                                                                |
-| -------------- | ------------------------------------------------------------------- |
-| 单图识别       | ≤3s（R1；PP-OCR det 960 长边 + rec 前缀裁剪，与 exam-split 同口径） |
-| renderer chunk | 工具页仅 UI + 类型封装，<200KB gzip（实测记入 smoke）               |
-| 二进制/模型    | 复用 `binaries/ocr`，不新增资产；`fetch-binaries.mjs` 不改          |
-| 样式           | 仅 Tailwind + tokens；无硬编码色值                                  |
-| 图标           | `@lucide/vue` 的 `ScanText`                                         |
-| 日志           | 主进程 `ctx.log.info` 记录注册；禁止 console                        |
-
----
-
-## 8. 验收标准
-
-1. 空态/加载（可取消）/报错三态齐全，无白屏。
-2. 识别中文截图（含空格/中文路径）→ 文本非空，可编辑，复制成功。
-3. 导出 TXT：中文/空格目录成功；同名自动 `(1)`；文本内容与编辑框一致（UTF-8）。
-4. 损坏图片 → `OCR_INPUT_INVALID`；>20MB → `OCR_IMAGE_TOO_LARGE`；纯空白图 → `OCR_NO_TEXT`。
-5. 取消任务后无结果回写、回到可操作态。
-6. exam-split 全部既有单测/e2e 通过（引擎上提零回归）。
-7. `pnpm coverage` 全仓 ≥60%、核心纯函数 ≥80%；`pnpm gate` 退出码 0。
-8. `docs/smoke/ocr-text.md` R2 八类逐条记录。
-
----
-
-## 9. 风险与回滚
-
-| 风险                         | 处置                                                                                           |
-| ---------------------------- | ---------------------------------------------------------------------------------------------- |
-| 引擎搬移导致 exam-split 回归 | 代码逐字搬移 + 保留原文件 re-export；先跑 exam-split 全量单测再继续                            |
-| `?modulePath` 打包路径失效   | worker 仍留在工具包内，不搬移；构建后 e2e 验证                                                 |
-| OCR 结果偶发乱序             | `sortReadingOrder` 纯函数单测覆盖同行/跨行/重叠                                                |
-| 真实图片 e2e 不稳定          | 正向用例用大号黑字合成图；失败路径（损坏/超大/空白）为必测；`binaries/ocr` 缺失时正例标注 skip |
-
-回滚：删除 `packages/tools/ocr-text` 与壳 3 处注册，恢复 exam-split 原文件（git revert 单 commit 即可）。
-
----
-
-## 10. 审批
-
-- [ ] 用户批准本清单与 `ocr-text-tasks.md` 后开始实施（Spec 模式要求）。
+- 本包单测（color / errors / manifest / eyedropper）通过，覆盖率 ≥80%（root `vitest.config.ts` 增加 `packages/tools/color-toolbox/src/**/*.ts` 阈值）。
+- e2e `apps/desktop/e2e/color-toolbox-smoke.spec.ts` 3 用例：默认色三格式展示（含吸管按钮可见）、非法输入报错与恢复、示例色/色阶联动 + 对比度数值与徽标；吸管真实拾色依赖系统交互，列入 smoke 人工项。
+- R2 八类映射记录于 `docs/smoke/color-toolbox.md`。
+- `pnpm gate` / `pnpm coverage` / `pnpm build` 全绿。
