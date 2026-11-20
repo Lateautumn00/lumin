@@ -22,6 +22,7 @@ import {
   Image,
   Info,
   LayoutGrid,
+  Palette,
   QrCode,
   Ruler,
   ScanText,
@@ -62,6 +63,7 @@ const iconMap: Record<string, LucideIcon> = {
   'hard-drive': HardDrive,
   'git-compare': GitCompare,
   archive: Archive,
+  palette: Palette,
   wrench: Wrench
 }
 

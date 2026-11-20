@@ -251,6 +251,9 @@ importers:
       '@lumin/tool-calculator':
         specifier: workspace:*
         version: link:../../packages/tools/calculator
+      '@lumin/tool-color-toolbox':
+        specifier: workspace:*
+        version: link:../../packages/tools/color-toolbox
       '@lumin/tool-disk-analyzer':
         specifier: workspace:*
         version: link:../../packages/tools/disk-analyzer
@@ -457,6 +460,24 @@ importers:
       pinia:
         specifier: 4.1.0
         version: 4.1.0(@vue/devtools-api@8.2.1)(typescript@6.0.3)(vue@3.5.45(typescript@6.0.3))
+      vue:
+        specifier: 3.5.45
+        version: 3.5.45(typescript@6.0.3)
+
+  packages/tools/color-toolbox:
+    dependencies:
+      '@lucide/vue':
+        specifier: 1.72.0
+        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
+      '@lumin/plugin-api':
+        specifier: workspace:*
+        version: link:../../plugin-api
+      '@lumin/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      naive-ui:
+        specifier: 2.45.3
+        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
       vue:
         specifier: 3.5.45
         version: 3.5.45(typescript@6.0.3)

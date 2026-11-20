@@ -138,6 +138,14 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/batch-ocr/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-color-toolbox\/manifest$/,
+    replacement: r('../../packages/tools/color-toolbox/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-color-toolbox\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/color-toolbox/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-file-renamer\/manifest$/,
     replacement: r('../../packages/tools/file-renamer/src/manifest.ts')
   },
