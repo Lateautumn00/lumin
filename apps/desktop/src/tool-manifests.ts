@@ -19,6 +19,7 @@ import { manifest as pdfImagesManifest } from '@lumin/tool-pdf-images/manifest'
 import { manifest as pdfToolkitManifest } from '@lumin/tool-pdf-toolkit/manifest'
 import { manifest as qrCodeManifest } from '@lumin/tool-qr-code/manifest'
 import { manifest as textToolboxManifest } from '@lumin/tool-text-toolbox/manifest'
+import { manifest as timeToolboxManifest } from '@lumin/tool-time-toolbox/manifest'
 import { manifest as unitConverterManifest } from '@lumin/tool-unit-converter/manifest'
 import { manifest as videoDownloadManifest } from '@lumin/tool-video-download/manifest'
 import { manifest as zipToolManifest } from '@lumin/tool-zip-tool/manifest'
@@ -47,5 +48,6 @@ export const toolManifests: readonly ToolManifest[] = [
   folderCompareManifest,
   zipToolManifest,
   colorToolboxManifest,
+  timeToolboxManifest,
   exampleManifest
 ]

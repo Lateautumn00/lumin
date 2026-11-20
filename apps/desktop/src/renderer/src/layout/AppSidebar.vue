@@ -7,6 +7,7 @@ import {
   Calculator,
   ChevronDown,
   ChevronRight,
+  Clock,
   Copy,
   Download,
   FileOutput,
@@ -63,6 +64,7 @@ const iconMap: Record<string, LucideIcon> = {
   'hard-drive': HardDrive,
   'git-compare': GitCompare,
   archive: Archive,
+  clock: Clock,
   palette: Palette,
   wrench: Wrench
 }
