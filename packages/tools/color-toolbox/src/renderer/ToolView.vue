@@ -24,7 +24,9 @@ import {
   type WcagVerdict
 } from '../color'
 import { toolError, type ColorToolboxErrorCode } from '../errors'
-import { getEyeDropper, isEyedropperCancel, type EyeDropperConstructorLike } from '../eyedropper'
+import { mapPointToPixel } from '../picker'
+import type { CaptureDisplayResult } from '../schema'
+import { captureDisplay } from './client'
 
 const WHITE_RGB: Rgb = { r: 255, g: 255, b: 255 }
 
@@ -48,9 +50,9 @@ const inputText = ref(formatColor(DEFAULT_COLOR, 'hex'))
 const inputError = ref<StructuredError | null>(null)
 const backgroundColor = ref('#FFFFFF')
 const clipboardError = ref<StructuredError | null>(null)
-const eyedropperCtor = ref<EyeDropperConstructorLike | null>(null)
-const eyedropperBusy = ref(false)
-const eyedropperError = ref<StructuredError | null>(null)
+const capturing = ref(false)
+const picker = ref<CaptureDisplayResult | null>(null)
+const pickerError = ref<StructuredError | null>(null)
 const copied = ref('')
 
 let copiedTimer: ReturnType<typeof setTimeout> | undefined
@@ -128,22 +130,62 @@ function onRandom(): void {
   applyColor(randomColor())
 }
 
-async function onPickScreen(): Promise<void> {
-  const ctor = eyedropperCtor.value
-  if (ctor === null || eyedropperBusy.value) return
-  eyedropperError.value = null
-  eyedropperBusy.value = true
+const displayOptions = computed<readonly { label: string; value: string }[]>(() =>
+  picker.value === null
+    ? []
+    : picker.value.displays.map((item) => ({ label: item.label, value: item.id }))
+)
+
+async function openPicker(displayId?: string): Promise<void> {
+  if (capturing.value) return
+  pickerError.value = null
+  capturing.value = true
   try {
-    const result = await new ctor().open()
-    const parsed = parseHex(result.sRGBHex)
-    if (parsed !== null) applyColor(parsed)
+    picker.value = await captureDisplay(displayId === undefined ? {} : { displayId })
   } catch (err) {
-    if (!isEyedropperCancel(err)) {
-      eyedropperError.value = toolError('CT_EYEDROPPER_FAILED', toStructuredError(err).message)
-    }
+    pickerError.value = toolError('CT_CAPTURE_FAILED', toStructuredError(err).message)
   } finally {
-    eyedropperBusy.value = false
+    capturing.value = false
   }
+}
+
+function closePicker(): void {
+  picker.value = null
+  pickerError.value = null
+}
+
+function onPickerKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && picker.value !== null) closePicker()
+}
+
+function onDisplayChange(value: string | number): void {
+  if (typeof value !== 'string') return
+  void openPicker(value)
+}
+
+function onPickerClick(event: MouseEvent): void {
+  const current = picker.value
+  const target = event.currentTarget
+  if (current === null || !(target instanceof HTMLImageElement)) return
+  const rect = target.getBoundingClientRect()
+  const pixel = mapPointToPixel(
+    { x: event.clientX, y: event.clientY },
+    { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+    { width: current.width, height: current.height }
+  )
+  if (pixel === null) return
+  const canvas = document.createElement('canvas')
+  canvas.width = 1
+  canvas.height = 1
+  const context = canvas.getContext('2d')
+  if (context === null) {
+    pickerError.value = toolError('CT_CAPTURE_FAILED', '无法读取截图像素')
+    return
+  }
+  context.drawImage(target, pixel.x, pixel.y, 1, 1, 0, 0, 1, 1)
+  const data = context.getImageData(0, 0, 1, 1).data
+  applyColor({ r: data[0] ?? 0, g: data[1] ?? 0, b: data[2] ?? 0 })
+  closePicker()
 }
 
 function onSwapContrast(): void {
@@ -187,10 +229,11 @@ function swatchClass(): string {
 }
 
 onMounted(() => {
-  eyedropperCtor.value = getEyeDropper()
+  window.addEventListener('keydown', onPickerKeydown)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', onPickerKeydown)
   if (copiedTimer !== undefined) clearTimeout(copiedTimer)
 })
 </script>
@@ -239,10 +282,9 @@ onUnmounted(() => {
           随机
         </NButton>
         <NButton
-          :disabled="eyedropperCtor === null"
-          :loading="eyedropperBusy"
-          :title="eyedropperCtor === null ? '当前环境不支持吸管取色' : '在屏幕上拾取颜色'"
-          @click="onPickScreen"
+          :loading="capturing"
+          title="截取屏幕后点选颜色（支持应用窗口外的任意位置）"
+          @click="openPicker()"
         >
           <template #icon><Pipette :size="16" /></template>
           吸管取色
@@ -254,16 +296,16 @@ onUnmounted(() => {
         <span class="ml-2 text-xs opacity-70">{{ inputError.code }}</span>
       </p>
       <p
-        v-else-if="eyedropperError !== null"
+        v-else-if="pickerError !== null"
         role="alert"
         class="text-sm text-[var(--lumin-color-error)]"
       >
-        {{ eyedropperError.message }}
-        <span class="ml-2 text-xs opacity-70">{{ eyedropperError.code }}</span>
+        {{ pickerError.message }}
+        <span class="ml-2 text-xs opacity-70">{{ pickerError.code }}</span>
       </p>
       <p v-else class="text-xs text-[var(--lumin-color-text-secondary)]">
-        输入格式随右侧切换：HEX（#3B82F6）/ RGB（rgb(59, 130, 246)）/ HSL（hsl(217, 91%, 60%)）
-        <template v-if="eyedropperCtor === null">；吸管取色不可用（当前环境不支持）</template>
+        输入格式随右侧切换：HEX（#3B82F6）/ RGB（rgb(59, 130, 246)）/ HSL（hsl(217, 91%, 60%)）；
+        吸管取色可截取整屏，支持吸取应用窗口外的颜色
       </p>
 
       <div class="flex flex-wrap items-center gap-2">
@@ -417,5 +459,44 @@ onUnmounted(() => {
         <p class="text-2xl font-semibold">大字示例 Sample</p>
       </div>
     </section>
+
+    <div
+      v-if="picker !== null"
+      role="dialog"
+      aria-modal="true"
+      aria-label="屏幕取色"
+      class="fixed inset-0 z-50 flex flex-col gap-3 bg-[var(--lumin-color-surface)] p-4"
+    >
+      <div class="flex flex-wrap items-center gap-3">
+        <p class="text-sm text-[var(--lumin-color-text)]">点击图片任意位置取色，Esc 取消</p>
+        <div v-if="picker.displays.length > 1" class="w-48">
+          <NSelect
+            :value="picker.displayId"
+            :options="[...displayOptions]"
+            :disabled="capturing"
+            aria-label="选择显示器"
+            @update:value="onDisplayChange"
+          />
+        </div>
+        <NButton size="small" class="ml-auto" :disabled="capturing" @click="closePicker">
+          取消
+        </NButton>
+      </div>
+
+      <p v-if="pickerError !== null" role="alert" class="text-sm text-[var(--lumin-color-error)]">
+        {{ pickerError.message }}
+        <span class="ml-2 text-xs opacity-70">{{ pickerError.code }}</span>
+      </p>
+
+      <div class="flex min-h-0 flex-1 items-center justify-center">
+        <img
+          :src="picker.dataUrl"
+          alt="屏幕截图，点击任意位置取色"
+          draggable="false"
+          class="max-h-full max-w-full cursor-crosshair select-none object-contain"
+          @click="onPickerClick"
+        />
+      </div>
+    </div>
   </div>
 </template>

@@ -8,6 +8,14 @@
       "types": "./src/manifest.ts",
       "default": "./src/manifest.ts"
     },
+    "./node": {
+      "types": "./src/node.ts",
+      "default": "./src/node.ts"
+    },
+    "./schema": {
+      "types": "./src/schema.ts",
+      "default": "./src/schema.ts"
+    },
     "./renderer/*": {
       "types": "./src/renderer/*",
       "default": "./src/renderer/*"
@@ -16,11 +24,15 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
+  "devDependencies": {
+    "electron": "45.3.1"
+  },
   "dependencies": {
     "@lucide/vue": "1.72.0",
     "@lumin/plugin-api": "workspace:*",
     "@lumin/shared": "workspace:*",
     "naive-ui": "2.45.3",
-    "vue": "3.5.45"
+    "vue": "3.5.45",
+    "zod": "4.6.7"
   }
 }

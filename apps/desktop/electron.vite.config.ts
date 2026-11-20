@@ -142,6 +142,10 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/color-toolbox/src/manifest.ts')
   },
   {
+    find: /^@lumin\/tool-color-toolbox\/node$/,
+    replacement: r('../../packages/tools/color-toolbox/src/node.ts')
+  },
+  {
     find: /^@lumin\/tool-color-toolbox\/renderer\/(.+)$/,
     replacement: r('../../packages/tools/color-toolbox/src/renderer/$1')
   },
