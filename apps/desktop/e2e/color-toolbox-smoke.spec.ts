@@ -2,8 +2,8 @@
  * @file color-toolbox（颜色工具箱）e2e 冒烟：真实 Electron 驱动页面交互
  * @author cuilanchao
  * @date 2026-11-20
- * @description 覆盖：页面加载与默认色三格式展示、非法输入结构化报错与恢复、
- *              示例色/色阶联动与 WCAG 对比度判定（纯 renderer 工具，零 IPC）。
+ * @description 覆盖：页面加载与默认色三格式展示、整屏截图取色预览层（Esc 关闭）、
+ *              非法输入结构化报错与恢复、示例色/色阶联动与 WCAG 对比度判定。
  */
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
@@ -46,7 +46,13 @@ test.describe('color-toolbox（颜色工具箱）冒烟', () => {
       await expect(page.getByText('rgb(59, 130, 246)', { exact: true })).toBeVisible()
       await expect(page.getByText('hsl(217, 91%, 60%)', { exact: true })).toBeVisible()
       await expect(page.getByText('3.68 : 1', { exact: true })).toBeVisible()
-      await expect(page.getByRole('button', { name: '吸管取色' })).toBeVisible()
+
+      // 吸管取色：主进程截屏 → 应用内预览层 → Esc 取消
+      await page.getByRole('button', { name: '吸管取色' }).click()
+      await expect(page.getByRole('dialog', { name: '屏幕取色' })).toBeVisible()
+      await expect(page.getByText('点击图片任意位置取色，Esc 取消')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('dialog', { name: '屏幕取色' })).toBeHidden()
     } finally {
       await app.close()
     }

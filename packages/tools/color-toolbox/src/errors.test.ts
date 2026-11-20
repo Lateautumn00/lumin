@@ -7,7 +7,7 @@ describe('color-toolbox errors', () => {
     expect(COLOR_TOOLBOX_ERROR_CODES).toEqual([
       'CT_INVALID_COLOR',
       'CT_CLIPBOARD_FAILED',
-      'CT_EYEDROPPER_FAILED'
+      'CT_CAPTURE_FAILED'
     ])
   })
 
