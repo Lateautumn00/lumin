@@ -305,6 +305,9 @@ importers:
       '@lumin/tool-video-download':
         specifier: workspace:*
         version: link:../../packages/tools/video-download
+      '@lumin/tool-zip-tool':
+        specifier: workspace:*
+        version: link:../../packages/tools/zip-tool
       '@playwright/test':
         specifier: 1.65.0
         version: 1.65.0
@@ -952,6 +955,36 @@ importers:
       '@lumin/ui':
         specifier: workspace:*
         version: link:../../ui
+      naive-ui:
+        specifier: 2.45.3
+        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
+      vue:
+        specifier: 3.5.45
+        version: 3.5.45(typescript@6.0.3)
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
+  packages/tools/zip-tool:
+    dependencies:
+      '@lucide/vue':
+        specifier: 1.72.0
+        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
+      '@lumin/node-kit':
+        specifier: workspace:*
+        version: link:../../node-kit
+      '@lumin/plugin-api':
+        specifier: workspace:*
+        version: link:../../plugin-api
+      '@lumin/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@lumin/ui':
+        specifier: workspace:*
+        version: link:../../ui
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       naive-ui:
         specifier: 2.45.3
         version: 2.45.3(vue@3.5.45(typescript@6.0.3))
@@ -2487,6 +2520,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   file-entry-cache@11.1.5:
     resolution: {integrity: sha512-+PFTHITI08JIGhnNpGNI8T8inUpgZfk3GNEqfT9R2zZV2iFXg3CvqzSl/uEhs7TSGujYRELEANyDvS8Fj7+S7Q==}
@@ -5602,6 +5638,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  fflate@0.8.3: {}
 
   file-entry-cache@11.1.5:
     dependencies:

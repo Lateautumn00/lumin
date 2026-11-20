@@ -44,6 +44,7 @@
     "@lumin/tool-text-toolbox": "workspace:*",
     "@lumin/tool-unit-converter": "workspace:*",
     "@lumin/tool-video-download": "workspace:*",
+    "@lumin/tool-zip-tool": "workspace:*",
     "@playwright/test": "1.65.0",
     "@tailwindcss/vite": "4.3.5",
     "@types/qrcode": "1.5.6",

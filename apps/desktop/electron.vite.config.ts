@@ -185,6 +185,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/folder-compare/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-zip-tool\/manifest$/,
+    replacement: r('../../packages/tools/zip-tool/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-zip-tool\/node$/,
+    replacement: r('../../packages/tools/zip-tool/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-zip-tool\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/zip-tool/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-text-toolbox\/manifest$/,
     replacement: r('../../packages/tools/text-toolbox/src/manifest.ts')
   },

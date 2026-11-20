@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
+  Archive,
   Braces,
   Calculator,
   Copy,
@@ -54,6 +55,7 @@ const iconMap: Record<string, LucideIcon> = {
   copy: Copy,
   'hard-drive': HardDrive,
   'git-compare': GitCompare,
+  archive: Archive,
   wrench: Wrench
 }
 
