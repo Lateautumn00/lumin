@@ -12,7 +12,7 @@ export const manifest = defineManifest({
   name: '二维码工具',
   description: '二维码生成与图片识别（PNG/SVG 导出）',
   icon: 'qr-code',
-  category: 'text',
+  category: 'image',
   order: 80,
   version: '0.1.0'
 })
