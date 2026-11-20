@@ -12,6 +12,7 @@ import {
   Files,
   Film,
   FlaskConical,
+  HardDrive,
   Hash,
   Image,
   Info,
@@ -50,6 +51,7 @@ const iconMap: Record<string, LucideIcon> = {
   'qr-code': QrCode,
   'scan-text': ScanText,
   copy: Copy,
+  'hard-drive': HardDrive,
   wrench: Wrench
 }
 

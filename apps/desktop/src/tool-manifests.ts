@@ -1,5 +1,6 @@
 import type { ToolManifest } from '@lumin/plugin-api'
 import { manifest as calculatorManifest } from '@lumin/tool-calculator/manifest'
+import { manifest as diskAnalyzerManifest } from '@lumin/tool-disk-analyzer/manifest'
 import { manifest as docx2pdfManifest } from '@lumin/tool-docx2pdf/manifest'
 import { manifest as duplicateFinderManifest } from '@lumin/tool-duplicate-finder/manifest'
 import { manifest as exampleManifest } from '@lumin/tool-example/manifest'
@@ -37,5 +38,6 @@ export const toolManifests: readonly ToolManifest[] = [
   qrCodeManifest,
   ocrTextManifest,
   duplicateFinderManifest,
+  diskAnalyzerManifest,
   exampleManifest
 ]

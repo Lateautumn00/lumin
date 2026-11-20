@@ -161,6 +161,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/duplicate-finder/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-disk-analyzer\/manifest$/,
+    replacement: r('../../packages/tools/disk-analyzer/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-disk-analyzer\/node$/,
+    replacement: r('../../packages/tools/disk-analyzer/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-disk-analyzer\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/disk-analyzer/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-text-toolbox\/manifest$/,
     replacement: r('../../packages/tools/text-toolbox/src/manifest.ts')
   },

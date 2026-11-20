@@ -1,4 +1,5 @@
 import type { RegisterMain } from '@lumin/plugin-api'
+import { registerMain as diskAnalyzerRegisterMain } from '@lumin/tool-disk-analyzer/node'
 import { registerMain as docx2pdfRegisterMain } from '@lumin/tool-docx2pdf/node'
 import { registerMain as duplicateFinderRegisterMain } from '@lumin/tool-duplicate-finder/node'
 import { registerMain as exampleRegisterMain } from '@lumin/tool-example/node'
@@ -16,6 +17,7 @@ import { registerMain as qrCodeRegisterMain } from '@lumin/tool-qr-code/node'
 import { registerMain as videoDownloadRegisterMain } from '@lumin/tool-video-download/node'
 
 export const toolMains: Readonly<Record<string, RegisterMain>> = {
+  'disk-analyzer': diskAnalyzerRegisterMain,
   docx2pdf: docx2pdfRegisterMain,
   'duplicate-finder': duplicateFinderRegisterMain,
   example: exampleRegisterMain,

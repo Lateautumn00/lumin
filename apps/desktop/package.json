@@ -25,6 +25,7 @@
     "@lumin/plugin-api": "workspace:*",
     "@lumin/shared": "workspace:*",
     "@lumin/tool-calculator": "workspace:*",
+    "@lumin/tool-disk-analyzer": "workspace:*",
     "@lumin/tool-docx2pdf": "workspace:*",
     "@lumin/tool-duplicate-finder": "workspace:*",
     "@lumin/tool-exam-split": "workspace:*",
