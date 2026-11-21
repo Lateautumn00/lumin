@@ -61,6 +61,7 @@
 | Q48 | 工具去重与文案校正        | **M48（2026-11-21 用户确认）**：① 删除 `dev-toolbox` 的「UUID 生成」页签，UUID 统一由 `password-generator` 提供；② 删除 `time-toolbox` 的「倒计时」页签，时长倒计时与提醒统一由 `misc-toolbox` 计时器提供（保留蜂鸣能力，避免功能回退）；③ 修正 manifest 文案漏项（text-toolbox 补摩尔斯、color-toolbox 补吸管/调色板、exam-split 去掉「OCR 敬请期待」）；④ 消除 order 冲突（fs-cleaner 66→69、example 90→95）；详见 §4.48                                              |
 | Q49 | PDF 收敛与 OCR 双模式合并 | **M49（2026-11-21 用户确认）**：① `exam-split` PDF 页签只保留 OCR 前置所需的「拆分 + 裁剪」，合并/删页/旋转下线并引导到 `pdf-toolkit`（plan Q19 已明确裁剪归 exam-split）；② `ocr-text`（单张）与 `batch-ocr`（批量）合并为单一工具，保留 `ocr-text` 身份与入口，迁入 `batch-ocr` 架构实现「单张识别 / 批量识别」双模式，删除 `batch-ocr` 包与全部壳接线；详见 §4.49                                                                                                    |
 | Q50 | 音频互转扩展              | **在既有 `media-convert` 增第五 Tab「音频互转」（2026-11-21 用户选定，M50，不新建工具包）**：仅音频扩展名（mp3/wav/flac/aac/m4a/ogg/opus/wma/aiff）→ 目标格式（mp3/m4a/wav/flac/ogg）+ 码率（128/192/320，wav/flac 无损忽略），复用提取音频编码参数与串行批次语义，`-vn` 丢弃封面轨；视频输入 → `MC_FILE_UNSUPPORTED`；**零新增依赖**（复用 `binaries/download/ffmpeg.exe`）；详见 §4.50                                                                                |
+| Q51 | 屏幕标尺                  | **在既有 `misc-toolbox` 增第三 Tab「屏幕标尺」（2026-11-21 用户选定，M51，不新建工具包）**：desktopCapturer 整屏截图 → 应用内预览拖拽框选，实时显示物理像素/对角线/逻辑像素与 DPI 名义换算 cm/inch；DPI 48–600（默认 96）、多显示器切换、复制结果、Esc 关闭；截屏能力与坐标映射公共上提（`node-kit/src/screen.ts`、`shared/src/geometry.ts`），color-toolbox 改为委托且零回归；**零新增依赖**；详见 §4.51                                                                                |
 | —   | 硬约束                    | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -703,6 +704,15 @@ lumin/
 - **命名与批次**：`{stem}.{ext}`，冲突走 `uniqueFileName` 递增；批量串行、单文件失败不中断、可取消，与既有四模式一致
 - **验收**：五 Tab 标签可见；wav→mp3/flac 真实 ffmpeg 产物存在且无视频流；视频输入被拒；单测/类型检查/gate 全绿；chunk <200KB gzip；spec/smoke/README/CHANGELOG 同步
 
+### 4.51 屏幕标尺：截屏测量（M51，2026-11-21 R8 登记）
+
+- **决策背景**：路线图差距 G1「屏幕标尺」——需要测量屏幕元素/窗口的像素尺寸与物理尺寸，此前仅 color-toolbox 具备整屏截图能力
+- **实现方式**：`misc-toolbox` 增第三 Tab「屏幕标尺」；单通道 `misc-toolbox:capture-display`（`displayId` 可选，回包含 `scaleFactor`），renderer 预览层拖拽框选，纯函数 `ruler.ts` 计算宽高/对角线/逻辑像素与 cm/inch
+- **公共上提**：截屏逻辑（显示器选择 + desktopCapturer 调用 + 错误语义）上提 `@lumin/node-kit/screen.ts`，坐标映射上提 `@lumin/shared/geometry.ts`；`color-toolbox` 改为委托同源实现，单测零改动通过
+- **交互边界**：DPI 可调 48–600（默认 96，仅名义换算）；多显示器切换后重新截屏；拖拽越界夹紧到截图边缘；Esc 关闭；复制结果为四行纯文本
+- **错误码**：`MT_CAPTURE_FAILED`（截屏失败/参数非法）、`MT_RULER_INVALID`（DPI 越界）、`MT_CLIPBOARD_FAILED`（复制失败）
+- **验收**：三页签可见；截屏后拖拽出现宽/高/对角线/逻辑尺寸；Esc 关闭；单测/类型检查/gate 全绿；chunk <200KB gzip；spec/smoke/README/CHANGELOG 同步
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -795,6 +805,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M48 v4.7**  | 工具去重与文案校正（§4.48，2026-11-21）：移除 `dev-toolbox` UUID 页签（归口 password-generator）、移除 `time-toolbox` 倒计时页签（归口 misc-toolbox 计时器）；补全 text/color/exam-split manifest 文案；修复 fs-cleaner / example order 冲突；不新建工具包、不动壳                                                                              | §4.48 验收；受影响包 typecheck/单测/e2e 同步；`pnpm gate` 全绿；文档五处同步                                      | 0.5 天   |
 | **M49 v4.8**  | PDF 能力收敛与 OCR 双模式合并（§4.49，2026-11-21）：`exam-split` PDF 页签仅保留拆分/裁剪（合并/删页/旋转下线并引导 pdf-toolkit）；`ocr-text` 并入 `batch-ocr` 架构提供「单张识别 / 批量识别」双模式，删除 `batch-ocr` 包与全部壳接线；错误码统一 `OCR_*`                                                                                        | §4.49 验收；两包 typecheck/单测/e2e 同步；限包覆盖率 ≥80%；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步      | 0.5 天   |
 | **M50 v4.9**  | 音视频处理扩展：音频互转（§4.50，2026-11-21）：`media-convert` 增第五 Tab「音频互转」，`process` union 增 `audio-convert`；仅音频输入、目标格式 + 码率，编码参数与提取音频共用；零新增依赖                                                                                                                                                      | §4.50 验收；typecheck/单测/e2e 同步（8 用例）；限包覆盖率 ≥80%；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天   |
+| **M51 v5.0**  | 屏幕标尺（§4.51，2026-11-21）：`misc-toolbox` 增第三 Tab「屏幕标尺」—— desktopCapturer 截屏 + 拖拽框选，物理/逻辑像素、对角线、DPI 名义 cm/inch；截屏与坐标映射公共上提 node-kit/shared（color-toolbox 零回归）；零新增依赖                                                                                                                    | §4.51 验收；e2e 新增 1 用例；限包覆盖率 ≥80%；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步                  | 0.5 天   |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
