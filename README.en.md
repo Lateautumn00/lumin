@@ -15,6 +15,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | Image crop         | Batch crop by aspect ratio (with 9-grid anchor) or percentage region; remembers output folder, never overwrites originals                                                 |
 | Batch renamer      | Six stacked rules in one directory, live preview, conflict detection, single-step undo                                                                                    |
 | Text toolbox       | JSON format/minify/validate, Base64/URL encode-decode, regex test & replace preview                                                                                       |
+| Markdown tool      | Markdown preview & HTML export, JSON→TypeScript type generation, YAML format/convert                                                                                       |
 | Color toolbox      | HEX/RGB/HSL conversion, full-screen eyedropper (outside the app window)/picker and color scales, harmony palettes, WCAG contrast (AA/AAA) checks                          |
 | Time toolbox       | Timestamp ↔ date conversion, 8 common time zones, duration math, Cron parsing with next 5 runs                                                                            |
 | Life calculator    | Mortgage payments (equal installment/equal principal) with schedule, salary tax with deductions, percentage & discount math                                               |

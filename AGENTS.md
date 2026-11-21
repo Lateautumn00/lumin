@@ -15,7 +15,7 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 - pnpm workspaces + Turborepo + electron-vite + Electron + TypeScript
 - Vue 3 + Vite + Pinia + Vue Router + Naive UI + Tailwind CSS
 - Vitest（测试）· ESLint + Prettier（格式）· dependency-cruiser（边界）
-- pdf-lib + pdfjs-dist（PDF）· mathjs（表达式）· PP-OCR ONNX + onnxruntime-node（OCR，M3b P4 由 onnxruntime-web 切换，2026-11-18，见 plan §4.4）
+- pdf-lib + pdfjs-dist（PDF）· mathjs（表达式）· PP-OCR ONNX + onnxruntime-node（OCR，M3b P4 由 onnxruntime-web 切换，2026-11-18，见 plan §4.4）· marked 18.2.1 + js-yaml 5.5.0（Markdown 工具，M39，2026-11-21 R8 登记，见 plan §4.39）
 - electron-builder（NSIS + portable）· electron-updater（generic provider）
 
 **版本基线**：一律**最新稳定版 + 精确钉版**，锁定表见 `docs/opencode/plan.md` §1.1；升级依赖前必须 `npm view` 复核并同步该表（Q18/R8，口头无效）。TypeScript 当前锁定 **6.0.3**（7.0.2 因 `typescript-eslint` 未适配已按方案 A 回退，例外与升级条件见 plan.md §1.1）。

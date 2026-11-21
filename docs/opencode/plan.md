@@ -7,7 +7,7 @@
 
 ---
 
-## 1. 决策总表（Q1–Q37 锁定）
+## 1. 决策总表（Q1–Q39 锁定）
 
 | #   | 决策项        | 结论                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | --- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -49,6 +49,7 @@
 | Q36 | PDF 图片增强  | **在 `pdf-images` 扩展「图片转 PDF」页签（2026-11-21 用户选定，不新建工具包）**：新增 Letter 纸型、页面方向（自动/竖版/横版）、页边距预设（无/小/中/大）与自定义输出文件名（冲突递增）；复用 pdf-lib 与既有 worker/错误码，零新增依赖；详见 §4.34                                                                                                                                                                                                                   |
 | Q37 | 图片裁剪      | **新增 `image-crop` 工具（2026-11-21 用户选定）**：多选静态图片（PNG/JPG/WebP/BMP/TIFF，1–500 张、单张 ≤200MB）批量裁剪——比例模式（1:1/4:3/3:4/16:9/9:16/自定义 + 九宫格锚点）取原图内最大同比例矩形；自由模式按百分比区域（左/上/宽/高）；输出目录记忆、`{原名}_裁剪{标签}.{ext}`、冲突递增、原图只读；主进程 ffmpeg 串行 + 进度 + 取消，单张失败不中断整批；公共编码/失败归类上提 `node-kit/ffmpeg`、扩展名提取上提 `shared/naming`，零新增第三方依赖；详见 §4.35 |
 | Q38 | 生活计算器    | **新增 `life-calculator` 工具（2026-11-21 用户选定，M37）**：房贷（等额本息/等额本金 + 还款计划摘要）、工资个税（月度口径 + 五险一金 + 专项附加扣除）、百分比与折扣（增减/变化率/折后价/反推原价）；纯 renderer、零 IPC、零新增依赖；详见 §4.37                                                                                                                                                                                                                     |
+| Q39 | Markdown 工具 | **新增 `markdown-tool` 工具（2026-11-21 用户选定，M39）**：Markdown 预览 + MD→HTML（引入 `marked` 18.2.1）、JSON→TypeScript 类型生成（零依赖自写）、YAML→JSON / JSON→YAML / 格式化（引入 `js-yaml` 5.5.0）；解析全在 renderer，主进程仅 `config`/`set-output-dir`/`save` 同步短通道做目录记忆与原子写盘；预览用 sandbox iframe + CSP 双重防脚本；详见 §4.39 |
 | —   | 硬约束        | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -72,7 +73,7 @@
 | 校验/测试      | zod 4.6.7 · vitest 5.1.0 + @vitest/coverage-v8 5.1.0 · @vue/test-utils 2.5.1 · vue-tsc 3.3.14                                                                                                                                                                                                                                                                                            | vue-tsc peer 无上限（TS7 兼容待实测）                                                                                                                                                                                                                                                                                                  |
 | Lint/格式      | eslint 10.14.0 · @typescript-eslint/* 8.72.2 · eslint-plugin-vue 10.12.1 · vue-eslint-parser 10.4.2 · @vue/eslint-config-typescript 14.9.0 · @vue/eslint-config-prettier 10.2.0 · eslint-config-prettier 10.1.8 · prettier 3.10.1                                                                                                                                                        |                                                                                                                                                                                                                                                                                                                                        |
 | 工程化         | turbo 2.11.11 · dependency-cruiser 18.7.2 · electron-log 5.4.4                                                                                                                                                                                                                                                                                                                           | pnpm 12 为 Rust 重写，配置格式与 11 兼容；`--frozen-lockfile false` 语法已移除                                                                                                                                                                                                                                                         |
-| 后续里程碑     | mathjs 15.2.0（M1）· pdf-lib 1.17.1 + pdfjs-dist 6.5.438（M3）· **onnxruntime-web 1.31.1（M3b P0 钉版）→ onnxruntime-node 1.31.1（M3b P4 R1 复评切换，2026-11-18 `npm view` 复核 latest=1.31.1，`pnpm-workspace.yaml` `allowBuilds` 放行 postinstall）** · @playwright/test（M0 IPC 冒烟）· **fflate 0.8.3（M25，2026-11-20 `npm view` 复核 latest=0.8.3；纯 JS ZIP，MIT，无原生依赖）** | M3b P0 实测：worker_threads 内 import 23ms / session 创建 327ms / 320² 推理 62–90ms；模型与字典经 `scripts/fetch-binaries.mjs` 固定 URL+SHA256 拉取（det 4.7MB + rec 10.9MB + cls 0.6MB + 字典 6623 字符，合计 ≈16.2MB）；P4 真实样卷 wasm 3.3–4.7s/页超 R1 ≤3s 基线 → 切 onnxruntime-node 后 1.10–1.56s/页达标（提速 2.6–3.8×）       |
+| 后续里程碑     | mathjs 15.2.0（M1）· pdf-lib 1.17.1 + pdfjs-dist 6.5.438（M3）· **onnxruntime-web 1.31.1（M3b P0 钉版）→ onnxruntime-node 1.31.1（M3b P4 R1 复评切换，2026-11-18 `npm view` 复核 latest=1.31.1，`pnpm-workspace.yaml` `allowBuilds` 放行 postinstall）** · @playwright/test（M0 IPC 冒烟）· **fflate 0.8.3（M25，2026-11-20 `npm view` 复核 latest=0.8.3；纯 JS ZIP，MIT，无原生依赖）** | M3b P0 实测：worker_threads 内 import 23ms / session 创建 327ms / 320² 推理 62–90ms；模型与字典经 `scripts/fetch-binaries.mjs` 固定 URL+SHA256 拉取（det 4.7MB + rec 10.9MB + cls 0.6MB + 字典 6623 字符，合计 ≈16.2MB）；P4 真实样卷 wasm 3.3–4.7s/页超 R1 ≤3s 基线 → 切 onnxruntime-node 后 1.10–1.56s/页达标（提速 2.6–3.8×）· **marked 18.2.1 + js-yaml 5.5.0（M39，2026-11-21 `npm view` 复核；纯 JS、MIT、无原生依赖，均自带类型；marked 输出经 sandbox iframe + CSP 隔离）**       |
 
 ---
 
@@ -576,6 +577,17 @@ lumin/
 - **通道增量**：`pdf-toolkit:extract-text` / `extract-images` / `compress`（均三段式任务，载荷 `{ inputPath, ranges? }`，压缩加 `level: low|medium|high`）
 - **验收**：单测（node-kit extract + pdf-toolkit 三 op，包覆盖率 ≥80%）；e2e 12/12（原 8 + 文本含页码 / 图片 ≥1 PNG / 压缩页数不变 / 空文本层报错）；R2 八类映射；`pnpm gate` 全绿
 
+### 4.39 Markdown 工具（M39，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：新增 `markdown-tool`（category `document`，icon `file-code`，order 80）；三项能力——B5 Markdown 预览 + MD→HTML、B8 JSON→TypeScript、B8 YAML 互转/格式化；**引入 `marked` 18.2.1 与 `js-yaml` 5.5.0**（R8 特批，纯 JS/MIT/无原生，精确钉版登记 §1.1）
+- **形态**：解析与生成全在 renderer（同步纯函数，无三段式任务）；主进程仅 `config` / `set-output-dir` / `save` 三个同步短通道，默认输出目录 `userData/markdown`，冲突 `resolveConflictPath` 递增、`writeAtomic` 写 UTF-8
+- **Markdown 口径**：`marked`（`gfm: true`、`breaks: false`）；预览 `<iframe sandbox="">` + srcdoc，文档内注入 CSP（预览 `default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:`，导出 `default-src 'none'; img-src data: https: http:`），脚本无法执行、预览不加载外链图片；支持复制片段 HTML 与导出完整 HTML
+- **JSON→TS 口径**：对象/数组/联合推断；数组元素对象合并（全出现必选、部分出现 `?`、类型不同取联合）；嵌套命名 `根名 + PascalCase(键路径)` 且冲突递增；非法字段名单引号包裹；空对象 `Record<string, never>`、空数组 `unknown[]`、深度 >64 报错；根名须合法 TS 标识符且非保留字
+- **YAML 口径**：YAML→JSON（2 空格美化）/ JSON→YAML / 格式化 YAML（`indent: 2`、`lineWidth: 120`、`noRefs: true`）；多文档与语法错误统一 `MD_YAML_INVALID`（带行/列）；格式化会移除注释、展开锚点，页内明示
+- **错误码**：`MD_INPUT_TOO_LONG` / `MD_JSON_INVALID` / `MD_TS_NAME_INVALID` / `MD_YAML_INVALID` / `MD_CLIPBOARD_FAILED` / `MD_SAVE_FAILED`
+- **三态**：空态（三页签引导 + 主操作）、加载态豁免（同步纯函数，导出按钮 loading）、报错态（各页签独立 `role="alert"`）
+- **验收**：单测（markdown / json-to-ts / yaml / save / schema / node / errors / manifest，本包 ≥80%）；e2e 4/4（预览、JSON→TS 报错恢复、YAML 三模式、导出冲突 `(1)`）；R2 八类映射；chunk（`marked` + `js-yaml` 独占依赖）<200KB gzip；`pnpm gate` 全绿
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -656,6 +668,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M36 v3.5**  | 第一梯队缺口补齐（§4.36，2026-11-21）：计算器阶乘 + 进制页签；时间工具箱日期差 + 倒计时；单位换算流量/角度/像素（DPI）；文本工具箱 Hex/Unicode、批量文本处理与字数统计；只扩展现有 4 包，零新包零新增依赖                                                                                                                                       | §4.36 验收；四包单测 ≥80%；R2 八类映射；chunk <200KB gzip；gate 全绿                    | 0.5–1 天 |
 | **M37 v3.6**  | 生活计算器（§4.37，2026-11-21）：`life-calculator` —— 房贷（等额本息/等额本金 + 还款计划）、工资个税（月度口径 + 五险一金 + 专项附加扣除）、百分比与折扣；纯 renderer、零 IPC、零新增依赖                                                                                                                                                       | §4.37 验收；e2e 4 用例；R2 八类映射；chunk 8,415 B gzip；gate 全绿                      | 0.5 天   |
 | **M38 v3.7**  | PDF 能力补全（§4.38，2026-11-21）：`pdf-toolkit` 扩展三 Tab —— 文本层提取导出 TXT、内嵌图片提取（sha256 去重）、按档位重采样压缩；抽取原语上提 `node-kit/pdf`，零新增依赖                                                                                                                                                                       | §4.38 验收；e2e 12/12；R2 八类映射；包覆盖率 ≥80%；gate 全绿                            | 0.5–1 天 |
+| **M39 v3.8**  | Markdown 工具（§4.39，2026-11-21）：新增 `markdown-tool` —— Markdown 预览 + MD→HTML（`marked` 18.2.1，sandbox iframe + CSP 防脚本）、JSON→TypeScript 类型生成（零依赖自写）、YAML 互转/格式化（`js-yaml` 5.5.0）；解析全在 renderer，主进程仅目录记忆 + 原子写盘                                                                                                                                     | §4.39 验收；e2e 4 用例；R2 八类映射；chunk <200KB gzip；gate 全绿                       | 0.5–1 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
