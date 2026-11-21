@@ -12,6 +12,7 @@ import {
   type Category,
   type CategoryId,
   type LinearUnit,
+  type ResolutionUnit,
   type TempUnit
 } from '../units/data'
 import { sortWithFavorites, useFavoritesStore } from '../units/favorites'
@@ -25,6 +26,7 @@ const category = ref<CategoryId>('length')
 const fromId = ref('m')
 const toId = ref('km')
 const valueInput = ref('')
+const dpiInput = ref('96')
 const favorites = useFavoritesStore()
 
 const categoryOptions = CATEGORIES.map((item) => ({ label: item.name, value: item.id }))
@@ -33,7 +35,9 @@ const currentCategory = computed<Category>(() => findCategory(category.value) ??
 
 const favoriteIds = computed<string[]>(() => favorites.list(category.value))
 
-const currentUnits = computed<readonly (LinearUnit | TempUnit)[]>(() => currentCategory.value.units)
+const currentUnits = computed<readonly (LinearUnit | TempUnit | ResolutionUnit)[]>(
+  () => currentCategory.value.units
+)
 
 const unitOptions = computed(() =>
   sortWithFavorites(currentUnits.value, favoriteIds.value).map((unit) => ({
@@ -48,7 +52,13 @@ const result = computed<ResultState>(() => {
   const numeric = Number(raw)
   if (!Number.isFinite(numeric)) return { kind: 'error', message: '请输入有效数值' }
   try {
-    const converted = convert(category.value, fromId.value, toId.value, numeric)
+    const converted = convert(
+      category.value,
+      fromId.value,
+      toId.value,
+      numeric,
+      Number(dpiInput.value)
+    )
     return { kind: 'ok', text: formatNumber(converted) }
   } catch (err) {
     return { kind: 'error', message: err instanceof ConvertError ? err.message : '换算失败' }
@@ -62,6 +72,7 @@ function onCategoryChange(value: string | number): void {
   category.value = next.id
   fromId.value = next.units[0].id
   toId.value = next.units[1].id
+  dpiInput.value = String(next.id === 'resolution' ? next.dpiDefault : 96)
 }
 
 function swap(): void {
@@ -161,6 +172,16 @@ function onToggleFavorite(unitId: string): void {
             —
           </span>
         </div>
+      </div>
+
+      <div v-if="category === 'resolution'" class="flex flex-wrap items-center gap-2">
+        <span class="text-sm text-[var(--lumin-color-text-secondary)]">DPI</span>
+        <div class="w-32">
+          <NInput v-model:value="dpiInput" inputmode="numeric" aria-label="DPI" />
+        </div>
+        <span class="text-xs text-[var(--lumin-color-text-secondary)]">
+          1 英寸 = DPI 像素（常用 96 / 150 / 300）
+        </span>
       </div>
 
       <p v-if="favoriteIds.length === 0" class="text-xs text-[var(--lumin-color-text-secondary)]">

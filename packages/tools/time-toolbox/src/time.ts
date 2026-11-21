@@ -30,6 +30,21 @@ export interface DurationParts {
   totalDays: number
 }
 
+/** 日历差（按年月日借位，totalDays 为绝对天数差） */
+export interface CalendarDiff {
+  negative: boolean
+  years: number
+  months: number
+  days: number
+  totalDays: number
+}
+
+/** 倒计时结果（expired 表示目标时间已到或已过） */
+export interface Countdown {
+  expired: boolean
+  parts: DurationParts
+}
+
 /** 常用时区选项 */
 export interface TimeZoneOption {
   id: string
@@ -49,6 +64,9 @@ export const COMMON_TIME_ZONES: readonly TimeZoneOption[] = [
 ]
 
 const TIMESTAMP_PATTERN = /^-?\d+$/
+
+/** 纯日期文本：YYYY-MM-DD */
+const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
 
 /** 日期时间文本：2026-11-20T09:30[:00] 或空格分隔 */
 const DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/
@@ -176,6 +194,94 @@ export function isValidTimeZone(timeZone: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * 解析本地日期文本（YYYY-MM-DD）为当日 00:00:00 的毫秒时间戳
+ * @param input 纯日期文本
+ * @returns 毫秒时间戳；格式或日期分量非法（如 2026-02-30）时返回 null
+ */
+export function parseLocalDate(input: string): number | null {
+  const match = DATE_ONLY_PATTERN.exec(input.trim())
+  if (match === null) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+
+  const date = new Date(0)
+  date.setFullYear(year, month - 1, day)
+  date.setHours(0, 0, 0, 0)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null
+  }
+  return date.getTime()
+}
+
+/** 指定年月的天数（monthIndex 允许越界，由 Date.UTC 自动进位） */
+function daysInMonth(year: number, monthIndex: number): number {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
+}
+
+/** 年月日 → UTC 天序号（用 UTC 归一，避免夏令时导致的 23/25 小时偏差） */
+function dayNumberOf(year: number, monthIndex: number, day: number): number {
+  return Date.UTC(year, monthIndex, day) / 86_400_000
+}
+
+/** 日期加 N 个月（月末按目标月天数截断），返回 UTC 天序号 */
+function addMonthsDayNumber(
+  year: number,
+  monthIndex: number,
+  day: number,
+  deltaMonths: number
+): number {
+  const totalMonths = year * 12 + monthIndex + deltaMonths
+  const targetYear = Math.floor(totalMonths / 12)
+  const targetMonth = ((totalMonths % 12) + 12) % 12
+  const targetDay = Math.min(day, daysInMonth(targetYear, targetMonth))
+  return dayNumberOf(targetYear, targetMonth, targetDay)
+}
+
+/**
+ * 计算两个日期（本地日历日）之间的年月日差与总天数
+ * @param startMs 开始毫秒时间戳
+ * @param endMs 结束毫秒时间戳
+ * @description 结束早于开始时自动交换并置 negative；月末按「加月截断」规则借位（1-31 → 3-01 = 1 个月 1 天）
+ */
+export function diffCalendar(startMs: number, endMs: number): CalendarDiff {
+  const negative = endMs < startMs
+  const start = new Date(negative ? endMs : startMs)
+  const end = new Date(negative ? startMs : endMs)
+  const startYear = start.getFullYear()
+  const startMonth = start.getMonth()
+  const startDay = start.getDate()
+  const startNumber = dayNumberOf(startYear, startMonth, startDay)
+  const endNumber = dayNumberOf(end.getFullYear(), end.getMonth(), end.getDate())
+
+  let monthsTotal = (end.getFullYear() - startYear) * 12 + (end.getMonth() - startMonth)
+  let anchor = addMonthsDayNumber(startYear, startMonth, startDay, monthsTotal)
+  if (anchor > endNumber && monthsTotal > 0) {
+    monthsTotal -= 1
+    anchor = addMonthsDayNumber(startYear, startMonth, startDay, monthsTotal)
+  }
+
+  return {
+    negative,
+    years: Math.floor(monthsTotal / 12),
+    months: monthsTotal % 12,
+    days: endNumber - anchor,
+    totalDays: endNumber - startNumber
+  }
+}
+
+/**
+ * 倒计时：目标时间 - 当前时间，分解为天/时/分/秒
+ * @param targetMs 目标毫秒时间戳
+ * @param nowMs 当前毫秒时间戳
+ */
+export function countdownTo(targetMs: number, nowMs: number): Countdown {
+  const diff = targetMs - nowMs
+  return { expired: diff <= 0, parts: formatDuration(diff) }
 }
 
 /**

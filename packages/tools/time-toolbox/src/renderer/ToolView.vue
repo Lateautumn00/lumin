@@ -10,22 +10,22 @@ import type { StructuredError } from '@lumin/shared'
 
 import {
   COMMON_TIME_ZONES,
+  countdownTo,
+  diffCalendar,
   formatDateTime,
   formatDuration,
   formatIso,
   formatOffset,
   isValidTimeZone,
+  parseLocalDate,
   parseLocalDateTime,
   parseTimestamp,
+  type CalendarDiff,
+  type Countdown,
   type DurationParts,
   type TimestampMode
 } from '../time'
-import {
-  describeCron,
-  nextCronRuns,
-  parseCron,
-  type ParsedCron
-} from '../cron'
+import { describeCron, nextCronRuns, parseCron, type ParsedCron } from '../cron'
 import { toolError } from '../errors'
 
 const LOCAL_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -152,8 +152,7 @@ function addZone(): void {
     zoneError.value = toolError('TT_INVALID_INPUT', `无法识别的时区：${id}`)
     return
   }
-  const exists =
-    COMMON_TIME_ZONES.some((zone) => zone.id === id) || extraZones.value.includes(id)
+  const exists = COMMON_TIME_ZONES.some((zone) => zone.id === id) || extraZones.value.includes(id)
   if (exists) {
     zoneError.value = toolError('TT_INVALID_INPUT', '该时区已在列表中')
     return
@@ -202,6 +201,65 @@ function swapDuration(): void {
   const start = startInput.value
   startInput.value = endInput.value
   endInput.value = start
+}
+
+/* ---------- Tab5 日期差 ---------- */
+
+/** 毫秒 → date 输入值（本地日期 YYYY-MM-DD） */
+function toDateInput(ms: number): string {
+  return formatDateTime(ms).slice(0, 10)
+}
+
+const diffStartInput = ref(toDateInput(Date.now()))
+const diffEndInput = ref(toDateInput(Date.now()))
+
+const dateDiffState = computed<{ diff: CalendarDiff | null; error: StructuredError | null }>(() => {
+  const start = parseLocalDate(diffStartInput.value)
+  const end = parseLocalDate(diffEndInput.value)
+  if (start === null || end === null) {
+    return { diff: null, error: toolError('TT_INVALID_INPUT', '请填写完整的开始与结束日期') }
+  }
+  return { diff: diffCalendar(start, end), error: null }
+})
+
+const dateDiffSummary = computed(() => {
+  const diff = dateDiffState.value.diff
+  if (diff === null) return ''
+  const prefix = diff.negative ? '−' : ''
+  return `${prefix}${diff.years} 年 ${diff.months} 个月 ${diff.days} 天`
+})
+
+const dateDiffRows = computed<{ key: string; label: string; value: string }[]>(() => {
+  const diff = dateDiffState.value.diff
+  if (diff === null) return []
+  return [{ key: 'date-diff-total-days', label: '总天数', value: `${diff.totalDays} 天` }]
+})
+
+/* ---------- Tab6 倒计时 ---------- */
+
+const countdownTargetInput = ref(toDateTimeLocalInput(floorToMinute(Date.now()) + 3_600_000))
+
+const countdownState = computed<{ countdown: Countdown | null; error: StructuredError | null }>(
+  () => {
+    const target = parseLocalDateTime(countdownTargetInput.value)
+    if (target === null) {
+      return { countdown: null, error: toolError('TT_INVALID_INPUT', '请填写完整的目标时间') }
+    }
+    return { countdown: countdownTo(target, nowTick.value), error: null }
+  }
+)
+
+const countdownSummary = computed(() => {
+  const countdown = countdownState.value.countdown
+  if (countdown === null) return ''
+  const { days, hours, minutes, seconds } = countdown.parts
+  return `${days} 天 ${hours} 小时 ${minutes} 分钟 ${seconds} 秒`
+})
+
+const countdownExpired = computed(() => countdownState.value.countdown?.expired === true)
+
+function setCountdownPreset(offsetMs: number): void {
+  countdownTargetInput.value = toDateTimeLocalInput(floorToMinute(Date.now()) + offsetMs)
 }
 
 /* ---------- Tab4 Cron 解析 ---------- */
@@ -292,6 +350,12 @@ onUnmounted(() => {
       </NTabPane>
       <NTabPane name="duration">
         <template #tab>时长</template>
+      </NTabPane>
+      <NTabPane name="date-diff">
+        <template #tab>日期差</template>
+      </NTabPane>
+      <NTabPane name="countdown">
+        <template #tab>倒计时</template>
       </NTabPane>
       <NTabPane name="cron">
         <template #tab>Cron</template>
@@ -486,9 +550,94 @@ onUnmounted(() => {
         </div>
       </template>
 
+      <NText depth="3" class="text-xs"> 结束时间早于开始时间时按绝对差展示并加「−」。 </NText>
+    </div>
+
+    <!-- 日期差 -->
+    <div v-if="activeTab === 'date-diff'" class="flex max-w-2xl flex-col gap-3">
+      <div class="flex flex-wrap items-end gap-3">
+        <div class="flex flex-col gap-1">
+          <NText depth="2" class="text-sm">开始日期</NText>
+          <input
+            v-model="diffStartInput"
+            type="date"
+            aria-label="开始日期"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1.5 text-sm"
+          />
+        </div>
+        <div class="flex flex-col gap-1">
+          <NText depth="2" class="text-sm">结束日期</NText>
+          <input
+            v-model="diffEndInput"
+            type="date"
+            aria-label="结束日期"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1.5 text-sm"
+          />
+        </div>
+      </div>
+
+      <div
+        v-if="dateDiffState.error !== null"
+        role="alert"
+        class="text-sm text-[var(--lumin-color-error, #d03050)]"
+      >
+        {{ dateDiffState.error.message }}（{{ dateDiffState.error.code }}）
+      </div>
+      <template v-else-if="dateDiffState.diff !== null">
+        <NText class="text-lg font-semibold">{{ dateDiffSummary }}</NText>
+        <div class="flex flex-col gap-1">
+          <div
+            v-for="row in dateDiffRows"
+            :key="row.key"
+            class="flex items-center gap-3 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-2"
+          >
+            <NText depth="2" class="w-20 shrink-0 text-xs">{{ row.label }}</NText>
+            <NText class="flex-1 font-mono text-sm">{{ row.value }}</NText>
+            <NButton size="tiny" quaternary @click="copyText(row.value, row.key)">
+              <Copy class="mr-1 h-3 w-3" />{{ copiedLabel === row.key ? '已复制' : '复制' }}
+            </NButton>
+          </div>
+        </div>
+      </template>
+
       <NText depth="3" class="text-xs">
-        结束时间早于开始时间时按绝对差展示并加「−」。
+        按本地日历日计算；月末按「加月截断」借位（如 1-31 → 3-01 为 1 个月 1 天）。
       </NText>
+    </div>
+
+    <!-- 倒计时 -->
+    <div v-if="activeTab === 'countdown'" class="flex max-w-2xl flex-col gap-3">
+      <div class="flex flex-wrap items-end gap-3">
+        <div class="flex flex-col gap-1">
+          <NText depth="2" class="text-sm">目标时间</NText>
+          <input
+            v-model="countdownTargetInput"
+            type="datetime-local"
+            step="1"
+            aria-label="倒计时目标时间"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1.5 text-sm"
+          />
+        </div>
+        <NButton size="small" quaternary @click="setCountdownPreset(3_600_000)">1 小时后</NButton>
+        <NButton size="small" quaternary @click="setCountdownPreset(86_400_000)">1 天后</NButton>
+        <NButton size="small" quaternary @click="setCountdownPreset(604_800_000)">7 天后</NButton>
+      </div>
+
+      <div
+        v-if="countdownState.error !== null"
+        role="alert"
+        class="text-sm text-[var(--lumin-color-error, #d03050)]"
+      >
+        {{ countdownState.error.message }}（{{ countdownState.error.code }}）
+      </div>
+      <template v-else-if="countdownState.countdown !== null">
+        <NText depth="2" class="text-sm">
+          {{ countdownExpired ? '目标时间已过，已过时长：' : '距离目标还有：' }}
+        </NText>
+        <NText class="text-2xl font-semibold tabular-nums">{{ countdownSummary }}</NText>
+      </template>
+
+      <NText depth="3" class="text-xs">每秒自动刷新；目标时间早于当前时间时显示已过时长。</NText>
     </div>
 
     <!-- Cron 解析 -->

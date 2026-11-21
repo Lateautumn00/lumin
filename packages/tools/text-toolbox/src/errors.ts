@@ -15,7 +15,10 @@ export const TEXT_TOOLBOX_ERROR_CODES = [
   'TT_TEXT_TOO_LARGE',
   'TT_BASE64_INVALID',
   'TT_URL_INVALID',
-  'TT_REGEX_INVALID'
+  'TT_REGEX_INVALID',
+  'TT_HEX_INVALID',
+  'TT_UNICODE_INVALID',
+  'TT_REPLACE_INVALID'
 ] as const
 
 export type TextToolboxErrorCode = (typeof TEXT_TOOLBOX_ERROR_CODES)[number]
@@ -26,7 +29,10 @@ const MESSAGES: Record<TextToolboxErrorCode, string> = {
   TT_TEXT_TOO_LARGE: '文本超过 5MB 上限，请分段处理',
   TT_BASE64_INVALID: '不是有效的 Base64 文本',
   TT_URL_INVALID: '不是有效的 URL 编码文本',
-  TT_REGEX_INVALID: '正则表达式不正确'
+  TT_REGEX_INVALID: '正则表达式不正确',
+  TT_HEX_INVALID: '不是有效的十六进制文本',
+  TT_UNICODE_INVALID: '不是有效的 Unicode 转义文本',
+  TT_REPLACE_INVALID: '查找内容不能为空'
 }
 
 /** 纯函数统一结果：成功带值，失败带结构化错误（不含 throw） */

@@ -1,18 +1,45 @@
 <script setup lang="ts">
-// 文本工具箱主视图（M8）
-// 作者：cuilanchao · 修改时间：2026-11-18
-// 纯 renderer 三 Tab（JSON / 编解码 / 正则），零 IPC；大文本先渲染 busy 再分帧计算（R4 加载态）
+// 文本工具箱主视图（M8，M36 增 Hex/Unicode 与文本处理）
+// 作者：cuilanchao · 修改时间：2026-11-21
+// 纯 renderer 四 Tab（JSON / 编解码 / 正则 / 文本处理），零 IPC；大文本先渲染 busy 再分帧计算（R4 加载态）
 import { computed, ref, watch } from 'vue'
 import { NButton, NCheckbox, NInput, NTabPane, NTabs, NTag, NText } from 'naive-ui'
 import { Copy } from '@lucide/vue'
 import type { StructuredError } from '@lumin/shared'
-import { errorMessage } from '../errors'
+import { errorMessage, type TextResult } from '../errors'
 import { formatJson, minifyJson, validateJson, type JsonResult } from '../json'
-import { decodeBase64, decodeUrl, encodeBase64, encodeUrl } from '../encoding'
+import {
+  decodeBase64,
+  decodeHex,
+  decodeUnicode,
+  decodeUrl,
+  encodeBase64,
+  encodeHex,
+  encodeUnicode,
+  encodeUrl
+} from '../encoding'
 import { collectMatches, replacePreview, type RegexMatchInfo } from '../regex'
+import { applyLineOps, replaceText, type CaseMode, type SortMode } from '../text-ops'
+import { countText } from '../stats'
 
 /** 超过该字节数先渲染「处理中」再分帧计算，避免输入后界面卡住无反馈 */
 const HEAVY_BYTES = 200 * 1024
+
+type CodecMode = 'base64' | 'url' | 'hex' | 'unicode'
+
+const CODEC_ENCODERS: Record<CodecMode, (text: string) => TextResult<string>> = {
+  base64: encodeBase64,
+  url: encodeUrl,
+  hex: encodeHex,
+  unicode: encodeUnicode
+}
+
+const CODEC_DECODERS: Record<CodecMode, (text: string) => TextResult<string>> = {
+  base64: decodeBase64,
+  url: decodeUrl,
+  hex: decodeHex,
+  unicode: decodeUnicode
+}
 
 const activeTab = ref('json')
 const busy = ref(false)
@@ -27,7 +54,7 @@ const jsonOutput = ref('')
 const jsonIndent = ref<2 | 4>(2)
 
 // —— 编解码 Tab ——
-const codecMode = ref<'base64' | 'url'>('base64')
+const codecMode = ref<CodecMode>('base64')
 const codecInput = ref('')
 const codecOutput = ref('')
 
@@ -41,6 +68,19 @@ const regexTotal = ref(0)
 const regexTruncated = ref(false)
 const regexReplaceResult = ref('')
 const regexReplaceCount = ref(0)
+
+// —— 文本处理 Tab ——
+const textOpsInput = ref('')
+const textOpsOutput = ref('')
+const textOpsProcessed = ref(false)
+const replaceFind = ref('')
+const replaceWith = ref('')
+const replaceRegex = ref(false)
+const replaceCaseSensitive = ref(true)
+const lineRemoveEmpty = ref(true)
+const lineDedupe = ref(true)
+const lineSort = ref<SortMode>('asc')
+const lineCase = ref<CaseMode>('none')
 
 /** 当前勾选的 flags（按固定顺序拼接，保证可预期） */
 const flagsString = computed(() => {
@@ -165,13 +205,9 @@ function runCodec(kind: 'encode' | 'decode'): void {
   runMaybeHeavy(codecInput.value, () => {
     const input = codecInput.value
     const result =
-      codecMode.value === 'base64'
-        ? kind === 'encode'
-          ? encodeBase64(input)
-          : decodeBase64(input)
-        : kind === 'encode'
-          ? encodeUrl(input)
-          : decodeUrl(input)
+      kind === 'encode'
+        ? CODEC_ENCODERS[codecMode.value](input)
+        : CODEC_DECODERS[codecMode.value](input)
     if (!result.ok) {
       codecOutput.value = ''
       showError(result.error)
@@ -193,6 +229,97 @@ function fillCodecSample(): void {
   clearFeedback()
   codecInput.value = '你好 Lumin · text-toolbox'
   codecOutput.value = ''
+}
+
+/* ---------- 文本处理 Tab ---------- */
+
+/** 统计对象：已处理则统计输出，否则统计输入 */
+const textOpsStats = computed(() =>
+  countText(textOpsProcessed.value ? textOpsOutput.value : textOpsInput.value)
+)
+
+const textOpsStatsRows = computed<{ label: string; value: number }[]>(() => {
+  const stats = textOpsStats.value
+  return [
+    { label: '字符', value: stats.chars },
+    { label: '不含空白', value: stats.charsNoSpaces },
+    { label: '汉字', value: stats.chinese },
+    { label: '字母', value: stats.letters },
+    { label: '数字', value: stats.digits },
+    { label: '词', value: stats.words },
+    { label: '行', value: stats.lines },
+    { label: '非空行', value: stats.nonEmptyLines },
+    { label: 'UTF-8 字节', value: stats.bytes }
+  ]
+})
+
+// 用户改动输入后，输出视为过期，统计回落到输入
+watch(textOpsInput, () => {
+  textOpsProcessed.value = false
+})
+
+function runReplace(): void {
+  clearFeedback()
+  if (textOpsInput.value === '') {
+    notice.value = '请先输入要处理的文本'
+    return
+  }
+  runMaybeHeavy(textOpsInput.value, () => {
+    const result = replaceText(textOpsInput.value, replaceFind.value, replaceWith.value, {
+      regex: replaceRegex.value,
+      caseSensitive: replaceCaseSensitive.value
+    })
+    if (!result.ok) {
+      textOpsOutput.value = ''
+      textOpsProcessed.value = true
+      showError(result.error)
+      return
+    }
+    textOpsOutput.value = result.value
+    textOpsProcessed.value = true
+    notice.value = `替换完成 · ${byteLength(result.value)} 字节`
+  })
+}
+
+function runLineOps(): void {
+  clearFeedback()
+  if (textOpsInput.value === '') {
+    notice.value = '请先输入要处理的文本'
+    return
+  }
+  runMaybeHeavy(textOpsInput.value, () => {
+    const result = applyLineOps(textOpsInput.value, {
+      removeEmpty: lineRemoveEmpty.value,
+      dedupe: lineDedupe.value,
+      sort: lineSort.value,
+      caseMode: lineCase.value
+    })
+    textOpsOutput.value = result
+    textOpsProcessed.value = true
+    notice.value = `处理完成 · ${byteLength(result)} 字节`
+  })
+}
+
+function resetTextOps(): void {
+  clearFeedback()
+  textOpsInput.value = ''
+  textOpsOutput.value = ''
+  textOpsProcessed.value = false
+}
+
+function fillTextOpsSample(): void {
+  clearFeedback()
+  textOpsInput.value = '  第三行  \n\n第二行\n第一行\n第二行\n'
+  textOpsOutput.value = ''
+  textOpsProcessed.value = false
+  replaceFind.value = ''
+  replaceWith.value = ''
+  replaceRegex.value = false
+  replaceCaseSensitive.value = true
+  lineRemoveEmpty.value = true
+  lineDedupe.value = true
+  lineSort.value = 'asc'
+  lineCase.value = 'none'
 }
 
 function runRegex(kind: 'match' | 'replace'): void {
@@ -259,7 +386,8 @@ function messageOf(code: string): string {
     <div>
       <h1 class="text-base font-semibold">文本工具箱</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        JSON 格式化压缩、Base64/URL 编解码、正则测试与替换预览（本地处理，不联网）
+        JSON 格式化压缩、Base64/URL/Hex/Unicode
+        编解码、正则测试、批量文本处理与字数统计（本地处理，不联网）
       </p>
     </div>
 
@@ -274,6 +402,9 @@ function messageOf(code: string): string {
       </NTabPane>
       <NTabPane name="regex">
         <template #tab>正则</template>
+      </NTabPane>
+      <NTabPane name="text-ops">
+        <template #tab>文本处理</template>
       </NTabPane>
     </NTabs>
 
@@ -336,6 +467,8 @@ function messageOf(code: string): string {
         >
           <option value="base64">Base64（UTF-8）</option>
           <option value="url">URL Component</option>
+          <option value="hex">Hex（UTF-8 字节）</option>
+          <option value="unicode">Unicode（\uXXXX）</option>
         </select>
       </div>
       <div class="grid gap-3 md:grid-cols-2">
@@ -461,6 +594,94 @@ function messageOf(code: string): string {
         class="text-sm"
       >
         输入模式与测试文本后点击「测试匹配」；替换支持 $1–$9 与 $&
+      </NText>
+    </div>
+
+    <!-- 文本处理：批量替换 / 行去重 / 排序 / 清空行 / 大小写 + 字数统计 -->
+    <div v-if="activeTab === 'text-ops'" class="flex flex-col gap-3">
+      <div class="flex flex-wrap items-center gap-2 text-sm">
+        <NText depth="2">查找</NText>
+        <NInput v-model:value="replaceFind" placeholder="查找内容" class="min-w-40 flex-1" />
+        <NText depth="2">替换为</NText>
+        <NInput
+          v-model:value="replaceWith"
+          placeholder="替换内容（正则支持 $1）"
+          class="min-w-40 flex-1"
+        />
+        <NCheckbox v-model:checked="replaceRegex">正则</NCheckbox>
+        <NCheckbox v-model:checked="replaceCaseSensitive">区分大小写</NCheckbox>
+        <NButton :disabled="busy" @click="runReplace">替换</NButton>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2 text-sm">
+        <NText depth="2">行处理</NText>
+        <NCheckbox v-model:checked="lineRemoveEmpty">清空空白行</NCheckbox>
+        <NCheckbox v-model:checked="lineDedupe">去重</NCheckbox>
+        <select
+          v-model="lineSort"
+          aria-label="行排序"
+          class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+        >
+          <option value="none">不排序</option>
+          <option value="asc">升序</option>
+          <option value="desc">降序</option>
+        </select>
+        <select
+          v-model="lineCase"
+          aria-label="大小写转换"
+          class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+        >
+          <option value="none">不改大小写</option>
+          <option value="upper">全部大写</option>
+          <option value="lower">全部小写</option>
+          <option value="title">单词首字母大写</option>
+        </select>
+        <NButton type="primary" :disabled="busy" @click="runLineOps">处理行</NButton>
+        <NButton size="tiny" quaternary @click="fillTextOpsSample">填入示例</NButton>
+        <NButton size="tiny" quaternary @click="resetTextOps">清空</NButton>
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-2">
+        <div class="flex flex-col gap-2">
+          <NText depth="2" class="text-sm">输入</NText>
+          <NInput
+            v-model:value="textOpsInput"
+            type="textarea"
+            placeholder="粘贴要处理的文本（每行一条）"
+            :autosize="{ minRows: 8, maxRows: 16 }"
+          />
+        </div>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <NText depth="2" class="text-sm">输出</NText>
+            <NButton size="tiny" quaternary @click="copyText(textOpsOutput, 'text-ops')">
+              <Copy class="mr-1 h-3 w-3" />{{ copiedLabel === 'text-ops' ? '已复制' : '复制' }}
+            </NButton>
+          </div>
+          <NInput
+            :value="textOpsOutput"
+            type="textarea"
+            readonly
+            placeholder="处理结果"
+            :autosize="{ minRows: 8, maxRows: 16 }"
+          />
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <div
+          v-for="row in textOpsStatsRows"
+          :key="row.label"
+          class="flex min-w-24 flex-col gap-0.5 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
+        >
+          <NText depth="3" class="text-xs">{{ row.label }}</NText>
+          <NText class="text-sm font-semibold tabular-nums">{{ row.value }}</NText>
+        </div>
+      </div>
+
+      <NText depth="3" class="text-xs">
+        统计对象：{{ textOpsProcessed ? '处理结果' : '输入文本' }}；行处理顺序为去空行 → 大小写 →
+        去重 → 排序。
       </NText>
     </div>
 

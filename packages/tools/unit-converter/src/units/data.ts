@@ -13,6 +13,13 @@ export interface TempUnit {
   readonly offset: number
 }
 
+/** 像素/分辨率单位：factor 为相对英寸的倍数；px 的实际换算由 DPI 决定 */
+export interface ResolutionUnit {
+  readonly id: 'px' | 'in' | 'cm' | 'mm'
+  readonly name: string
+  readonly factor: number
+}
+
 export type CategoryId =
   | 'length'
   | 'weight'
@@ -24,12 +31,15 @@ export type CategoryId =
   | 'data'
   | 'pressure'
   | 'power'
+  | 'flow'
+  | 'angle'
+  | 'resolution'
 
 /** 至少两个单位（spec §2：units[0] 基准默认源单位，units[1] 默认目标单位） */
 type UnitPair<U> = readonly [U, U, ...U[]]
 
 export interface LinearCategory {
-  readonly id: Exclude<CategoryId, 'temperature'>
+  readonly id: Exclude<CategoryId, 'temperature' | 'resolution'>
   readonly name: string
   readonly base: string
   readonly units: UnitPair<LinearUnit>
@@ -42,7 +52,16 @@ export interface TempCategory {
   readonly units: UnitPair<TempUnit>
 }
 
-export type Category = LinearCategory | TempCategory
+/** 像素 ↔ 物理尺寸：px 与物理单位互转需要 DPI，不能套用线性 factor */
+export interface ResolutionCategory {
+  readonly id: 'resolution'
+  readonly name: string
+  readonly base: 'px'
+  readonly units: UnitPair<ResolutionUnit>
+  readonly dpiDefault: number
+}
+
+export type Category = LinearCategory | TempCategory | ResolutionCategory
 
 export const CATEGORIES: readonly [Category, ...Category[]] = [
   {
@@ -173,6 +192,44 @@ export const CATEGORIES: readonly [Category, ...Category[]] = [
       { id: 'mW', name: '毫瓦 (mW)', factor: 0.001 },
       { id: 'hp', name: '英制马力 (hp)', factor: 745.6998715822702 },
       { id: 'PS', name: '公制马力 (PS)', factor: 735.49875 }
+    ]
+  },
+  {
+    id: 'flow',
+    name: '流量',
+    base: 'L/min',
+    units: [
+      { id: 'lpm', name: '升/分钟 (L/min)', factor: 1 },
+      { id: 'lps', name: '升/秒 (L/s)', factor: 60 },
+      { id: 'm3h', name: '立方米/时 (m³/h)', factor: 1000 / 60 },
+      { id: 'm3s', name: '立方米/秒 (m³/s)', factor: 60000 },
+      { id: 'gpm', name: '美制加仑/分钟 (GPM)', factor: 3.785411784 },
+      { id: 'cfm', name: '立方英尺/分钟 (CFM)', factor: 28.316846592 }
+    ]
+  },
+  {
+    id: 'angle',
+    name: '角度',
+    base: 'deg',
+    units: [
+      { id: 'deg', name: '度 (°)', factor: 1 },
+      { id: 'rad', name: '弧度 (rad)', factor: 180 / Math.PI },
+      { id: 'grad', name: '百分度 (grad)', factor: 0.9 },
+      { id: 'turn', name: '转 (turn)', factor: 360 },
+      { id: 'arcmin', name: '角分 (′)', factor: 1 / 60 },
+      { id: 'arcsec', name: '角秒 (″)', factor: 1 / 3600 }
+    ]
+  },
+  {
+    id: 'resolution',
+    name: '像素/分辨率',
+    base: 'px',
+    dpiDefault: 96,
+    units: [
+      { id: 'px', name: '像素 (px)', factor: 1 },
+      { id: 'in', name: '英寸 (in)', factor: 1 },
+      { id: 'cm', name: '厘米 (cm)', factor: 1 / 2.54 },
+      { id: 'mm', name: '毫米 (mm)', factor: 1 / 25.4 }
     ]
   }
 ]

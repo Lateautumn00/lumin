@@ -34,11 +34,12 @@ const ALLOWED_SYMBOLS: ReadonlySet<string> = new Set([
   'round',
   'floor',
   'ceil',
+  'factorial',
   'pi',
   'e'
 ])
 
-/** 允许的运算符（mathjs OperatorNode.fn 名） */
+/** 允许的运算符（mathjs OperatorNode.fn 名）；factorial 对应后缀 `!` 语法 */
 const ALLOWED_OPS: ReadonlySet<string> = new Set([
   'add',
   'subtract',
@@ -46,6 +47,7 @@ const ALLOWED_OPS: ReadonlySet<string> = new Set([
   'divide',
   'pow',
   'mod',
+  'factorial',
   'unaryMinus',
   'unaryPlus'
 ])
@@ -91,6 +93,26 @@ function identity(x: number): number {
   return x
 }
 
+/** 阶乘仅接受非负整数（mathjs 默认对非整数走伽马函数，此处收敛为普通计算器语义） */
+function factorial(x: number): number {
+  if (!Number.isInteger(x) || x < 0) throw new Error('阶乘仅支持非负整数')
+  let value = 1
+  for (let index = 2; index <= x; index += 1) value *= index
+  return value
+}
+
+/**
+ * 把后缀 `!`（OperatorNode.fn='factorial'）改写为函数调用节点
+ * @description mathjs 的 OperatorNode 求值不读 scope，改写后两种写法统一走本地阶乘实现
+ */
+function normalizeFactorial(node: MathNode): MathNode {
+  return node.transform<MathNode>((current) =>
+    current instanceof OperatorNode && current.fn === 'factorial'
+      ? new FunctionNode(new SymbolNode('factorial'), current.args)
+      : current
+  )
+}
+
 /** 按角度模式构造求值 scope：三角函数与反三角函数换算角度，ln/log 分别为自然对数/常用对数 */
 function createScope(mode: AngleMode): Record<string, unknown> {
   const toRad = mode === 'deg' ? (x: number): number => (x * Math.PI) / 180 : identity
@@ -103,7 +125,8 @@ function createScope(mode: AngleMode): Record<string, unknown> {
     acos: (x: number): number => fromRad(Math.acos(x)),
     atan: (x: number): number => fromRad(Math.atan(x)),
     ln: (x: number): number => Math.log(x),
-    log: (x: number): number => Math.log10(x)
+    log: (x: number): number => Math.log10(x),
+    factorial
   }
 }
 
@@ -122,6 +145,9 @@ function classifyEvalError(err: unknown): StructuredError {
   }
   if (/Undefined symbol/i.test(detail)) {
     return { code: 'UNKNOWN_SYMBOL', message: '表达式含未知符号', detail }
+  }
+  if (detail.includes('阶乘仅支持非负整数')) {
+    return { code: 'EVAL_FAILED', message: '阶乘仅支持非负整数', detail }
   }
   return { code: 'EVAL_FAILED', message: '计算失败', detail }
 }
@@ -148,7 +174,7 @@ export function evaluate(expr: string, mode: AngleMode): EvalResult {
   }
 
   try {
-    const value: unknown = node.compile().evaluate(createScope(mode))
+    const value: unknown = normalizeFactorial(node).compile().evaluate(createScope(mode))
     if (typeof value !== 'number') return failure('NON_NUMERIC', '结果不是数值')
     if (!Number.isFinite(value)) return failure('NON_FINITE', '结果无效（除零或溢出）')
     return { ok: true, value }
