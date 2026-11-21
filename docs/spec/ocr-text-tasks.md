@@ -9,6 +9,7 @@
 ## [x] T1 OCR 引擎上提（`packages/ocr-kit`）
 
 **新建**
+
 - `packages/ocr-kit/package.json`（`@lumin/ocr-kit`；依赖 node-kit/shared/canvas/onnxruntime-node；devDep pdfjs-dist）
 - `packages/ocr-kit/tsconfig.json`（extends `../../tsconfig.base.json`）
 - `packages/ocr-kit/src/errors.ts`：`OCR_KIT_ERROR_CODES`、`ocrToolError(code, detail?)`、`isOcrKitError`
@@ -16,10 +17,12 @@
 - `packages/ocr-kit/src/index.ts`：统一 re-export
 
 **搬移规则**
+
 - 逐字搬移 exam-split 的 `ocr-preproc/ocr-post/ocr-model/ocr-assets`；仅改 import 路径与错误来源（`./errors` → kit `errors`）
 - `render.ts`：`RenderOptions` 新增可选 `scale`；PDF 渲染用 `options.scale ?? DEFAULT_RENDER_SCALE`（`DEFAULT_RENDER_SCALE = 2`）；不再依赖 `preview.ts`
 
 **接线**
+
 - `packages/tools/exam-split/package.json`：加 `@lumin/ocr-kit: workspace:*`
 - `apps/desktop/electron.vite.config.ts`：加 `@lumin/ocr-kit` 别名
 - `.dependency-cruiser.cjs`：`tools-only-allowed-deps` 白名单加 `ocr-kit`
@@ -29,16 +32,19 @@
 ## [x] T2 exam-split 薄壳化
 
 **修改**
+
 - `src/ocr-preproc.ts`、`src/ocr-post.ts`、`src/ocr-model.ts`、`src/ocr-assets.ts` → `export * from '@lumin/ocr-kit'`
 - `src/ocr-render.ts` → re-export kit + 本地 `renderOcrInput` 包装注入 `scale: PDF_RENDER_SCALE`；保留 `export { PDF_RENDER_SCALE } from './preview'`、`export { ensureCjkFont } from '@lumin/node-kit/pdf'`
 
 **验证（不改任何 exam-split 测试文件）**
+
 - `pnpm install`
 - `pnpm exec vitest run --project @lumin/tool-exam-split`
 
 ## [x] T3 新工具骨架
 
 **新建**
+
 - `packages/tools/ocr-text/package.json`（exports `manifest`/`node`/`renderer/*`；依赖 ocr-kit/node-kit/plugin-api/shared/ui/vue/naive-ui/zod/@lucide/vue）
 - `packages/tools/ocr-text/tsconfig.json`
 - `src/manifest.ts`：`defineManifest({ id:'ocr-text', name:'图片文字识别', description:'图片 OCR：提取文字、可编辑预览、复制与导出 TXT', icon:'scan-text', order:90, version:'0.1.0' })`
@@ -91,6 +97,7 @@
 ## [x] T9 门禁与提交
 
 顺序执行：
+
 1. `pnpm install`
 2. `pnpm --filter @lumin/desktop typecheck`
 3. `pnpm exec vitest run --project @lumin/tool-exam-split`
@@ -101,6 +108,7 @@
 8. `pnpm gate`
 
 全绿后 3 个中文提交（不推送）：
+
 - `feat: 新增图片文字识别工具并上提 OCR 引擎共享包`
 - `test: ocr-text 单测与 e2e 冒烟`
 - `docs: 登记 M20 ocr-text 规格、冒烟与规划`
@@ -113,3 +121,17 @@
 - exam-split 全量测试零回归
 - 门禁全绿；无 `any`、无 console、无新增第三方依赖
 - 仅新增/修改本清单列出的文件
+
+---
+
+## M49 附加任务（双模式合并，2026-11-21）
+
+> 主清单：`docs/spec/m49-pdf-ocr-consolidate-tasks.md` T3–T6；本文件登记 ocr-text 侧变更。
+
+- [x] 包迁移：删除旧单张实现，`batch-ocr` 目录内容整体迁入 `packages/tools/ocr-text`（`@lumin/tool-ocr-text`）
+- [x] 身份恢复：manifest `id: 'ocr-text'` / `图片文字识别` / icon `scan-text` / order 90；通道前缀 `ocr-text:*`；目录记忆键 `tools.ocr-text.outputDir`
+- [x] 错误码归一：`BO_*` → `OCR_*`（含 `BO_OCR_FAILED → OCR_FAILED`、`BO_TOO_MANY_FILES → OCR_TOO_MANY_FILES`），导出 `OCR_TEXT_ERROR_CODES` / `OcrTextErrorCode`
+- [x] worker 重命名：`batch.worker.ts` → `ocr.worker.ts`，`handleBatchOcrTask` → `handleOcrTextTask`
+- [x] UI 双模式：`mode: 'single' | 'batch'`（默认单张、运行中禁切换、切换清空）；单张选图自动识别；批量列表 + 逐项状态 + 失败不中断
+- [x] 测试同步：`ocr.worker.test.ts`、`schema/manifest/errors/recognize/node/client` 断言更新；删除 `batch-ocr-smoke.spec.ts`，重写 `ocr-text-smoke.spec.ts` 为双模式 4 用例
+- [x] 文档同步：`docs/spec/ocr-text.md` 重写为双模式；`docs/spec/batch-ocr.md`、`docs/smoke/batch-ocr.md` 删除；`docs/smoke/ocr-text.md` 合并重写
