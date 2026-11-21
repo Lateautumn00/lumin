@@ -7,13 +7,21 @@
 import type { StructuredError } from '@lumin/shared'
 
 /** misc-toolbox 错误码全集（spec §1） */
-export const MISC_TOOLBOX_ERROR_CODES = ['MT_CIDR_INVALID'] as const
+export const MISC_TOOLBOX_ERROR_CODES = [
+  'MT_CIDR_INVALID',
+  'MT_CAPTURE_FAILED',
+  'MT_RULER_INVALID',
+  'MT_CLIPBOARD_FAILED'
+] as const
 
 export type MiscToolboxErrorCode = (typeof MISC_TOOLBOX_ERROR_CODES)[number]
 
 /** 错误码 → 中文文案（renderer 展示；spec §1 同源） */
 const MESSAGES: Record<MiscToolboxErrorCode, string> = {
-  MT_CIDR_INVALID: '子网 / IP 输入无效'
+  MT_CIDR_INVALID: '子网 / IP 输入无效',
+  MT_CAPTURE_FAILED: '屏幕截图失败',
+  MT_RULER_INVALID: '测量参数无效',
+  MT_CLIPBOARD_FAILED: '复制到剪贴板失败'
 }
 
 /**

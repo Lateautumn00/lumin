@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * 实用工具（misc-toolbox）：子网 / IP 计算器 + 秒表 / 倒计时 / 番茄钟。
- * 三态：空态（IP 引导 + 预设、秒表 00:00.00）/ 加载态（全同步纯函数与本地计时，豁免）/ 报错态（MT_CIDR_INVALID + 中文文案）。
+ * 实用工具（misc-toolbox）：子网 / IP 计算器 + 屏幕标尺 + 秒表 / 倒计时 / 番茄钟。
+ * 三态：空态（IP 引导 + 预设、标尺 DPI 引导、秒表 00:00.00）/ 加载态（截屏按钮 loading、计时豁免）/ 报错态（MT_* + 中文文案）。
  * 计时基于 performance.now 差值，setInterval 仅刷新显示；卸载时清理 interval / AudioContext / 标题标记。
  */
 import { computed, onUnmounted, ref, watch } from 'vue'
@@ -21,6 +21,7 @@ import {
 import { Flag, Pause, Play, RotateCcw, SkipForward } from '@lucide/vue'
 import type { StructuredError } from '@lumin/shared'
 
+import ScreenRulerPanel from './ScreenRulerPanel.vue'
 import { errorMessage } from '../errors'
 import { parseAndCompute, type SubnetInfo } from '../ip'
 import {
@@ -403,7 +404,7 @@ onUnmounted(() => {
     <div>
       <h1 class="text-base font-semibold">实用工具</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        子网 / IP 计算器与秒表、倒计时、番茄钟（全部本地运行，不联网）
+        子网 / IP 计算器、屏幕标尺与秒表、倒计时、番茄钟（全部本地运行，不联网）
       </p>
     </div>
 
@@ -411,6 +412,9 @@ onUnmounted(() => {
     <NTabs v-model:value="activeTab" type="line">
       <NTabPane name="ip">
         <template #tab>子网 / IP</template>
+      </NTabPane>
+      <NTabPane name="ruler">
+        <template #tab>屏幕标尺</template>
       </NTabPane>
       <NTabPane name="timer">
         <template #tab>计时器</template>
@@ -477,7 +481,12 @@ onUnmounted(() => {
       </NText>
     </div>
 
-    <!-- 页签二：计时器 -->
+    <!-- 页签二：屏幕标尺 -->
+    <div v-if="activeTab === 'ruler'">
+      <ScreenRulerPanel />
+    </div>
+
+    <!-- 页签三：计时器 -->
     <div v-if="activeTab === 'timer'" class="flex flex-col gap-3">
       <NRadioGroup :value="timerMode" @update:value="onModeChange">
         <NRadioButton value="stopwatch">秒表</NRadioButton>

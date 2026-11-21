@@ -1,47 +1,8 @@
 /**
- * @file 截图取色的坐标映射纯函数
+ * @file picker.ts 截图取色的坐标映射（复用 shared 公共实现）
  * @author cuilanchao
  * @date 2026-11-20
- * @description 把预览层内的点击位置换算为截图原始像素坐标；越界返回 null
+ * @description 公共逻辑已上提至 @lumin/shared/geometry（屏幕标尺同样复用），此处仅保留原入口。
  */
-
-/** 截图像素尺寸 */
-export interface PixelSize {
-  readonly width: number
-  readonly height: number
-}
-
-/** 预览图片在视口中的矩形（getBoundingClientRect 子集） */
-export interface DisplayRect {
-  readonly left: number
-  readonly top: number
-  readonly width: number
-  readonly height: number
-}
-
-/** 点击坐标（clientX/clientY） */
-export interface ClientPoint {
-  readonly x: number
-  readonly y: number
-}
-
-/**
- * 点击位置 → 截图原始像素坐标
- * @param point 客户端坐标
- * @param rect 预览图片矩形
- * @param size 截图原始像素尺寸
- * @returns 越界/无效矩形返回 null
- */
-export function mapPointToPixel(
-  point: ClientPoint,
-  rect: DisplayRect,
-  size: PixelSize
-): { x: number; y: number } | null {
-  if (rect.width <= 0 || rect.height <= 0 || size.width <= 0 || size.height <= 0) return null
-  const offsetX = point.x - rect.left
-  const offsetY = point.y - rect.top
-  if (offsetX < 0 || offsetY < 0 || offsetX >= rect.width || offsetY >= rect.height) return null
-  const x = Math.min(size.width - 1, Math.floor((offsetX / rect.width) * size.width))
-  const y = Math.min(size.height - 1, Math.floor((offsetY / rect.height) * size.height))
-  return { x, y }
-}
+export { mapPointToPixel } from '@lumin/shared'
+export type { ClientPoint, DisplayRect, PixelSize } from '@lumin/shared'

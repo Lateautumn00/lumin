@@ -1,5 +1,6 @@
 export * from './envelope'
 export * from './format'
+export * from './geometry'
 export * from './number'
 export * from './ranges'
 export * from './naming'
