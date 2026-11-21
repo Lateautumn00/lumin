@@ -57,6 +57,7 @@
 | Q44 | 文本工具箱扩展 | **在既有 `text-toolbox` 增「摩尔斯」页签（2026-11-21 用户选定，M44，不新建工具包）**：ITU 标准码表（A–Z、0–9、常用标点）编解码，字母单空格、单词「 / 」分隔，错误码 `TT_MORSE_INVALID`；**纯 renderer、零 IPC、零新增依赖**；Hex/Unicode 与批量文本处理、字数统计已于 M36 交付，本次仅补摩尔斯；详见 §4.44 |
 | Q45 | 开发工具扩展 | **在既有 `dev-toolbox` 增「JWT 解码」与「UUID 生成」两页签（2026-11-21 用户选定，M45，不新建工具包）**：JWT 仅 Base64URL 解码 header/payload 并解析 exp/iat 时效（**不做签名校验、不联网**），结构非法报 `DT_JWT_INVALID`；UUID 生成 RFC 4122 v4（批量 1–100）与时间戳 ID（`yyyyMMdd-HHmmss-xxxx`）；**纯 renderer、零 IPC、零新增依赖**；详见 §4.45 |
 | Q46 | 颜色工具箱扩展 | **在既有 `color-toolbox` 增「图片调色板」区块（2026-11-21 用户选定，M46，不新建工具包）**：本地选图（≤20MB）→ renderer canvas 下采样（最长边 ≤480px）读 RGBA → 量化聚合主色 Top 8 与占比，色块点击联动主色、可复制整组；非图片/超大/解码失败报 `CT_PALETTE_FAILED`；**纯 renderer、零 IPC、零新增依赖**（`createImageBitmap` + canvas 内置能力）；详见 §4.46 |
+| Q47 | 文本工具箱扩展 | **在既有 `text-toolbox` 增「CSV/JSON」页签（2026-11-21 用户选定，M47，不新建工具包）**：CSV → JSON（RFC 4180 引号/转义、逗号/制表符/分号/竖线、首行表头开关）与 JSON 对象数组 → CSV 双向，错误码 `TT_CSV_INVALID`（detail 带行号）；**纯 renderer、零 IPC、零新增依赖**；详见 §4.47 |
 | —   | 硬约束        | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -663,6 +664,15 @@ lumin/
 - **三态**：未选图为空态说明；解码期间按钮 loading 且不可重入；失败结构化提示保留换图入口
 - **验收**：palette 单测 10 例 + errors 增补；e2e 新增「选图→色板→色块联动」与「非图片 `CT_PALETTE_FAILED`」两用例；本包覆盖率 ≥80%；chunk <200KB gzip；R2 映射见 `docs/smoke/color-toolbox.md`
 
+### 4.47 文本工具箱 CSV ↔ JSON（M47，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：在既有 `text-toolbox` 增「CSV/JSON」页签（第 6 个），**纯 renderer、零 IPC、零新增依赖**，不新建工具包
+- **CSV → JSON**：RFC 4180 解析（引号包裹、`""` 转义、字段内换行、`\r\n`/`\r` 归一、BOM 去除、空行忽略）；首行表头开关决定输出对象数组或二维数组，值一律字符串；分隔符可选 `,` / `\t` / `;` / `|`
+- **JSON → CSV**：仅接受扁平对象数组；列名取所有 key 首次出现顺序，缺失字段与 `null` 输出空，数字/布尔转字面量；含分隔符/引号/换行的字段加引号并双写 `"`；行间 `\r\n`
+- **错误码**：列数不一致 / 引号未闭合 / 引号不在字段起始 / 表头重复 / 非对象数组 / 嵌套值 → `TT_CSV_INVALID`（detail 带行号或字段名）；JSON 语法错误透传 `TT_JSON_INVALID`；所有入口先做 5MB 校验（`TT_TEXT_TOO_LARGE`）
+- **三态**：输入/输出 placeholder + 「填入示例」空态；>200KB 复用分帧 busy；结构化错误 → 中文文案 + detail
+- **验收**：csv 单测 26 例；e2e 新增「CSV → JSON」与「JSON → CSV + 列数不一致报错」两用例；本包覆盖率 96.72 / 92.08 / 100 / 100；chunk **77,047 B raw / 16,663 B gzip**；R2 映射见 `docs/smoke/text-toolbox.md` §7
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -751,6 +761,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M44 v4.3**  | 文本工具箱摩尔斯（§4.44，2026-11-21）：`text-toolbox` 增「摩尔斯」页签 —— ITU 标准码表编解码（A–Z/0–9/常用标点）、字母单空格与单词「 / 」分隔、`TT_MORSE_INVALID`；纯 renderer、零 IPC、零新增依赖，不新建工具包（Hex/Unicode/批量处理/字数统计已于 M36 交付）                                                  | §4.44 验收；e2e 新增往返用例；R2 映射；chunk <200KB gzip；包覆盖率 ≥80%；gate 全绿       | 0.5 天    |
 | **M45 v4.4**  | 开发工具扩展（§4.45，2026-11-21）：`dev-toolbox` 增「JWT 解码」（Base64URL 解 header/payload + exp/iat 时效，不验签）与「UUID 生成」（RFC 4122 v4 批量 1–100 + 时间戳 ID）两页签；纯 renderer、零 IPC、零新增依赖                                                                                                                        | §4.45 验收；e2e 新增 2 用例；R2 映射；chunk <200KB gzip；包覆盖率 ≥80%；gate 全绿        | 0.5 天    |
 | **M46 v4.5**  | 颜色工具箱扩展（§4.46，2026-11-21）：`color-toolbox` 增「图片调色板」区块 —— 本地选图（≤20MB）→ canvas 下采样读 RGBA → 量化聚合 Top 8 主色与占比，色块联动主色、复制整组、`CT_PALETTE_FAILED`；纯 renderer、零 IPC、零新增依赖                                                                                                                    | §4.46 验收；e2e 新增 2 用例；R2 映射；chunk <200KB gzip；包覆盖率 ≥80%；gate 全绿        | 0.5 天    |
+| **M47 v4.6**  | 文本工具箱 CSV ↔ JSON（§4.47，2026-11-21）：`text-toolbox` 增「CSV/JSON」页签 —— RFC 4180 解析（引号/转义/字段内换行）与扁平对象数组序列化，四种分隔符、表头开关、`TT_CSV_INVALID`；纯 renderer、零 IPC、零新增依赖，不新建工具包                                                                                                          | §4.47 验收；e2e 新增 2 用例；R2 映射；chunk 16,663 B gzip；包覆盖率 ≥80%；gate 全绿      | 0.5 天    |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

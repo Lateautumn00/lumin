@@ -14,7 +14,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | Image rotate       | Batch rotate (90°/180°/270°) and horizontal/vertical flip, combinable; remembers output folder, never overwrites originals                                                |
 | Image crop         | Batch crop by aspect ratio (with 9-grid anchor) or percentage region; remembers output folder, never overwrites originals                                                 |
 | Batch renamer      | Six stacked rules in one directory, live preview, conflict detection, single-step undo                                                                                    |
-| Text toolbox       | JSON format/minify/validate, Base64/URL/Hex/Unicode encode-decode, regex test & replace preview, batch text processing & word count, Morse code |
+| Text toolbox       | JSON format/minify/validate, Base64/URL/Hex/Unicode encode-decode, regex test & replace preview, batch text processing & word count, Morse code, CSV ↔ JSON |
 | Markdown tool      | Markdown preview & HTML export, JSON→TypeScript type generation, YAML format/convert                                                                                       |
 | Color toolbox      | HEX/RGB/HSL conversion, full-screen eyedropper (outside the app window)/picker and color scales, image palette extraction (dominant colors & ratios), harmony palettes, WCAG contrast (AA/AAA) checks           |
 | Time toolbox       | Timestamp ↔ date conversion, 8 common time zones, duration math, Cron parsing with next 5 runs                                                                            |
