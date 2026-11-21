@@ -51,3 +51,14 @@
 | 字数统计    | `stats.test.ts`                                        | ✅ 中英数字混排 16 字符/5 汉字/5 字母/3 数字/4 词/2 行/26 字节；CRLF 空行；emoji 按码点 1 字符 4 字节                                                                            |
 | chunk（R5） | `pnpm build` 产物实测                                  | ✅ `text-toolbox-*.js` = 54,599 B raw / **11,890 B gzip**，远低于 200KB                                                                                                          |
 | R2 八类映射 | 纯 renderer、无文件 IO                                 | 1–4 **不适用**；超大文本 → `TT_TEXT_TOO_LARGE`（5MB）；5 取消：>200KB 分帧但同步可忽略；6 并发：无共享状态；7 磁盘满：无写入；8 断电恢复：无持久化（沿用 §2）                    |
+
+## 6. M44 增量验证（摩尔斯，2026-11-21）
+
+| 项            | 方式                                                      | 结果                                                                                                                                                                   |
+| ------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 摩尔斯纯函数  | `pnpm exec vitest run packages/tools/text-toolbox/src/morse.test.ts` | ✅ 12 tests（编码大小写/单词分隔/数字/空白归一/空文本/不支持字符 `TT_MORSE_INVALID`/超限；解码往返/单词容错/空文本/未知码/超限）                                          |
+| 质量门禁      | `pnpm gate`（lint → typecheck → test → audit:high → boundary） | ✅ 全绿：2412 passed / 1 skipped；audit 仅 2 moderate（无 high/critical）；boundary 788 modules 0 违规                                                                   |
+| 覆盖率（R1）  | `pnpm coverage`                                           | ✅ 全仓 93.44 / 85.69 / 91.68 / 95.32（语句/分支/函数/行）；text-toolbox 包阈值 ≥80% 通过                                                                                |
+| chunk（R5）   | `pnpm build` 产物实测                                     | ✅ `text-toolbox-*.js` = **62,617 B raw / 13,523 B gzip**（远低于 200KB gzip）；独占依赖 chunk 为 0                                                                     |
+| e2e（R3）     | `playwright test text-toolbox-smoke.spec.ts`              | ⚠️ 已新增「摩尔斯编码 → 交换 → 解码往返」用例；**本机执行被 Trae 文件系统沙箱硬阻断**（Electron 沙箱令牌对 `AppData\Roaming\@lumin` 仅 RX，启动报 `Lock file can not be created: 0x5`，`dangerouslyDisableSandbox` 亦无法绕过），待本机普通终端或 CI 运行验证 |
+| R2 八类映射   | 纯 renderer、无文件 IO                                    | 1–4 **不适用**；编码超限 → `TT_TEXT_TOO_LARGE`（5MB）；不支持字符/未知码 → `TT_MORSE_INVALID`；5 取消：同步计算无队列；6 并发：无共享状态；7 磁盘满：不落盘；8 断电恢复：无持久化 |
