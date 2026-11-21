@@ -2,7 +2,7 @@
  * @file dev-toolbox（开发工具）e2e 冒烟：真实 Electron + 真实 netstat/tasklist/静态服务器
  * @author cuilanchao
  * @date 2026-11-21
- * @description 覆盖 spec §6：五页签空态、CURL 转代码、JWT 解码与非法 token、UUID 批量生成、
+ * @description 覆盖 spec §6：四页签空态、CURL 转代码、JWT 解码与非法 token、
  *              端口查询与非法端口、静态服务器启停与真实 HTTP 访问、非法根目录错误态。
  *              注意：临时目录名必须 ASCII（非 ASCII 目录名会导致本机 Node fs 硬崩），文件名保留中文。
  *              本文件不执行破坏性操作（端口结束进程用例仅验证非法端口，不杀进程）。
@@ -98,7 +98,6 @@ test.describe('dev-toolbox（开发工具）冒烟', () => {
       await expect(tab(page, 'ports')).toContainText('端口占用')
       await expect(tab(page, 'curl')).toContainText('CURL 转代码')
       await expect(tab(page, 'jwt')).toContainText('JWT 解码')
-      await expect(tab(page, 'uuid')).toContainText('UUID 生成')
       await expect(tab(page, 'server')).toContainText('静态服务器')
 
       await expect(page.getByText(/留空点击「查询」列出全部监听端口/)).toBeVisible()
@@ -109,9 +108,6 @@ test.describe('dev-toolbox（开发工具）冒烟', () => {
 
       await tab(page, 'jwt').click()
       await expect(page.getByText(/粘贴 JWT 后自动解码 header 与 payload/)).toBeVisible()
-
-      await tab(page, 'uuid').click()
-      await expect(page.getByText(/设置数量后点击「生成」/)).toBeVisible()
 
       await tab(page, 'server').click()
       await expect(page.getByText(/选择根目录并点击「启动」/)).toBeVisible()
@@ -187,34 +183,6 @@ test.describe('dev-toolbox（开发工具）冒烟', () => {
       await page.getByPlaceholder(/粘贴 JWT/).fill('not-a-jwt')
       await expect(page.getByText(/DT_JWT_INVALID/)).toBeVisible({ timeout: 10_000 })
       await expect(page.getByRole('button', { name: '重试' })).toBeVisible()
-    } finally {
-      await app.close()
-    }
-  })
-
-  test('UUID 生成：批量 5 个符合 v4 形态；时间戳 ID 格式正确', async () => {
-    const { app, page } = await launch()
-    await ensureReady(page)
-    try {
-      await clickSidebarTool(page, '计算器')
-      await clickSidebarTool(page, '开发工具')
-      await tab(page, 'uuid').click()
-
-      const generateButtons = page.getByRole('button', { name: '生成', exact: true })
-      await generateButtons.first().click()
-
-      const output = page.locator('pre').first()
-      await expect(output).toBeVisible({ timeout: 10_000 })
-      const lines = ((await output.textContent()) ?? '').trim().split('\n')
-      expect(lines).toHaveLength(5)
-      for (const line of lines) {
-        expect(line).toMatch(
-          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
-        )
-      }
-
-      await generateButtons.nth(1).click()
-      await expect(page.getByText(/^\d{8}-\d{6}-[0-9a-z]{4}$/)).toBeVisible({ timeout: 10_000 })
     } finally {
       await app.close()
     }
