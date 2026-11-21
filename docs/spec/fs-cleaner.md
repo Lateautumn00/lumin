@@ -188,7 +188,7 @@ tempCleanResultSchema  = { files: {path,size,mtimeMs}[], matchedBytes: int>=0, s
 | 加载态 | 进度 + [取消] | 进度 + [取消] | 进度 + [取消] | 进度 + [取消] |
 | 报错态 | 错误码 → 中文 + [重试]/详情 | 同左 | 同左 | 同左 |
 
-四个页签共享错误/进度展示组件（`renderer/TaskState.vue` 内部复用同包 `@lumin/ui` 的 `TaskProgress.vue`）。
+四个页签共享错误/进度展示组件（`renderer/TaskFeedback.vue` 内部复用同包 `@lumin/ui` 的 `TaskProgress.vue`）。
 
 ---
 
