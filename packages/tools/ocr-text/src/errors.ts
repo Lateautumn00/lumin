@@ -1,7 +1,7 @@
 /**
  * @file ocr-text 工具错误码（UPPER_SNAKE；文案见 docs/spec/ocr-text.md §6）
  * @author cuilanchao
- * @date 2026-11-19
+ * @date 2026-11-20
  * @description renderer 与 main 共用；本模块只依赖 @lumin/shared，不得引入 node-kit。
  */
 import {
@@ -17,6 +17,7 @@ export const OCR_TEXT_ERROR_CODES = [
   'OCR_IMAGE_TOO_LARGE',
   'OCR_INPUT_INVALID',
   'OCR_NO_TEXT',
+  'OCR_TOO_MANY_FILES',
   'MODEL_MISSING',
   'OCR_FAILED',
   'OP_TIMEOUT',
@@ -33,9 +34,10 @@ const MESSAGES: Record<OcrTextErrorCode, string> = {
   OCR_IMAGE_TOO_LARGE: '图片超过 20MB，请压缩后重试',
   OCR_INPUT_INVALID: '图片无法读取，请换一张清晰的图片',
   OCR_NO_TEXT: '未识别到文字，请换更清晰的图片',
+  OCR_TOO_MANY_FILES: '单次最多 50 张图片',
   MODEL_MISSING: '识别模型缺失，请重新安装应用后重试',
   OCR_FAILED: '识别失败，请重试或查看详情',
-  OP_TIMEOUT: '处理超时（120 秒），已终止',
+  OP_TIMEOUT: '处理超时（10 分钟），已终止',
   OUTPUT_WRITE_FAILED: '无法写出 TXT，请检查目录权限与剩余空间',
   CANCELLED: '已取消'
 }

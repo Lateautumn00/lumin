@@ -1,5 +1,4 @@
 import type { RegisterMain } from '@lumin/plugin-api'
-import { registerMain as batchOcrRegisterMain } from '@lumin/tool-batch-ocr/node'
 import { registerMain as colorToolboxRegisterMain } from '@lumin/tool-color-toolbox/node'
 import { registerMain as devToolboxRegisterMain } from '@lumin/tool-dev-toolbox/node'
 import { registerMain as diskAnalyzerRegisterMain } from '@lumin/tool-disk-analyzer/node'
@@ -26,7 +25,6 @@ import { registerMain as videoDownloadRegisterMain } from '@lumin/tool-video-dow
 import { registerMain as zipToolRegisterMain } from '@lumin/tool-zip-tool/node'
 
 export const toolMains: Readonly<Record<string, RegisterMain>> = {
-  'batch-ocr': batchOcrRegisterMain,
   'color-toolbox': colorToolboxRegisterMain,
   'dev-toolbox': devToolboxRegisterMain,
   'disk-analyzer': diskAnalyzerRegisterMain,

@@ -2,23 +2,11 @@ import { existsSync } from 'node:fs'
 import { open, readFile, unlink, writeFile } from 'node:fs/promises'
 import { errnoCode } from '@lumin/shared'
 import { resolveConflictPath, tail } from '@lumin/node-kit'
-import { PDFDocument, degrees } from 'pdf-lib'
+import { PDFDocument } from 'pdf-lib'
 import { toolError } from './errors'
-import {
-  cropDesiredPath,
-  deleteDesiredPath,
-  mergeDesiredPath,
-  rotateDesiredPath,
-  splitDesiredPaths
-} from './naming'
+import { cropDesiredPath, splitDesiredPaths } from './naming'
 import { parsePages, parseSplitRanges } from './ranges'
-import type {
-  CropPayload,
-  DeletePayload,
-  MergePayload,
-  RotatePayload,
-  SplitPayload
-} from './schema'
+import type { CropPayload, SplitPayload } from './schema'
 
 /** 任务进度阶段（spec §4：load(0) → process(1) → write(2) → done(3)） */
 export type OpStage = 'load' | 'process' | 'write' | 'done'
@@ -140,82 +128,6 @@ export async function splitPdf(
   return { outputPaths }
 }
 
-/** 合并：按序复制全部页到首个输入所在目录（spec §3.2）；progress current/total = 已合并文件数 */
-export async function mergePdf(
-  inputPaths: readonly string[],
-  progress: EmitProgress,
-  nameTemplate?: string
-): Promise<OpResult> {
-  progress({ stage: 'load', current: 0, message: '读取 PDF…' })
-  const out = await PDFDocument.create()
-  const total = inputPaths.length
-  let merged = 0
-  for (const inputPath of inputPaths) {
-    const src = await loadSource(inputPath)
-    const copied = await out.copyPages(src, src.getPageIndices())
-    for (const page of copied) out.addPage(page)
-    merged += 1
-    progress({ stage: 'process', current: merged, total, message: `已合并 ${merged}/${total}` })
-  }
-  const outputPath = resolveOutput(mergeDesiredPath(inputPaths, nameTemplate))
-  progress({ stage: 'write', current: total, total, message: '写出文件…' })
-  await writeOutput(outputPath, out)
-  progress({ stage: 'done', current: total, total, message: '完成' })
-  return { outputPaths: [outputPath] }
-}
-
-/** 删页：删除指定页保留其余（spec §3.2）；删后剩余 0 页 → NO_PAGES_LEFT */
-export async function deletePages(
-  inputPath: string,
-  rangesText: string,
-  progress: EmitProgress,
-  nameTemplate?: string
-): Promise<OpResult> {
-  progress({ stage: 'load', current: 0, message: '读取 PDF…' })
-  const src = await loadSource(inputPath)
-  const pageCount = src.getPageCount()
-  const pages = parsePages(rangesText, pageCount) ?? []
-  if (pages.length >= pageCount) throw toolError('NO_PAGES_LEFT')
-  const removed = new Set(pages)
-  const keep = src.getPageIndices().filter((index) => !removed.has(index + 1))
-  const out = await PDFDocument.create()
-  const copied = await out.copyPages(src, keep)
-  for (const page of copied) out.addPage(page)
-  const outputPath = resolveOutput(deleteDesiredPath(inputPath, pages, nameTemplate))
-  progress({ stage: 'process', current: 1, message: '处理页面…' })
-  progress({ stage: 'write', current: 2, message: '写出文件…' })
-  await writeOutput(outputPath, out)
-  progress({ stage: 'done', current: 3, message: '完成' })
-  return { outputPaths: [outputPath] }
-}
-
-/** 旋转：选中页顺时针加转（叠加当前角度；spec §3.2），空区间 = 全部页 */
-export async function rotatePages(
-  inputPath: string,
-  rangesText: string | undefined,
-  delta: 90 | 180 | 270,
-  progress: EmitProgress,
-  nameTemplate?: string
-): Promise<OpResult> {
-  progress({ stage: 'load', current: 0, message: '读取 PDF…' })
-  const src = await loadSource(inputPath)
-  const pageCount = src.getPageCount()
-  const pages = parsePages(rangesText ?? '', pageCount, { allowEmpty: true }) ?? []
-  const targets = pages.length === 0 ? src.getPageIndices().map((index) => index + 1) : pages
-  for (const pageNumber of targets) {
-    const page = src.getPage(pageNumber - 1)
-    if (page === undefined) throw toolError('RANGE_INVALID', String(pageNumber))
-    const current = page.getRotation().angle
-    page.setRotation(degrees((current + delta) % 360))
-  }
-  const outputPath = resolveOutput(rotateDesiredPath(inputPath, delta, nameTemplate))
-  progress({ stage: 'process', current: 1, message: '处理页面…' })
-  progress({ stage: 'write', current: 2, message: '写出文件…' })
-  await writeOutput(outputPath, src)
-  progress({ stage: 'done', current: 3, message: '完成' })
-  return { outputPaths: [outputPath] }
-}
-
 /**
  * 裁剪：box 为 0–1 比例（左上原点，renderer 按参照页归一化，spec §1），
  * 逐页按各自 MediaBox 等比应用并翻转到 PDF 左下原点坐标系；空区间 = 全部页。
@@ -253,9 +165,6 @@ export async function cropPages(
 /** 载荷分发（worker 侧唯一入口；zod 校验已在 node.ts 完成） */
 export type WorkerRequest =
   | { op: 'split'; payload: SplitPayload }
-  | { op: 'merge'; payload: MergePayload }
-  | { op: 'delete'; payload: DeletePayload }
-  | { op: 'rotate'; payload: RotatePayload }
   | { op: 'crop'; payload: CropPayload }
 
 export async function runOp(request: WorkerRequest, progress: EmitProgress): Promise<OpResult> {
@@ -264,23 +173,6 @@ export async function runOp(request: WorkerRequest, progress: EmitProgress): Pro
       return splitPdf(
         request.payload.inputPath,
         request.payload.ranges,
-        progress,
-        request.payload.nameTemplate
-      )
-    case 'merge':
-      return mergePdf(request.payload.inputPaths, progress, request.payload.nameTemplate)
-    case 'delete':
-      return deletePages(
-        request.payload.inputPath,
-        request.payload.ranges,
-        progress,
-        request.payload.nameTemplate
-      )
-    case 'rotate':
-      return rotatePages(
-        request.payload.inputPath,
-        request.payload.ranges,
-        request.payload.degrees,
         progress,
         request.payload.nameTemplate
       )

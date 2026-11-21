@@ -1,14 +1,14 @@
-import { baseName, rangeLabel, toRangeList } from '@lumin/shared'
+import { baseName, rangeLabel } from '@lumin/shared'
 
 /** 命名模板占位符白名单（spec §7.2） */
 export const NAME_TOKENS = ['name', 'op', 'label', 'date'] as const
 
 export interface NameVars {
-  /** 原名（不含扩展名；合并取首个输入） */
+  /** 原名（不含扩展名） */
   name: string
-  /** 操作名（拆分/合并/删页/旋转/裁剪） */
+  /** 操作名（拆分/裁剪） */
   op: string
-  /** 参数标签：拆分/删页为页标签，旋转为角度，合并/裁剪为空串 */
+  /** 参数标签：拆分为页标签，裁剪为空串 */
   label: string
   /** 本地日期 YYYYMMDD */
   date: string
@@ -87,43 +87,6 @@ export function splitDesiredPaths(
       ? `${base}_p${label}.pdf`
       : templateOutputPath(inputPath, template, '拆分', label)
   })
-}
-
-/** 合并：默认 `{首个原名}_合并.pdf`；模板取首个文件原名（spec §7.2） */
-export function mergeDesiredPath(inputPaths: readonly string[], nameTemplate?: string): string {
-  const template = activeTemplate(nameTemplate)
-  const first = inputPaths[0]
-  if (template === null) {
-    if (first === undefined) return '_合并.pdf'
-    return `${baseName(first)}_合并.pdf`
-  }
-  if (first === undefined) return '_合并.pdf'
-  return templateOutputPath(first, template, '合并', '')
-}
-
-/** 删页：默认 `{原名}_删p{标签}.pdf`（多段以逗号连接）；模板 label 同默认标签（spec §7.2） */
-export function deleteDesiredPath(
-  inputPath: string,
-  pages: readonly number[],
-  nameTemplate?: string
-): string {
-  const label = toRangeList(pages).map(rangeLabel).join(',')
-  const template = activeTemplate(nameTemplate)
-  return template === null
-    ? `${baseName(inputPath)}_删p${label}.pdf`
-    : templateOutputPath(inputPath, template, '删页', label)
-}
-
-/** 旋转：默认 `{原名}_旋转{90|180|270}.pdf`；模板 label = 角度（spec §7.2） */
-export function rotateDesiredPath(
-  inputPath: string,
-  degrees: number,
-  nameTemplate?: string
-): string {
-  const template = activeTemplate(nameTemplate)
-  return template === null
-    ? `${baseName(inputPath)}_旋转${degrees}.pdf`
-    : templateOutputPath(inputPath, template, '旋转', String(degrees))
 }
 
 /** 裁剪：默认 `{原名}_裁剪.pdf`；模板 label = 空串（spec §7.2） */

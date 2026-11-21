@@ -1,11 +1,8 @@
 import type {
   CropPayload,
-  DeletePayload,
-  MergePayload,
   OcrDetectPayload,
   OcrExportPayload,
   OpResult,
-  RotatePayload,
   SplitPayload
 } from '../schema'
 
@@ -16,18 +13,6 @@ export interface SubmitResult {
 
 export function submitSplit(payload: SplitPayload): Promise<SubmitResult> {
   return window.lumin.invoke('exam-split:split', payload)
-}
-
-export function submitMerge(payload: MergePayload): Promise<SubmitResult> {
-  return window.lumin.invoke('exam-split:merge', payload)
-}
-
-export function submitDelete(payload: DeletePayload): Promise<SubmitResult> {
-  return window.lumin.invoke('exam-split:delete', payload)
-}
-
-export function submitRotate(payload: RotatePayload): Promise<SubmitResult> {
-  return window.lumin.invoke('exam-split:rotate', payload)
 }
 
 export function submitCrop(payload: CropPayload): Promise<SubmitResult> {
