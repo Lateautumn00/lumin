@@ -52,3 +52,37 @@
 - [ ] Windows 10/11 浅色与深色主题下对比度徽标、色块描边可辨识（tokens 驱动，未逐台验证）
 - [ ] 系统取色器（原生 `<input type="color">`）在低缩放与高 DPI 下可正常弹出
 - [ ] 吸管取色：预览层跨应用窗口取色生效（含其他应用/桌面）、多显示器下拉切换、Esc/取消按钮关闭、高 DPI 下坐标与颜色一致
+
+## 6. M46 增补：图片调色板（2026-11-21）
+
+> 分支 `feature/m46-color-palette`；不新建工具包，`color-toolbox` 单页新增「图片调色板」卡片；纯 renderer（`createImageBitmap` + canvas），零 IPC、零新增依赖。
+
+### 6.1 冒烟总览
+
+| #   | 冒烟项              | 方式                                                    | 结果                                                                                                              |
+| --- | ------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 1   | 单测                | `pnpm exec vitest run packages/tools/color-toolbox`     | ✅ 69 tests（8 文件；新增 `palette.test.ts` 10 例，`errors.test.ts` 增补码集与 detail 断言）                        |
+| 2   | 覆盖率（R1 ≥80%）   | `pnpm coverage`                                         | ✅ 通过（本包阈值沿用 root `vitest.config.ts`；全仓 93.5 / 85.62 / 91.8 / 95.37）                                 |
+| 3   | 质量门禁            | `pnpm gate`（lint→typecheck→test→audit→boundary）       | ✅ 2452 passed / 1 skipped；audit 2 moderate（无 high/critical）；边界 796 modules 0 违规                          |
+| 4   | e2e 冒烟（R3）      | `playwright test e2e/color-toolbox-smoke.spec.ts`       | ⏳ 已新增 2 用例（共 5 用例）；本机沙箱无法启动 Electron，**待 CI/本机验证**                                        |
+| 5   | 构建                | `pnpm --filter @lumin/desktop build`                    | ✅ renderer/main/preload 三份产物正常产出                                                                          |
+| 6   | chunk 体积（R5）    | 构建产物实测                                            | ✅ `color-toolbox-*.js` **43,849 B raw / 11,925 B gzip**（<200KB gzip），独占依赖 chunk 为 0                       |
+
+### 6.2 R2 八类（图片输入补充）
+
+| 类别             | 适用性 / 验证                                                                                                 | 级别      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- | --------- |
+| 1. 中文/空格路径 | 图片经 `<input type="file">` 的 `File` 对象按二进制读取，不经磁盘路径拼接；文件名仅作展示                       | 代码审查  |
+| 2. 文件被占用    | 若图片被独占锁定导致解码失败 → `createImageBitmap` 抛错 → `CT_PALETTE_FAILED`（可重试）                        | 代码分支  |
+| 3. 加密文件      | 非图片/损坏文件 → 类型校验或解码失败 → `CT_PALETTE_FAILED`；e2e 以 `text/plain` 覆盖类型校验分支                 | e2e       |
+| 4. 超大文件      | 单张 >20MB 前置拒绝 → `CT_PALETTE_FAILED`；通过后下采样最长边 ≤480px，内存与耗时受控                            | 代码分支  |
+| 5. 任务取消      | 无长任务；解码期间 `[选择图片]` loading 不可重入；换图/卸载 `revokeObjectURL` 释放预览                          | 单测+代码 |
+| 6. 并发溢出      | `paletteLoading` 单文件串行，重复点击被忽略                                                                    | 代码审查  |
+| 7. 磁盘满        | 不落盘（图片只在内存 canvas 采样）；复制失败仍走 `CT_CLIPBOARD_FAILED`                                         | —         |
+| 8. 断电恢复      | 无持久化，重启回到默认状态为预期                                                                               | —         |
+
+### 6.3 人工目视（待补录）
+
+- [ ] 12MP 手机照片（JPEG）下采样耗时与 Top 8 主色视觉准确性
+- [ ] 中文/空格文件名展示与深色主题下色板 HEX/占比文字可辨识
+- [ ] 全透明 PNG 显示「没有可统计的不透明像素」提示（非报错）

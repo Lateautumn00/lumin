@@ -74,3 +74,13 @@
 - [x] 单测：`picker` 5 / `schema` 6 / `node` 16 / `client` 2（共 59，7 文件）；e2e 用例 1 增加「预览层可见 + Esc 关闭」
 - [x] 文档同步：spec、plan Q31/§4.29、CHANGELOG、smoke
 - [x] 验证：`pnpm gate` / `pnpm coverage` / `pnpm build` / e2e 3/3；chunk 34,215 B raw / 9,656 B gzip
+
+## T10 增补：图片调色板（M46，2026-11-21）
+
+- [x] `src/palette.ts`：`extractPalette(pixels, { maxColors, alphaThreshold })`（每通道高 4 位量化 4096 桶、桶内平均色、alpha 阈值忽略透明、占比 1 位小数、占比降序同占比按桶升序）+ `paletteText`
+- [x] `src/palette.test.ts` 10 例（单色/降序与稳定排序/透明忽略/阈值可调/桶合并平均色/maxColors 限制与越界收敛/空输入/尾部字节忽略/复制文本）
+- [x] `src/errors.ts` 增 `CT_PALETTE_FAILED`（「图片解析失败，请换一张图片重试」）+ `errors.test.ts` 码集与 detail 断言
+- [x] `ToolView.vue`：主颜色卡片之后新增「图片调色板」卡片（隐藏 file input、≤20MB、`createImageBitmap` + canvas 下采样 ≤480px、预览 + 文件名 + 像素数、Top 8 色块 hex/占比、点击联动主色、复制整组、全透明提示、解码期间 loading、卸载 `revokeObjectURL`）
+- [x] e2e：选图（2×2 半红半蓝 PNG）→ 色板与 50% 占比 → 点击 `#FF0000` 联动 `rgb(255, 0, 0)`；非图片 `CT_PALETTE_FAILED`
+- [x] 文档同步：spec §1/§2/§2.6/§2.7/§3/§4/§6/§7、smoke §6、plan Q46/§4.46/M46、CHANGELOG、README 中英
+- [x] 验证：包 69 单测、`pnpm gate` 2452 passed、`pnpm coverage` 通过、`pnpm build` chunk 43,849 B raw / 11,925 B gzip；e2e 待 CI/本机执行

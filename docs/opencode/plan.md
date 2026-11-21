@@ -56,6 +56,7 @@
 | Q43 | 实用工具      | **新增 `misc-toolbox` 工具（2026-11-21 用户选定，M43）**：两页签——IPv4 CIDR 子网计算（/0–/32 全边界、私有/回环判定）、计时器（秒表/倒计时/番茄钟，4 轮专注后长休）；**纯 renderer、零 IPC、无 `node.ts`**、零新增依赖；详见 §4.43 |
 | Q44 | 文本工具箱扩展 | **在既有 `text-toolbox` 增「摩尔斯」页签（2026-11-21 用户选定，M44，不新建工具包）**：ITU 标准码表（A–Z、0–9、常用标点）编解码，字母单空格、单词「 / 」分隔，错误码 `TT_MORSE_INVALID`；**纯 renderer、零 IPC、零新增依赖**；Hex/Unicode 与批量文本处理、字数统计已于 M36 交付，本次仅补摩尔斯；详见 §4.44 |
 | Q45 | 开发工具扩展 | **在既有 `dev-toolbox` 增「JWT 解码」与「UUID 生成」两页签（2026-11-21 用户选定，M45，不新建工具包）**：JWT 仅 Base64URL 解码 header/payload 并解析 exp/iat 时效（**不做签名校验、不联网**），结构非法报 `DT_JWT_INVALID`；UUID 生成 RFC 4122 v4（批量 1–100）与时间戳 ID（`yyyyMMdd-HHmmss-xxxx`）；**纯 renderer、零 IPC、零新增依赖**；详见 §4.45 |
+| Q46 | 颜色工具箱扩展 | **在既有 `color-toolbox` 增「图片调色板」区块（2026-11-21 用户选定，M46，不新建工具包）**：本地选图（≤20MB）→ renderer canvas 下采样（最长边 ≤480px）读 RGBA → 量化聚合主色 Top 8 与占比，色块点击联动主色、可复制整组；非图片/超大/解码失败报 `CT_PALETTE_FAILED`；**纯 renderer、零 IPC、零新增依赖**（`createImageBitmap` + canvas 内置能力）；详见 §4.46 |
 | —   | 硬约束        | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -652,6 +653,16 @@ lumin/
 - **三态**：两页签均有空态引导文案；JWT 无长任务，UUID 同步生成；结构化错误码 → 中文文案 + detail + 重试
 - **验收**：jwt 单测 19 例 + uuid 单测 11 例 + errors 增补 2 断言；e2e 新增 JWT 解码/非法 token 与 UUID 批量生成两用例；本包覆盖率 ≥80%；chunk <200KB gzip；R2 映射见 `docs/smoke/dev-toolbox.md`
 
+### 4.46 颜色工具箱图片调色板（M46，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：在既有 `color-toolbox` 单页增「图片调色板」区块（不引页签、不新建工具包），**纯 renderer、零 IPC、零新增依赖**（`createImageBitmap` + canvas 为 Chromium 内置能力）
+- **输入**：隐藏 `<input type="file" accept="image/*">`，单张 ≤20MB；`createImageBitmap` 解码后 canvas 下采样至最长边 ≤480px，读取 RGBA 像素；预览用 objectURL，换图/卸载时 `revokeObjectURL`
+- **纯函数**（`src/palette.ts`）：`extractPalette(pixels, { maxColors 1–32 默认 8, alphaThreshold 0–255 默认 128 })` —— 每通道取高 4 位量化为 4096 桶，桶内取平均色；alpha 低于阈值视为透明忽略；输出按占比降序、同占比按桶升序（同输入必得同输出）；`percent` 保留 1 位小数；`paletteText` 拼 `#A, #B, …`
+- **页面**：色板最多 8 块，色块点击 → 设为主色并联动颜色值/色阶/配色方案/对比度；`[复制整组]`；全透明图片提示换图（非错误）
+- **错误码**：非图片文件 / 超过 20MB / 解码或 canvas 取样失败 → `CT_PALETTE_FAILED`（可重试，detail 带原因）
+- **三态**：未选图为空态说明；解码期间按钮 loading 且不可重入；失败结构化提示保留换图入口
+- **验收**：palette 单测 10 例 + errors 增补；e2e 新增「选图→色板→色块联动」与「非图片 `CT_PALETTE_FAILED`」两用例；本包覆盖率 ≥80%；chunk <200KB gzip；R2 映射见 `docs/smoke/color-toolbox.md`
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -739,6 +750,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M43 v4.2**  | 实用工具（§4.43，2026-11-21）：新增 `misc-toolbox` —— IPv4 CIDR 子网计算（/0–/32 全边界）、秒表/倒计时/番茄钟；纯 renderer、零 IPC、无 `node.ts`、零新增依赖                                                                                                                                           | §4.43 验收；e2e 5/5；R2 映射；chunk 10,451 B gzip；包覆盖率 ≥80%                          | 0.5 天    |
 | **M44 v4.3**  | 文本工具箱摩尔斯（§4.44，2026-11-21）：`text-toolbox` 增「摩尔斯」页签 —— ITU 标准码表编解码（A–Z/0–9/常用标点）、字母单空格与单词「 / 」分隔、`TT_MORSE_INVALID`；纯 renderer、零 IPC、零新增依赖，不新建工具包（Hex/Unicode/批量处理/字数统计已于 M36 交付）                                                  | §4.44 验收；e2e 新增往返用例；R2 映射；chunk <200KB gzip；包覆盖率 ≥80%；gate 全绿       | 0.5 天    |
 | **M45 v4.4**  | 开发工具扩展（§4.45，2026-11-21）：`dev-toolbox` 增「JWT 解码」（Base64URL 解 header/payload + exp/iat 时效，不验签）与「UUID 生成」（RFC 4122 v4 批量 1–100 + 时间戳 ID）两页签；纯 renderer、零 IPC、零新增依赖                                                                                                                        | §4.45 验收；e2e 新增 2 用例；R2 映射；chunk <200KB gzip；包覆盖率 ≥80%；gate 全绿        | 0.5 天    |
+| **M46 v4.5**  | 颜色工具箱扩展（§4.46，2026-11-21）：`color-toolbox` 增「图片调色板」区块 —— 本地选图（≤20MB）→ canvas 下采样读 RGBA → 量化聚合 Top 8 主色与占比，色块联动主色、复制整组、`CT_PALETTE_FAILED`；纯 renderer、零 IPC、零新增依赖                                                                                                                    | §4.46 验收；e2e 新增 2 用例；R2 映射；chunk <200KB gzip；包覆盖率 ≥80%；gate 全绿        | 0.5 天    |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
