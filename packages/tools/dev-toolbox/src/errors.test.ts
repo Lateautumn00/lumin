@@ -10,6 +10,7 @@ describe('errorMessage', () => {
   it('已知错误码返回 spec 中文文案', () => {
     expect(errorMessage('DT_INVALID_PORT')).toBe('端口号须为 1–65535 的整数')
     expect(errorMessage('DT_PORT_IN_USE')).toBe('端口已被占用')
+    expect(errorMessage('DT_JWT_INVALID')).toBe('JWT 格式无效')
   })
 
   it('未知错误码回退通用文案', () => {
@@ -48,6 +49,7 @@ describe('isRetryable', () => {
   it('参数与自我保护错误不可重试', () => {
     expect(isRetryable('DT_INVALID_PORT')).toBe(false)
     expect(isRetryable('DT_KILL_SELF_FORBIDDEN')).toBe(false)
+    expect(isRetryable('DT_JWT_INVALID')).toBe(false)
     expect(isRetryable('UNKNOWN')).toBe(false)
   })
 })
