@@ -40,6 +40,7 @@
     "@lumin/tool-image-rotate": "workspace:*",
     "@lumin/tool-image-stitch": "workspace:*",
     "@lumin/tool-image-watermark": "workspace:*",
+    "@lumin/tool-life-calculator": "workspace:*",
     "@lumin/tool-media-convert": "workspace:*",
     "@lumin/tool-ocr-text": "workspace:*",
     "@lumin/tool-password-generator": "workspace:*",
