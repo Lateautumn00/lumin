@@ -12,7 +12,7 @@
 | --- | --- |
 | id | `dev-toolbox` |
 | name | 开发工具 |
-| description | 端口占用查询与进程结束、CURL 转代码、JWT 解码、UUID 生成、本地静态服务器 |
+| description | 端口占用查询与进程结束、CURL 转代码、JWT 解码、本地静态服务器 |
 | icon | `terminal`（`@lucide/vue` 的 `Terminal`） |
 | category | `misc` |
 | order | 70 |
@@ -156,31 +156,7 @@
 
 ---
 
-## 5. 页签五：UUID 生成（`uuid`，M45）
-
-纯 renderer，无 IPC。随机源优先 `crypto.getRandomValues`，缺失时回退 `Math.random`。
-
-### 输入与输出
-
-| 控件 | 说明 |
-| --- | --- |
-| 数量 `NInputNumber` | 1–100，默认 5 |
-| [生成] | 批量生成 RFC 4122 v4 UUID，只读 `<pre>` 每行一个 |
-| [复制全部] | 复制整个列表（换行分隔） |
-| 时间戳 ID [生成] / [复制] | 格式 `yyyyMMdd-HHmmss-xxxx`（本地时间 + 4 位随机后缀） |
-
-### 规则
-
-- UUID 第 7 字节高 4 位固定 `0100`（版本 4），第 9 字节高 2 位固定 `10`（变体 RFC 4122）。
-- 数量非 1–100 整数 → `DT_INVALID_PAYLOAD`（面板已限位，属防御校验）。
-
-| 错误码 | 触发 | 文案 |
-| --- | --- | --- |
-| `DT_INVALID_PAYLOAD` | 生成数量越界/非整数 | 参数无效（不可重试） |
-
----
-
-## 6. IPC 契约
+## 5. IPC 契约
 
 | 通道 | 类型 | 入参 | 出参 |
 | --- | --- | --- | --- |
@@ -198,14 +174,13 @@
 
 ---
 
-## 7. 三态与 UI 约束
+## 6. 三态与 UI 约束
 
 | 页签 | 空态 | 加载态 | 报错态 |
 | --- | --- | --- | --- |
 | 端口占用 | 「输入端口或留空查询全部」+ [查询] | [查询] 禁用 + `NSpin` | 错误码 → 中文 + [重试]/详情 |
 | CURL 转代码 | 示例 curl 占位（placeholder） | 无长任务 | 解析失败原因常驻展示 |
 | JWT 解码 | 「粘贴 JWT 后自动解码…」+ [填入示例] | 无长任务（同步解码） | `DT_JWT_INVALID` 中文 + detail + [重试] |
-| UUID 生成 | 「设置数量后点击『生成』…」 | 无长任务（同步生成） | `DT_INVALID_PAYLOAD` 中文 + detail + [重试] |
 | 静态服务器 | 「选择根目录后启动」 | [启动] 禁用 + 状态文案 | 错误码 → 中文 + [重试]/详情 |
 
 - 样式只用 Tailwind + tokens；图标只用 `@lucide/vue`。
@@ -213,7 +188,7 @@
 
 ---
 
-## 8. 测试与验收
+## 7. 测试与验收
 
 ### 单测（`packages/tools/dev-toolbox/src`）
 
@@ -221,19 +196,17 @@
 - `netstat.ts`：固定样本解析（TCP LISTENING / ESTABLISHED / UDP 三列行、IPv6 地址、含空格）≥8 例。
 - `mime.ts`/路径穿越判定：≥6 例。
 - `jwt.ts`（M45）：Base64URL 变体/填充/非法字符/非 UTF-8、分段数、非对象 JSON、Bearer 前缀、空签名、exp/iat 与过期边界 ≥15 例。
-- `uuid.ts`（M45）：v4 版本位/变体位、批量上限、越界错误码、时间戳 ID 格式、crypto 缺失回退 ≥10 例。
 - `errors.ts` 与 schema：≥5 例。
 - 包覆盖率 ≥80%（statements/branches/functions/lines）。
 
 ### e2e（`apps/desktop/e2e/dev-toolbox-smoke.spec.ts`）
 
-1. 侧栏「开发工具」可进入，五页签均可见且各有空态引导。
+1. 侧栏「开发工具」可进入，四页签均可见且各有空态引导。
 2. CURL：输入 `curl 'https://a.com/x' -H 'X-A: 1'` → 输出含 `fetch(` 与 `'X-A': '1'`；切到 python 输出含 `requests.request`。
 3. JWT：已知样本 → Header 含 `"alg": "HS256"`、Payload 含 `"sub": "1234567890"`、显示「已过期」；非法串 → `DT_JWT_INVALID` + [重试]。
-4. UUID：点击 [生成] → 5 行均匹配 v4 形态；时间戳 ID 匹配 `^\d{8}-\d{6}-[0-9a-z]{4}$`。
-5. 端口：留空查询 → 表格至少 1 行（本机必有监听）；非法端口 `70000` → `DT_INVALID_PORT` 文案可见。
-6. 静态服务器：临时目录写 `index.html` → 启动 → 页面显示 `http://127.0.0.1:` 地址；停止后状态回未运行。（HTTP 请求断言可在主进程侧用 Node `fetch` 直接在 spec 内验证 200 与内容）
-7. 错误态：无效目录启动 → `DT_ROOT_INVALID` 文案 + [重试] 可见。
+4. 端口：留空查询 → 表格至少 1 行（本机必有监听）；非法端口 `70000` → `DT_INVALID_PORT` 文案可见。
+5. 静态服务器：临时目录写 `index.html` → 启动 → 页面显示 `http://127.0.0.1:` 地址；停止后状态回未运行。（HTTP 请求断言可在主进程侧用 Node `fetch` 直接在 spec 内验证 200 与内容）
+6. 错误态：无效目录启动 → `DT_ROOT_INVALID` 文案 + [重试] 可见。
 
 ### 门禁
 
