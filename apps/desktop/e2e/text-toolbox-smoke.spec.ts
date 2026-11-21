@@ -113,6 +113,47 @@ test.describe('text-toolbox（文本工具箱）冒烟', () => {
     }
   })
 
+  test('CSV → JSON 转换（引号与表头）', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '文本工具箱')
+      await page.locator('.n-tabs-tab[data-name="csv"]').click()
+      const input = page.getByPlaceholder('粘贴 CSV 文本（支持引号包裹与字段内换行）')
+      await input.fill('name,desc\n张三,"a,b"')
+      await page.getByRole('button', { name: '转换', exact: true }).click()
+      await expect(page.getByPlaceholder('转换结果')).toHaveValue(
+        JSON.stringify([{ name: '张三', desc: 'a,b' }], null, 2)
+      )
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('JSON → CSV 转换与列数不一致报错', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '文本工具箱')
+      await page.locator('.n-tabs-tab[data-name="csv"]').click()
+      await page.locator('select[aria-label="转换方向"]').selectOption('json2csv')
+      const input = page.getByPlaceholder('粘贴 JSON 对象数组，如 [{"name":"张三"}]')
+      await input.fill('[{"name":"张三","age":42},{"name":"李四"}]')
+      await page.getByRole('button', { name: '转换', exact: true }).click()
+      await expect(page.getByPlaceholder('转换结果')).toHaveValue(
+        'name,age\r\n张三,42\r\n李四,'
+      )
+
+      await page.locator('select[aria-label="转换方向"]').selectOption('csv2json')
+      await input.fill('a,b\n1')
+      await page.getByRole('button', { name: '转换', exact: true }).click()
+      await expect(page.getByText('CSV/JSON 数据格式不正确', { exact: false })).toBeVisible()
+      await expect(page.getByText(/第 2 行：列数 1 与表头 2 不一致/).first()).toBeVisible()
+    } finally {
+      await app.close()
+    }
+  })
+
   test('摩尔斯编码 → 交换 → 解码往返', async () => {
     const { app, page } = await launch()
     await ensureReady(page)
