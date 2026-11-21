@@ -17,9 +17,10 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | Text toolbox       | JSON format/minify/validate, Base64/URL encode-decode, regex test & replace preview                                                              |
 | Color toolbox      | HEX/RGB/HSL conversion, full-screen eyedropper (outside the app window)/picker and color scales, harmony palettes, WCAG contrast (AA/AAA) checks |
 | Time toolbox       | Timestamp ↔ date conversion, 8 common time zones, duration math, Cron parsing with next 5 runs                                                   |
+| Life calculator    | Mortgage payments (equal installment/equal principal) with schedule, salary tax with deductions, percentage & discount math                      |
 | Password generator | Strong random passwords (charsets/exclusions/entropy & strength), UUID v4, random strings and integers                                           |
 | Text diff          | Line-by-line text comparison, ignore whitespace/case, side-by-side and unified views, stats and unified diff copy                                |
-| PDF images         | PDF pages → PNG/JPG (range/DPI), images → PDF in order (auto/A4/Letter, orientation/margins, custom name)                                       |
+| PDF images         | PDF pages → PNG/JPG (range/DPI), images → PDF in order (auto/A4/Letter, orientation/margins, custom name)                                        |
 | PDF toolkit        | Merge, split, delete, rotate, reorder pages, edit metadata, add watermarks and page numbers — output beside the source                           |
 | File hasher        | Batch MD5/SHA-1/SHA-256 with paste-to-verify against an expected digest, TSV copy                                                                |
 | Duplicate finder   | Scan a folder, confirm duplicate groups with two-stage SHA-256, keep the oldest and trash the rest                                               |
