@@ -26,7 +26,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | File hasher        | Batch MD5/SHA-1/SHA-256 with paste-to-verify against an expected digest, TSV copy                                                                                         |
 | Duplicate finder   | Scan a folder, confirm duplicate groups with two-stage SHA-256, keep the oldest and trash the rest                                                                        |
 | File cleaner       | Export a directory tree, scan & trash empty folders or temp files (after picking), batch-set file times (mtime/atime)                                                      |
-| Dev toolbox        | Port usage lookup with process kill, cURL to fetch/axios/python, local static server bound to 127.0.0.1                                                                    |
+| Dev toolbox        | Port usage lookup with process kill, cURL to fetch/axios/python, JWT decoding (no signature check), UUID v4 / timestamp ID generation, local static server bound to 127.0.0.1                                                              |
 | Misc toolbox       | Subnet/IP (CIDR) calculator, stopwatch, countdown and Pomodoro timer                                                                                                       |
 | Disk usage         | Recursively scan a folder, list entries by size with usage bars, drill down level by level (read-only)                                                                    |
 | Folder compare     | Pair files by relative path across two folders, diff by size/mtime with filters and reveal (read-only, no content)                                                        |

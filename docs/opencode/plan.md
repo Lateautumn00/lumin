@@ -55,6 +55,7 @@
 | Q42 | 开发工具      | **新增 `dev-toolbox` 工具（2026-11-21 用户选定，M42）**：三页签——端口占用查询/结束进程（`netstat`+`tasklist`+`taskkill`，`execFile` 数组传参、拒绝杀自身 PID）、CURL 转代码（fetch/axios/python，纯 renderer）、本地静态服务器（`node:http` 仅绑 `127.0.0.1`、GET/HEAD、路径穿越 403、访问日志 200 条）；**不扩展 plugin-api 与壳通道**，主进程能力全在工具 `node.ts`；零新增依赖；详见 §4.42 |
 | Q43 | 实用工具      | **新增 `misc-toolbox` 工具（2026-11-21 用户选定，M43）**：两页签——IPv4 CIDR 子网计算（/0–/32 全边界、私有/回环判定）、计时器（秒表/倒计时/番茄钟，4 轮专注后长休）；**纯 renderer、零 IPC、无 `node.ts`**、零新增依赖；详见 §4.43 |
 | Q44 | 文本工具箱扩展 | **在既有 `text-toolbox` 增「摩尔斯」页签（2026-11-21 用户选定，M44，不新建工具包）**：ITU 标准码表（A–Z、0–9、常用标点）编解码，字母单空格、单词「 / 」分隔，错误码 `TT_MORSE_INVALID`；**纯 renderer、零 IPC、零新增依赖**；Hex/Unicode 与批量文本处理、字数统计已于 M36 交付，本次仅补摩尔斯；详见 §4.44 |
+| Q45 | 开发工具扩展 | **在既有 `dev-toolbox` 增「JWT 解码」与「UUID 生成」两页签（2026-11-21 用户选定，M45，不新建工具包）**：JWT 仅 Base64URL 解码 header/payload 并解析 exp/iat 时效（**不做签名校验、不联网**），结构非法报 `DT_JWT_INVALID`；UUID 生成 RFC 4122 v4（批量 1–100）与时间戳 ID（`yyyyMMdd-HHmmss-xxxx`）；**纯 renderer、零 IPC、零新增依赖**；详见 §4.45 |
 | —   | 硬约束        | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -642,6 +643,15 @@ lumin/
 - **三态**：输入/输出 placeholder + 「填入示例」空态；>200KB 复用分帧 busy；结构化错误 → 中文文案 + detail 折叠
 - **验收**：morse 单测 12 例（编码大小写/单词/数字/空白归一/空文本/不支持字符/超限、解码往返/容错/空文本/未知码/超限）；e2e 新增摩尔斯编码→交换→解码往返用例；本包覆盖率 ≥80%；chunk <200KB gzip；R2 映射见 `docs/smoke/text-toolbox.md`
 
+### 4.45 开发工具 JWT 解码与 UUID 生成（M45，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：在既有 `dev-toolbox` 增两个页签（共 5 个），**纯 renderer、零 IPC、零新增依赖**，不新建工具包
+- **JWT 解码**：接受 `Bearer ` 前缀与首尾空白；Base64URL 解码（`-`/`_` 映射、忽略 `=` 填充）header/payload，输出格式化 JSON；解析 `exp`/`iat` 秒级时间并标注「未过期/已过期/无 exp」；**明确不校验签名**，页内常驻提示
+- **错误码**：空输入 / 分段数≠3 / Base64URL 非法字符 / 非 UTF-8 / 段非 JSON 对象 → `DT_JWT_INVALID`（不可重试，detail 指明原因）
+- **UUID 生成**：`crypto.getRandomValues` 优先（缺失回退 `Math.random`），RFC 4122 v4 版本位/变体位强制；批量 1–100（越界 `DT_INVALID_PAYLOAD`）+ 复制全部；时间戳 ID `yyyyMMdd-HHmmss-xxxx`（本地时间 + 4 位随机后缀）
+- **三态**：两页签均有空态引导文案；JWT 无长任务，UUID 同步生成；结构化错误码 → 中文文案 + detail + 重试
+- **验收**：jwt 单测 19 例 + uuid 单测 11 例 + errors 增补 2 断言；e2e 新增 JWT 解码/非法 token 与 UUID 批量生成两用例；本包覆盖率 ≥80%；chunk <200KB gzip；R2 映射见 `docs/smoke/dev-toolbox.md`
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -728,6 +738,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M42 v4.1**  | 开发工具（§4.42，2026-11-21）：新增 `dev-toolbox` —— 端口占用查询与结束进程、CURL 转 fetch/axios/python、本地静态服务器（仅 127.0.0.1、路径穿越防护）；主进程能力全在工具 `node.ts`，不扩 plugin-api；零新增依赖                                                                                        | §4.42 验收；e2e 5/5；R2 八类映射；chunk 11,413 B gzip；包覆盖率 ≥80%                     | 0.5–1 天 |
 | **M43 v4.2**  | 实用工具（§4.43，2026-11-21）：新增 `misc-toolbox` —— IPv4 CIDR 子网计算（/0–/32 全边界）、秒表/倒计时/番茄钟；纯 renderer、零 IPC、无 `node.ts`、零新增依赖                                                                                                                                           | §4.43 验收；e2e 5/5；R2 映射；chunk 10,451 B gzip；包覆盖率 ≥80%                          | 0.5 天    |
 | **M44 v4.3**  | 文本工具箱摩尔斯（§4.44，2026-11-21）：`text-toolbox` 增「摩尔斯」页签 —— ITU 标准码表编解码（A–Z/0–9/常用标点）、字母单空格与单词「 / 」分隔、`TT_MORSE_INVALID`；纯 renderer、零 IPC、零新增依赖，不新建工具包（Hex/Unicode/批量处理/字数统计已于 M36 交付）                                                  | §4.44 验收；e2e 新增往返用例；R2 映射；chunk <200KB gzip；包覆盖率 ≥80%；gate 全绿       | 0.5 天    |
+| **M45 v4.4**  | 开发工具扩展（§4.45，2026-11-21）：`dev-toolbox` 增「JWT 解码」（Base64URL 解 header/payload + exp/iat 时效，不验签）与「UUID 生成」（RFC 4122 v4 批量 1–100 + 时间戳 ID）两页签；纯 renderer、零 IPC、零新增依赖                                                                                                                        | §4.45 验收；e2e 新增 2 用例；R2 映射；chunk <200KB gzip；包覆盖率 ≥80%；gate 全绿        | 0.5 天    |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
