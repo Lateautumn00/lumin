@@ -14,6 +14,7 @@ import { registerMain as imageToolboxRegisterMain } from '@lumin/tool-image-tool
 import { registerMain as imageRotateRegisterMain } from '@lumin/tool-image-rotate/node'
 import { registerMain as imageStitchRegisterMain } from '@lumin/tool-image-stitch/node'
 import { registerMain as imageWatermarkRegisterMain } from '@lumin/tool-image-watermark/node'
+import { registerMain as markdownToolRegisterMain } from '@lumin/tool-markdown-tool/node'
 import { registerMain as mediaConvertRegisterMain } from '@lumin/tool-media-convert/node'
 import { registerMain as ocrTextRegisterMain } from '@lumin/tool-ocr-text/node'
 import { registerMain as pdfImagesRegisterMain } from '@lumin/tool-pdf-images/node'
@@ -38,6 +39,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'image-rotate': imageRotateRegisterMain,
   'image-stitch': imageStitchRegisterMain,
   'image-watermark': imageWatermarkRegisterMain,
+  'markdown-tool': markdownToolRegisterMain,
   'media-convert': mediaConvertRegisterMain,
   'ocr-text': ocrTextRegisterMain,
   'pdf-images': pdfImagesRegisterMain,

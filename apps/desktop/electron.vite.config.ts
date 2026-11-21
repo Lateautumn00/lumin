@@ -254,6 +254,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/text-toolbox/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-markdown-tool\/manifest$/,
+    replacement: r('../../packages/tools/markdown-tool/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-markdown-tool\/node$/,
+    replacement: r('../../packages/tools/markdown-tool/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-markdown-tool\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/markdown-tool/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-life-calculator\/manifest$/,
     replacement: r('../../packages/tools/life-calculator/src/manifest.ts')
   },

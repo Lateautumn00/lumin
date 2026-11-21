@@ -16,6 +16,7 @@ import { manifest as imageRotateManifest } from '@lumin/tool-image-rotate/manife
 import { manifest as imageStitchManifest } from '@lumin/tool-image-stitch/manifest'
 import { manifest as imageWatermarkManifest } from '@lumin/tool-image-watermark/manifest'
 import { manifest as lifeCalculatorManifest } from '@lumin/tool-life-calculator/manifest'
+import { manifest as markdownToolManifest } from '@lumin/tool-markdown-tool/manifest'
 import { manifest as mediaConvertManifest } from '@lumin/tool-media-convert/manifest'
 import { manifest as ocrTextManifest } from '@lumin/tool-ocr-text/manifest'
 import { manifest as passwordGeneratorManifest } from '@lumin/tool-password-generator/manifest'
@@ -45,6 +46,7 @@ export const toolManifests: readonly ToolManifest[] = [
   pdfToolkitManifest,
   fileRenamerManifest,
   textToolboxManifest,
+  markdownToolManifest,
   textDiffManifest,
   videoDownloadManifest,
   fileHasherManifest,
