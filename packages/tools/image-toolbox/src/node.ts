@@ -3,6 +3,7 @@
  * @author cuilanchao
  * @date 2026-11-19
  * @description probe（sync，ffmpeg 元信息）/ process（task，批量串行 + 可取消）/
+ *              make-gif（task，M40：逐帧探测 → 画布规划 → 单进程 filter_complex）/
  *              config（sync，输出目录记忆）通道注册；引擎只复用 binaries/download/ffmpeg.exe
  *              （M4 已拉取，零新增依赖；2026-11-19 体积优化移除 ffprobe 依赖，改解析
  *              `ffmpeg -i` 的 stderr 流信息）。批量语义：单张失败不中断批次（spec §7）；
@@ -17,11 +18,15 @@ import {
   MAX_FILE_BYTES,
   configResultSchema,
   extensionOf,
+  gifResultSchema,
+  makeGifPayloadSchema,
   probePayloadSchema,
   probeResultSchema,
   processPayloadSchema,
   processResultSchema,
   setOutputDirPayloadSchema,
+  type MakeGifPayload,
+  type MakeGifResult,
   type ProcessFailure,
   type ProcessPayload,
   type ProcessResult,
@@ -31,11 +36,19 @@ import {
 import { errnoCode, toolError } from './errors'
 import {
   buildEncodeArgs,
+  buildEffectFilter,
   buildScaleArgs,
   classifyFfmpegFailure,
   resolveTargetSize,
   type ResizeParams
 } from './encode'
+import {
+  buildGifFilterGraph,
+  fpsFromFrameMs,
+  gifLoopArg,
+  gifOutputName,
+  planGifCanvas
+} from './gif'
 import { buildOutputName, compressOutputExt, uniqueName, type SizeTag } from './naming'
 
 /** 可注入依赖（单测传假件；docx2pdf/video-download node.ts 同口径） */
@@ -217,6 +230,17 @@ export function registerWith(ctx: MainPluginContext, deps: ImageToolboxDeps): vo
     }
   })
 
+  // —— make-gif（task，M40）：逐张探尺寸 → 画布规划 → 单进程 filter_complex 出片 ——
+  ctx.registerTask<MakeGifPayload, MakeGifResult>('make-gif', async (taskCtx) => {
+    try {
+      return await runMakeGifTask(taskCtx, { ffmpegPath, deps, settings: ctx.settings })
+    } catch (err) {
+      if (isStructuredError(err)) throw err
+      if (err instanceof Error) throw toolError('IT_FILE_CORRUPT', tail(err.message))
+      throw err
+    }
+  })
+
   ctx.log.info('image-toolbox registered', { engineDir })
 }
 
@@ -314,6 +338,107 @@ async function runProcessTask(
   return processResultSchema.parse({ outputs, failures })
 }
 
+/** make-gif 任务所需的闭包资源 */
+interface GifEnv {
+  ffmpegPath: string
+  deps: ImageToolboxDeps
+  settings: MainPluginContext['settings']
+}
+
+/**
+ * 执行 GIF 生成任务（M40，spec §2.5）：逐帧预检/探测 → 画布规划 → 单进程编码
+ * @param taskCtx 任务上下文（payload 已由外层 zod 校验）
+ * @param env 闭包资源
+ */
+async function runMakeGifTask(
+  taskCtx: TaskHandlerContext<MakeGifPayload>,
+  env: GifEnv
+): Promise<MakeGifResult> {
+  const parsed = makeGifPayloadSchema.safeParse(taskCtx.payload)
+  if (!parsed.success) throw makeError('INVALID_PAYLOAD', '参数无效')
+  if (!existsSync(env.ffmpegPath)) throw toolError('IT_ENGINE_MISSING')
+  const input = parsed.data
+  const outputDir = input.outputDir
+
+  try {
+    mkdirSync(outputDir, { recursive: true })
+  } catch (err) {
+    throw toolError('IT_OUTPUT_WRITE_FAILED', errnoCode(err))
+  }
+  await env.settings.set('outputDir', outputDir)
+
+  let existing: Set<string>
+  try {
+    existing = new Set(readdirSync(outputDir).map((name) => name.toLowerCase()))
+  } catch (err) {
+    throw toolError('IT_OUTPUT_WRITE_FAILED', errnoCode(err))
+  }
+
+  // 逐帧预检 + 探测尺寸（进度「读取 i/n」，spec §2.5）
+  const total = input.files.length
+  const sizes: { width: number; height: number }[] = []
+  for (const [index, file] of input.files.entries()) {
+    if (taskCtx.signal.aborted) throw toolError('IT_CANCELLED')
+    if (extensionOf(file) === null) throw toolError('IT_FILE_UNSUPPORTED')
+    let size: number
+    try {
+      const stat = statSync(file)
+      if (!stat.isFile()) throw toolError('IT_FILE_UNSUPPORTED')
+      size = stat.size
+    } catch (err) {
+      if (isStructuredError(err)) throw err
+      throw toolError('IT_FILE_UNSUPPORTED', errnoCode(err))
+    }
+    if (size > MAX_FILE_BYTES) throw toolError('IT_FILE_UNSUPPORTED')
+    const info = await probeStream(file, env.ffmpegPath, env.deps)
+    sizes.push({ width: info.width, height: info.height })
+    taskCtx.emit({ kind: 'progress', current: index + 1, total, message: basename(file) })
+  }
+
+  const canvas = planGifCanvas(sizes, input.options.width)
+  if (canvas === null) throw toolError('IT_GIF_TOO_LARGE')
+
+  const fps = fpsFromFrameMs(input.options.durationMs)
+  const args = ['-y', '-v', 'error']
+  for (const file of input.files) args.push('-framerate', String(fps), '-i', file)
+  args.push(
+    '-filter_complex',
+    buildGifFilterGraph(total, canvas),
+    '-loop',
+    gifLoopArg(input.options.loop)
+  )
+
+  const name = uniqueName(existing, gifOutputName(new Date(env.deps.now())))
+  existing.add(name.toLowerCase())
+  const output = join(outputDir, name)
+  args.push(output)
+  taskCtx.emit({ kind: 'progress', current: total, total, message: '编码 GIF' })
+
+  const result = await env.deps.runProcess({
+    command: env.ffmpegPath,
+    args,
+    signal: taskCtx.signal,
+    maxOutputChars: 256 * 1024
+  })
+  if (result.aborted) throw toolError('IT_CANCELLED')
+  if (result.code !== 0) {
+    throw toolError(classifyFfmpegFailure(result.stderr, output), diagnose(result))
+  }
+  let sizeBytes: number
+  try {
+    sizeBytes = statSync(output).size
+  } catch (err) {
+    throw toolError('IT_OUTPUT_WRITE_FAILED', errnoCode(err))
+  }
+  return gifResultSchema.parse({
+    outputPath: output,
+    width: canvas.width,
+    height: canvas.height,
+    frames: total,
+    sizeBytes
+  })
+}
+
 /** processOne 所需资源（runProcessTask 组装） */
 interface SingleEnv {
   outputDir: string
@@ -353,6 +478,10 @@ async function processOne(
   } else if (payload.mode === 'convert') {
     ext = payload.options.format
     quality = payload.options.quality
+  } else if (payload.mode === 'effect') {
+    // 调整：输出沿用压缩「保持原格式」映射（gif/webp → webp 动画），质量透传
+    ext = compressOutputExt(inputExt)
+    quality = payload.options.quality
   } else {
     ext = payload.options.format
     quality = payload.options.quality
@@ -381,16 +510,27 @@ async function processOne(
 
   // 动图输入（gif/webp）：webp 输出保留动画，其余格式取首帧（spec §2.2）
   const animated = inputExt === 'gif' || inputExt === 'webp'
+  const effect =
+    payload.mode === 'effect'
+      ? { kind: payload.options.effect, threshold: payload.options.threshold }
+      : undefined
   const candidate = buildOutputName({
     inputName: basename(file),
     mode: payload.mode,
     quality,
     ...(size !== undefined ? { size } : {}),
+    ...(effect !== undefined ? { effect } : {}),
     ext
   })
   const name = uniqueName(env.existing, candidate)
   env.existing.add(name.toLowerCase())
   const output = join(env.outputDir, name)
+
+  // 效果滤镜与缩放互斥（spec §5）：调整只替换像素，不改变尺寸
+  const filterArgs =
+    payload.mode === 'effect'
+      ? ['-vf', buildEffectFilter(payload.options.effect, payload.options.threshold)]
+      : scaleArgs
 
   const result = await env.deps.runProcess({
     command: env.ffmpegPath,
@@ -400,7 +540,7 @@ async function processOne(
       'error',
       '-i',
       file,
-      ...scaleArgs,
+      ...filterArgs,
       ...buildEncodeArgs({ format: ext, quality, animated }),
       output
     ],

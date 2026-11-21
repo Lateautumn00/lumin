@@ -5,7 +5,29 @@
  * @description 质量 → 各编码器参数（mjpeg/libwebp/libaom-av1/png）、缩放四模式目标尺寸
  *              与「不放大」边界判定、ffmpeg 单张失败原因归类
  */
-import type { OutputFormat } from './naming'
+import type { EffectKind, OutputFormat } from './naming'
+
+/** 调整效果类型（M40，命名与滤镜共用；定义在 naming 避免循环依赖） */
+export type { EffectKind } from './naming'
+
+/** 黑白二值默认阈值（spec §2.4） */
+export const DEFAULT_BINARY_THRESHOLD = 128
+
+/**
+ * 调整效果 → ffmpeg `-vf` 滤镜（spec §5，纯函数）
+ * - 灰度 `hue=s=0` · 反色 `negate`
+ * - 黑白二值：先转灰再按阈值硬切（阈值钳制 0–255 取整）
+ * @param effect 效果类型
+ * @param threshold 二值阈值（仅 binary 生效）
+ */
+export function buildEffectFilter(effect: EffectKind, threshold: number): string {
+  if (effect === 'grayscale') return 'hue=s=0'
+  if (effect === 'invert') return 'negate'
+  const value = Number.isFinite(threshold)
+    ? Math.min(255, Math.max(0, Math.round(threshold)))
+    : DEFAULT_BINARY_THRESHOLD
+  return `format=gray,lut=y='if(gt(val,${value}),255,0)'`
+}
 
 /** 编码输入（animated = gif/webp 动图输入，走动画路径保留全部帧） */
 export interface EncodeSpec {

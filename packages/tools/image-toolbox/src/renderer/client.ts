@@ -4,7 +4,13 @@
  * @date 2026-11-18
  * @description probe/config sync 通道与 process task 的提交封装，类型来自 schema.ts
  */
-import type { ConfigResult, ProbePayload, ProbeResult, ProcessPayload } from '../schema'
+import type {
+  ConfigResult,
+  MakeGifPayload,
+  ProbePayload,
+  ProbeResult,
+  ProcessPayload
+} from '../schema'
 
 /** 批量探测图片元信息（尺寸/大小/是否动图；单张失败不阻塞，见结果 failures） */
 export function probe(payload: ProbePayload): Promise<ProbeResult> {
@@ -14,6 +20,11 @@ export function probe(payload: ProbePayload): Promise<ProbeResult> {
 /** 提交批量处理长任务，立即返回 taskId（三段式第一段） */
 export function process(payload: ProcessPayload): Promise<{ taskId: string }> {
   return window.lumin.invoke('image-toolbox:process', payload)
+}
+
+/** 提交 GIF 生成任务（M40，done 返回 `{outputPath,width,height,frames,sizeBytes}`） */
+export function makeGif(payload: MakeGifPayload): Promise<{ taskId: string }> {
+  return window.lumin.invoke('image-toolbox:make-gif', payload)
 }
 
 /** 读取输出目录记忆（settings `outputDir`，缺省 userData/images） */
