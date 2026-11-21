@@ -7,7 +7,8 @@ describe('color-toolbox errors', () => {
     expect(COLOR_TOOLBOX_ERROR_CODES).toEqual([
       'CT_INVALID_COLOR',
       'CT_CLIPBOARD_FAILED',
-      'CT_CAPTURE_FAILED'
+      'CT_CAPTURE_FAILED',
+      'CT_PALETTE_FAILED'
     ])
   })
 
@@ -27,6 +28,11 @@ describe('color-toolbox errors', () => {
       code: 'CT_INVALID_COLOR',
       message: '颜色格式不正确，请输入 HEX / RGB / HSL 值',
       detail: '无效的 HEX 值'
+    })
+    expect(toolError('CT_PALETTE_FAILED', '图片过大')).toEqual({
+      code: 'CT_PALETTE_FAILED',
+      message: '图片解析失败，请换一张图片重试',
+      detail: '图片过大'
     })
   })
 

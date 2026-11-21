@@ -10,7 +10,8 @@ import type { StructuredError } from '@lumin/shared'
 export const COLOR_TOOLBOX_ERROR_CODES = [
   'CT_INVALID_COLOR',
   'CT_CLIPBOARD_FAILED',
-  'CT_CAPTURE_FAILED'
+  'CT_CAPTURE_FAILED',
+  'CT_PALETTE_FAILED'
 ] as const
 
 export type ColorToolboxErrorCode = (typeof COLOR_TOOLBOX_ERROR_CODES)[number]
@@ -19,7 +20,8 @@ export type ColorToolboxErrorCode = (typeof COLOR_TOOLBOX_ERROR_CODES)[number]
 const MESSAGES: Record<ColorToolboxErrorCode, string> = {
   CT_INVALID_COLOR: '颜色格式不正确，请输入 HEX / RGB / HSL 值',
   CT_CLIPBOARD_FAILED: '复制失败，请手动选择文本复制',
-  CT_CAPTURE_FAILED: '屏幕取色失败，请重试'
+  CT_CAPTURE_FAILED: '屏幕取色失败，请重试',
+  CT_PALETTE_FAILED: '图片解析失败，请换一张图片重试'
 }
 
 /**

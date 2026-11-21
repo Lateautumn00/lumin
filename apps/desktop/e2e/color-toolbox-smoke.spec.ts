@@ -3,7 +3,8 @@
  * @author cuilanchao
  * @date 2026-11-20
  * @description 覆盖：页面加载与默认色三格式展示、整屏截图取色预览层（Esc 关闭）、
- *              非法输入结构化报错与恢复、示例色/色阶联动与 WCAG 对比度判定。
+ *              非法输入结构化报错与恢复、示例色/色阶联动与 WCAG 对比度判定、
+ *              图片调色板（选图统计主色/占比、色块联动主色、非图片文件报错）。
  */
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
@@ -91,6 +92,63 @@ test.describe('color-toolbox（颜色工具箱）冒烟', () => {
 
       await page.getByRole('button', { name: '色阶 #FDECEC' }).click()
       await expect(page.getByText('rgb(253, 236, 236)', { exact: true })).toBeVisible()
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('图片调色板：选图后统计主色与占比，点击色块联动主色', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '颜色工具箱')
+      await expect(page.getByRole('heading', { name: '图片调色板' })).toBeVisible()
+
+      // 生成 2×2 半红半蓝 PNG（避免依赖仓库内图片资产）
+      const dataUrl = await page.evaluate(() => {
+        const canvas = document.createElement('canvas')
+        canvas.width = 2
+        canvas.height = 2
+        const context = canvas.getContext('2d')
+        if (context === null) return ''
+        context.fillStyle = '#FF0000'
+        context.fillRect(0, 0, 1, 2)
+        context.fillStyle = '#0000FF'
+        context.fillRect(1, 0, 1, 2)
+        return canvas.toDataURL('image/png')
+      })
+      const base64 = dataUrl.split(',')[1] ?? ''
+      expect(base64).not.toBe('')
+      await page.setInputFiles('input[type="file"]', {
+        name: 'palette.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from(base64, 'base64')
+      })
+
+      await expect(page.getByText('palette.png')).toBeVisible()
+      await expect(page.getByRole('button', { name: '调色板 #FF0000' })).toBeVisible()
+      await expect(page.getByRole('button', { name: '调色板 #0000FF' })).toBeVisible()
+      await expect(page.getByText('50%', { exact: true }).first()).toBeVisible()
+
+      await page.getByRole('button', { name: '调色板 #FF0000' }).click()
+      await expect(page.getByText('rgb(255, 0, 0)', { exact: true })).toBeVisible()
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('图片调色板：非图片文件显示 CT_PALETTE_FAILED 结构化错误', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '颜色工具箱')
+      await page.setInputFiles('input[type="file"]', {
+        name: 'note.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('not an image', 'utf8')
+      })
+      await expect(page.getByRole('alert')).toContainText('图片解析失败')
+      await expect(page.getByRole('alert')).toContainText('CT_PALETTE_FAILED')
     } finally {
       await app.close()
     }

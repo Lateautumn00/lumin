@@ -4,7 +4,7 @@
  * 三态：空态（默认主色 + 示例色引导）/ 加载态（无长任务，同步计算豁免）/ 报错态（结构化错误码 + 中文文案）。
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { ArrowLeftRight, Copy, Dices, Pipette } from '@lucide/vue'
+import { ArrowLeftRight, Copy, Dices, Image, Pipette } from '@lucide/vue'
 import { NButton, NInput, NSelect } from 'naive-ui'
 import { toStructuredError, type StructuredError } from '@lumin/shared'
 
@@ -24,6 +24,7 @@ import {
   type WcagVerdict
 } from '../color'
 import { toolError, type ColorToolboxErrorCode } from '../errors'
+import { extractPalette, paletteText, type PaletteResult } from '../palette'
 import { mapPointToPixel } from '../picker'
 import type { CaptureDisplayResult } from '../schema'
 import { captureDisplay } from './client'
@@ -44,6 +45,19 @@ const PRESETS: readonly { name: string; hex: string }[] = [
   { name: '紫', hex: '#8B5CF6' }
 ]
 
+/** 图片调色板：单张图片大小上限 20MB（spec §2.7） */
+const MAX_PALETTE_IMAGE_BYTES = 20 * 1024 * 1024
+/** 图片调色板：统计前的最长边下采样尺寸（控制内存与耗时） */
+const MAX_PALETTE_EDGE = 480
+/** 图片调色板：返回颜色数上限 */
+const MAX_PALETTE_COLORS = 8
+
+interface PaletteState {
+  readonly fileName: string
+  readonly previewUrl: string
+  readonly result: PaletteResult
+}
+
 const format = ref<ColorFormat>('hex')
 const main = ref<Rgb>(DEFAULT_COLOR)
 const inputText = ref(formatColor(DEFAULT_COLOR, 'hex'))
@@ -53,6 +67,10 @@ const clipboardError = ref<StructuredError | null>(null)
 const capturing = ref(false)
 const picker = ref<CaptureDisplayResult | null>(null)
 const pickerError = ref<StructuredError | null>(null)
+const palette = ref<PaletteState | null>(null)
+const paletteLoading = ref(false)
+const paletteError = ref<StructuredError | null>(null)
+const paletteInput = ref<HTMLInputElement | null>(null)
 const copied = ref('')
 
 let copiedTimer: ReturnType<typeof setTimeout> | undefined
@@ -217,6 +235,78 @@ function copyScale(): void {
   void copy('scale', scale.value.map((color) => rgbToHex(color)).join(', '))
 }
 
+function releasePalette(): void {
+  if (palette.value !== null) URL.revokeObjectURL(palette.value.previewUrl)
+  palette.value = null
+}
+
+function pickPaletteImage(): void {
+  if (paletteLoading.value) return
+  paletteInput.value?.click()
+}
+
+async function analyzeImageFile(file: File): Promise<PaletteState> {
+  const previewUrl = URL.createObjectURL(file)
+  try {
+    const bitmap = await createImageBitmap(file)
+    try {
+      const scaleFactor = Math.min(
+        1,
+        MAX_PALETTE_EDGE / Math.max(bitmap.width, bitmap.height, 1)
+      )
+      const width = Math.max(1, Math.round(bitmap.width * scaleFactor))
+      const height = Math.max(1, Math.round(bitmap.height * scaleFactor))
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const context = canvas.getContext('2d', { willReadFrequently: true })
+      if (context === null) throw new Error('canvas 上下文不可用')
+      context.drawImage(bitmap, 0, 0, width, height)
+      const result = extractPalette(context.getImageData(0, 0, width, height).data, {
+        maxColors: MAX_PALETTE_COLORS
+      })
+      return { fileName: file.name, previewUrl, result }
+    } finally {
+      bitmap.close()
+    }
+  } catch (err) {
+    URL.revokeObjectURL(previewUrl)
+    throw err
+  }
+}
+
+async function onPaletteFileChange(event: Event): Promise<void> {
+  const target = event.target
+  if (!(target instanceof HTMLInputElement)) return
+  const file = target.files?.[0]
+  target.value = ''
+  if (file === undefined) return
+  paletteError.value = null
+  if (!file.type.startsWith('image/')) {
+    paletteError.value = toolError('CT_PALETTE_FAILED', '请选择图片文件')
+    return
+  }
+  if (file.size > MAX_PALETTE_IMAGE_BYTES) {
+    paletteError.value = toolError('CT_PALETTE_FAILED', '图片超过 20MB，请压缩后再试')
+    return
+  }
+  paletteLoading.value = true
+  try {
+    const next = await analyzeImageFile(file)
+    releasePalette()
+    palette.value = next
+  } catch (err) {
+    paletteError.value = toolError('CT_PALETTE_FAILED', toStructuredError(err).message)
+  } finally {
+    paletteLoading.value = false
+  }
+}
+
+function copyPalette(): void {
+  if (palette.value === null) return
+  void copy('palette', paletteText(palette.value.result.colors))
+}
+
 function badgeClass(pass: boolean): string {
   const base = 'rounded-[var(--lumin-radius-md)] border px-2 py-0.5 text-xs'
   return pass
@@ -234,6 +324,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onPickerKeydown)
+  releasePalette()
   if (copiedTimer !== undefined) clearTimeout(copiedTimer)
 })
 </script>
@@ -243,7 +334,7 @@ onUnmounted(() => {
     <header class="flex flex-col gap-1">
       <h2 class="text-lg font-semibold text-[var(--lumin-color-text)]">颜色工具箱</h2>
       <p class="text-sm text-[var(--lumin-color-text-secondary)]">
-        HEX / RGB / HSL 互转、色阶与配色方案、WCAG 对比度检测，全程本地计算
+        HEX / RGB / HSL 互转、色阶与配色方案、图片调色板、WCAG 对比度检测，全程本地计算
       </p>
     </header>
 
@@ -321,6 +412,89 @@ onUnmounted(() => {
           @click="applyColor(presetRgb(preset.hex))"
         />
       </div>
+    </section>
+
+    <section
+      class="flex flex-col gap-3 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-4"
+    >
+      <div class="flex flex-wrap items-center gap-2">
+        <h3 class="text-sm font-semibold text-[var(--lumin-color-text)]">图片调色板</h3>
+        <span class="text-xs text-[var(--lumin-color-text-secondary)]">
+          统计主色及占比，点击色块设为主色
+        </span>
+        <NButton size="small" class="ml-auto" :loading="paletteLoading" @click="pickPaletteImage">
+          <template #icon><Image :size="14" /></template>
+          {{ palette === null ? '选择图片' : '换一张' }}
+        </NButton>
+        <NButton v-if="palette !== null" size="small" quaternary @click="copyPalette">
+          {{ copied === 'palette' ? '已复制' : '复制整组' }}
+        </NButton>
+        <input
+          ref="paletteInput"
+          type="file"
+          accept="image/*"
+          class="hidden"
+          aria-label="选择图片"
+          @change="onPaletteFileChange"
+        />
+      </div>
+
+      <p v-if="paletteError !== null" role="alert" class="text-sm text-[var(--lumin-color-error)]">
+        {{ paletteError.message }}
+        <span class="ml-2 text-xs opacity-70">{{ paletteError.code }}</span>
+      </p>
+
+      <div v-if="palette !== null" class="flex flex-col gap-3 sm:flex-row">
+        <div class="flex flex-col items-center gap-1 sm:w-40">
+          <img
+            :src="palette.previewUrl"
+            alt="已选择的图片预览"
+            class="max-h-40 w-full rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] object-contain"
+          />
+          <span class="w-full truncate text-center text-xs text-[var(--lumin-color-text-secondary)]">
+            {{ palette.fileName }}
+          </span>
+          <span class="text-xs text-[var(--lumin-color-text-secondary)]">
+            共 {{ palette.result.totalPixels }} 个像素
+          </span>
+        </div>
+        <div class="flex min-w-0 flex-1 flex-col gap-2">
+          <p
+            v-if="palette.result.colors.length === 0"
+            class="text-xs text-[var(--lumin-color-text-secondary)]"
+          >
+            图片中没有可统计的不透明像素，请换一张不透明的图片
+          </p>
+          <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <button
+              v-for="color in palette.result.colors"
+              :key="color.hex"
+              type="button"
+              :aria-label="`调色板 ${color.hex}`"
+              :title="`${color.hex} · ${color.percent}%`"
+              class="flex flex-col items-stretch gap-1"
+              @click="applyColor(color.rgb)"
+            >
+              <span
+                :class="swatchClass()"
+                class="h-10 w-full"
+                :style="{ backgroundColor: color.hex }"
+              />
+              <span class="font-mono text-xs text-[var(--lumin-color-text)]">{{ color.hex }}</span>
+              <span class="text-xs text-[var(--lumin-color-text-secondary)]">
+                {{ color.percent }}%
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <p
+        v-if="palette === null && paletteError === null"
+        class="text-xs text-[var(--lumin-color-text-secondary)]"
+      >
+        支持 PNG / JPEG / WebP 等常见格式，单张 ≤20MB；仅本地解析，不上传
+      </p>
     </section>
 
     <section
