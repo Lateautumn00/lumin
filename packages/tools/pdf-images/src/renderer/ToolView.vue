@@ -3,7 +3,17 @@
 // 作者：cuilanchao · 修改时间：2026-11-19
 // 三态强制（空态引导 / 加载可取消 / 结构化错误 + 重试）、tokens、@lucide/vue（AGENTS §5）
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { NButton, NEmpty, NInput, NInputNumber, NSpace, NTabPane, NTabs, NText } from 'naive-ui'
+import {
+  NButton,
+  NEmpty,
+  NInput,
+  NRadioButton,
+  NRadioGroup,
+  NSpace,
+  NTabPane,
+  NTabs,
+  NText
+} from 'naive-ui'
 import { ArrowDown, ArrowUp, FileImage, FolderOpen, X } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
@@ -12,9 +22,10 @@ import { moveItem } from '../contract'
 import { isRetryable } from '../errors'
 import {
   MAX_IMAGES,
-  MAX_MARGIN_MM,
+  MAX_OUTPUT_NAME_LEN,
   type Dpi,
   type OutputImageFormat,
+  type PageOrientation,
   type PageSizeMode,
   type PdfImagesFailure
 } from '../schema'
@@ -45,7 +56,37 @@ const dpiStr = ref('150')
 // —— 图片 → PDF ——
 const images = ref<string[]>([])
 const pageSize = ref<PageSizeMode>('auto')
+const orientation = ref<PageOrientation>('auto')
 const marginMm = ref(0)
+const outputName = ref('')
+
+/** 页面方向选项（仅固定纸型生效） */
+const ORIENTATION_OPTIONS: { label: string; value: PageOrientation }[] = [
+  { label: '自动', value: 'auto' },
+  { label: '竖版', value: 'portrait' },
+  { label: '横版', value: 'landscape' }
+]
+
+/** 页边距预设（mm，仅固定纸型生效） */
+const MARGIN_PRESETS: { label: string; value: number }[] = [
+  { label: '无', value: 0 },
+  { label: '小 10mm', value: 10 },
+  { label: '中 20mm', value: 20 },
+  { label: '大 40mm', value: 40 }
+]
+
+/** 固定纸型（A4/Letter）才显示方向与边距 */
+const fixedPage = computed(() => pageSize.value !== 'auto')
+
+/** 自定义输出文件名的行内校验（留空合法 = 使用默认命名） */
+const outputNameError = computed(() => {
+  const raw = outputName.value.trim()
+  if (raw === '') return ''
+  if (raw.length > MAX_OUTPUT_NAME_LEN) return `输出文件名最长 ${MAX_OUTPUT_NAME_LEN} 字符`
+  if (/[\\/:*?"<>|]/.test(raw)) return '输出文件名不能包含 \\ / : * ? " < > |'
+  if (/[. ]$/.test(raw)) return '输出文件名不能以点或空格结尾'
+  return ''
+})
 
 // —— 任务与结果 ——
 const phase = ref<'idle' | 'running'>('idle')
@@ -212,7 +253,9 @@ async function run(action: Action): Promise<void> {
         : imagesToPdf({
             inputPaths: images.value,
             pageSize: pageSize.value,
-            marginMm: pageSize.value === 'a4' ? marginMm.value : 0,
+            orientation: fixedPage.value ? orientation.value : 'auto',
+            marginMm: fixedPage.value ? marginMm.value : 0,
+            ...(outputName.value.trim() === '' ? {} : { outputName: outputName.value.trim() }),
             ...(dir === '' ? {} : { outputDir: dir })
           })
     const { taskId } = await submit
@@ -458,18 +501,45 @@ onUnmounted(detach)
           >
             <option value="auto">跟随图片尺寸</option>
             <option value="a4">A4（等比居中）</option>
+            <option value="letter">Letter（等比居中）</option>
           </select>
         </div>
-        <div v-if="pageSize === 'a4'" class="flex items-center gap-3">
+        <div v-if="fixedPage" class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">页面方向</NText>
+          <NRadioGroup v-model:value="orientation" :disabled="phase === 'running'">
+            <NRadioButton
+              v-for="opt in ORIENTATION_OPTIONS"
+              :key="opt.value"
+              :value="opt.value"
+              :label="opt.label"
+            />
+          </NRadioGroup>
+        </div>
+        <div v-if="fixedPage" class="flex items-center gap-3">
           <NText depth="2" class="w-20 text-sm">页边距</NText>
-          <NInputNumber
-            v-model:value="marginMm"
-            :min="0"
-            :max="MAX_MARGIN_MM"
-            :disabled="phase === 'running'"
-            class="w-40"
-          />
-          <NText depth="3" class="text-xs">mm（0–{{ MAX_MARGIN_MM }}）</NText>
+          <NRadioGroup v-model:value="marginMm" :disabled="phase === 'running'">
+            <NRadioButton
+              v-for="preset in MARGIN_PRESETS"
+              :key="preset.value"
+              :value="preset.value"
+              :label="preset.label"
+            />
+          </NRadioGroup>
+        </div>
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">输出文件名</NText>
+            <NInput
+              v-model:value="outputName"
+              :disabled="phase === 'running'"
+              placeholder="留空则用「首图名_合并.pdf」"
+              class="flex-1"
+            />
+            <NText depth="3" class="text-xs">.pdf</NText>
+          </div>
+          <NText v-if="outputNameError !== ''" type="warning" class="text-xs">
+            {{ outputNameError }}
+          </NText>
         </div>
         <div class="flex items-center gap-3">
           <NText depth="2" class="w-20 text-sm">输出目录</NText>
@@ -488,7 +558,7 @@ onUnmounted(detach)
       <NSpace>
         <NButton
           type="primary"
-          :disabled="phase !== 'idle' || images.length === 0"
+          :disabled="phase !== 'idle' || images.length === 0 || outputNameError !== ''"
           @click="run('img2pdf')"
         >
           开始合并

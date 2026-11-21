@@ -11,7 +11,7 @@ import { basename, join } from 'node:path'
 import { PDFDocument, type PDFImage } from 'pdf-lib'
 import { exposeTask, runProcess, SpawnError, tail, type TaskRunContext } from '@lumin/node-kit'
 import { uniqueFileName, type StructuredError } from '@lumin/shared'
-import { a4Layout, imageKind, mergedPdfName, toFailure } from './contract'
+import { imageKind, pageLayout, pdfOutputName, toFailure } from './contract'
 import { errnoCode, isStructuredError, toolError } from './errors'
 import type { ImagesToPdfRequest, ImagesToPdfResult, PdfImagesFailure } from './schema'
 
@@ -130,7 +130,7 @@ export async function runImagesToPdf(
   ctx: TaskRunContext,
   deps: ImagesWorkerDeps = defaultDeps
 ): Promise<ImagesToPdfResult> {
-  const { inputPaths, pageSize, marginMm, outputDir, ffmpegPath } = payload
+  const { inputPaths, pageSize, orientation, marginMm, outputName, outputDir, ffmpegPath } = payload
 
   try {
     await mkdir(outputDir, { recursive: true })
@@ -148,20 +148,15 @@ export async function runImagesToPdf(
       const label = basename(inputPath)
       try {
         const image = await embedImage(deps, pdf, inputPath, ffmpegPath, tmpDir, index)
-        if (pageSize === 'a4') {
-          const layout = a4Layout(image.width, image.height, marginMm)
-          if (layout === null) throw toolError('PI_PAGE_SIZE_INVALID', `${label} 尺寸无效`)
-          const page = pdf.addPage([layout.pageWidth, layout.pageHeight])
-          page.drawImage(image, {
-            x: layout.x,
-            y: layout.y,
-            width: layout.width,
-            height: layout.height
-          })
-        } else {
-          const page = pdf.addPage([image.width, image.height])
-          page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height })
-        }
+        const layout = pageLayout(image.width, image.height, { pageSize, orientation, marginMm })
+        if (layout === null) throw toolError('PI_PAGE_SIZE_INVALID', `${label} 尺寸无效`)
+        const page = pdf.addPage([layout.pageWidth, layout.pageHeight])
+        page.drawImage(image, {
+          x: layout.x,
+          y: layout.y,
+          width: layout.width,
+          height: layout.height
+        })
         pages += 1
       } catch (err) {
         const structured = isStructuredError(err)
@@ -194,7 +189,10 @@ export async function runImagesToPdf(
   const firstInput = inputPaths[0]
   if (firstInput === undefined) throw toolError('PI_CONVERT_FAILED')
 
-  const name = uniqueFileName(await existingNames(outputDir), basename(mergedPdfName(firstInput)))
+  const name = uniqueFileName(
+    await existingNames(outputDir),
+    basename(pdfOutputName(firstInput, outputName))
+  )
   const finalPath = join(outputDir, name)
   const tmpPath = `${finalPath}.tmp`
   try {

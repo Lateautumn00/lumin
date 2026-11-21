@@ -198,7 +198,9 @@ export function registerWith(ctx: MainPluginContext, deps: PdfImagesDeps): void 
     const request: ImagesToPdfRequest = {
       inputPaths: parsed.inputPaths,
       pageSize: parsed.pageSize,
+      orientation: parsed.orientation,
       marginMm: parsed.marginMm,
+      ...(parsed.outputName === undefined ? {} : { outputName: parsed.outputName }),
       outputDir,
       ffmpegPath
     }

@@ -26,12 +26,31 @@ export type Dpi = (typeof DPI_VALUES)[number]
 export const IMAGE_FORMATS = ['png', 'jpeg'] as const
 export type OutputImageFormat = (typeof IMAGE_FORMATS)[number]
 
-/** 图片→PDF 页面模式：auto = 跟随图片尺寸单页；a4 = A4 等比居中并留边距 */
-export const PAGE_SIZES = ['auto', 'a4'] as const
+/** 图片→PDF 页面模式：auto = 跟随图片尺寸单页；a4/letter = 固定纸型等比居中并留边距 */
+export const PAGE_SIZES = ['auto', 'a4', 'letter'] as const
 export type PageSizeMode = (typeof PAGE_SIZES)[number]
+
+/** 固定纸型的页面方向：auto = 跟随图片宽高；portrait/landscape = 强制 */
+export const PAGE_ORIENTATIONS = ['auto', 'portrait', 'landscape'] as const
+export type PageOrientation = (typeof PAGE_ORIENTATIONS)[number]
 
 /** A4 页边距上限（mm） */
 export const MAX_MARGIN_MM = 50
+
+/** 自定义输出文件名长度上限 */
+export const MAX_OUTPUT_NAME_LEN = 80
+
+/** Windows 文件名非法字符（路径分隔符与保留符号） */
+const OUTPUT_NAME_INVALID_RE = /[\\/:*?"<>|]/
+
+/** 自定义输出文件名：去首尾空白、禁非法字符与结尾点/空格（`pdf` 后缀由命名函数统一补） */
+export const outputNameSchema = z
+  .string()
+  .trim()
+  .min(1, '输出文件名不能为空')
+  .max(MAX_OUTPUT_NAME_LEN, `输出文件名最长 ${MAX_OUTPUT_NAME_LEN} 字符`)
+  .refine((value) => !OUTPUT_NAME_INVALID_RE.test(value), '输出文件名不能包含 \\ / : * ? " < > |')
+  .refine((value) => !/[. ]$/.test(value), '输出文件名不能以点或空格结尾')
 
 export const pdfInfoPayloadSchema = z.object({
   inputPath: z.string().min(1).regex(PDF_INPUT_RE, '仅支持 PDF 文件')
@@ -57,7 +76,9 @@ export const imagesToPdfPayloadSchema = z.object({
     .min(1, '至少添加一张图片')
     .max(MAX_IMAGES, `单次最多 ${MAX_IMAGES} 张图片`),
   pageSize: z.enum(PAGE_SIZES),
+  orientation: z.enum(PAGE_ORIENTATIONS).default('auto'),
   marginMm: z.number().min(0).max(MAX_MARGIN_MM, `页边距最大 ${MAX_MARGIN_MM} mm`),
+  outputName: outputNameSchema.optional(),
   outputDir: z.string().min(1).optional()
 })
 
@@ -116,7 +137,10 @@ export interface PdfToImagesRequest {
 export interface ImagesToPdfRequest {
   inputPaths: string[]
   pageSize: PageSizeMode
+  orientation: PageOrientation
   marginMm: number
+  /** 自定义输出文件名（不含扩展名亦可；缺省用首图基名模板） */
+  outputName?: string
   outputDir: string
   ffmpegPath: string
 }

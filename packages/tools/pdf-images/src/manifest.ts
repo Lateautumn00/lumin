@@ -14,5 +14,5 @@ export const manifest = defineManifest({
   icon: 'file-image',
   category: 'document',
   order: 70,
-  version: '0.1.0'
+  version: '0.2.0'
 })
