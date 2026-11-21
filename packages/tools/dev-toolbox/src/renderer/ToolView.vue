@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 开发工具主视图（M42）
 // 作者：cuilanchao · 修改时间：2026-11-21
-// 三页签：端口占用 / CURL 转代码 / 静态服务器；静态服务器跑在主进程，切走页签不打断
+// 五页签：端口占用 / CURL 转代码 / JWT 解码 / UUID 生成 / 静态服务器；静态服务器跑在主进程，切走页签不打断
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { NAlert, NButton, NTabPane, NTabs, NTag } from 'naive-ui'
 import { toStructuredError, type StructuredError } from '@lumin/shared'
@@ -9,6 +9,8 @@ import { DEFAULT_SERVER_PORT, type AccessLog } from '../schema'
 import { config, serverStart, serverStatus, serverStop, setConfig } from './client'
 import PortsPanel from './PortsPanel.vue'
 import CurlPanel from './CurlPanel.vue'
+import JwtPanel from './JwtPanel.vue'
+import UuidPanel from './UuidPanel.vue'
 import ServerPanel from './ServerPanel.vue'
 
 /** 服务器视图状态（与 IPC 出参同形） */
@@ -150,7 +152,8 @@ onUnmounted(() => {
     <div>
       <h1 class="text-base font-semibold">开发工具</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        端口占用查询与进程结束、CURL 命令转代码、本地静态服务器（全部本机运行，仅监听 127.0.0.1）
+        端口占用查询与进程结束、CURL 命令转代码、JWT 解码、UUID
+        生成、本地静态服务器（全部本机运行，仅监听 127.0.0.1）
       </p>
     </div>
 
@@ -173,6 +176,12 @@ onUnmounted(() => {
       <NTabPane name="curl">
         <template #tab>CURL 转代码</template>
       </NTabPane>
+      <NTabPane name="jwt">
+        <template #tab>JWT 解码</template>
+      </NTabPane>
+      <NTabPane name="uuid">
+        <template #tab>UUID 生成</template>
+      </NTabPane>
       <NTabPane name="server">
         <template #tab>静态服务器</template>
       </NTabPane>
@@ -180,6 +189,8 @@ onUnmounted(() => {
 
     <PortsPanel v-if="activeTab === 'ports'" />
     <CurlPanel v-else-if="activeTab === 'curl'" />
+    <JwtPanel v-else-if="activeTab === 'jwt'" />
+    <UuidPanel v-else-if="activeTab === 'uuid'" />
 
     <div v-else class="flex flex-col gap-3">
       <ServerPanel

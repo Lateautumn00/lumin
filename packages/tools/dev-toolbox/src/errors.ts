@@ -20,7 +20,8 @@ export const DEV_TOOLBOX_ERROR_CODES = [
   'DT_CURL_PARSE_FAILED',
   'DT_ROOT_INVALID',
   'DT_PORT_IN_USE',
-  'DT_SERVER_FAILED'
+  'DT_SERVER_FAILED',
+  'DT_JWT_INVALID'
 ] as const
 
 export type DevToolboxErrorCode = (typeof DEV_TOOLBOX_ERROR_CODES)[number]
@@ -35,7 +36,8 @@ const MESSAGES: Record<DevToolboxErrorCode, string> = {
   DT_CURL_PARSE_FAILED: 'CURL 命令解析失败',
   DT_ROOT_INVALID: '根目录无效（不存在或不是目录）',
   DT_PORT_IN_USE: '端口已被占用',
-  DT_SERVER_FAILED: '启动静态服务器失败'
+  DT_SERVER_FAILED: '启动静态服务器失败',
+  DT_JWT_INVALID: 'JWT 格式无效'
 }
 
 /** 可重试错误码（renderer 据此显示 [重试]） */
