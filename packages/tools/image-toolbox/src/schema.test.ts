@@ -7,7 +7,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   compressOptionsSchema,
+  effectOptionsSchema,
   extensionOf,
+  gifOptionsSchema,
+  makeGifPayloadSchema,
   normalizeExtension,
   processPayloadSchema,
   probeResultSchema,
@@ -241,6 +244,73 @@ describe('processPayloadSchema（spec §4 discriminated union）', () => {
         files,
         outputDir: 'C:\\out',
         options: { mode: 'percent', percent: 50, noUpscale: true, format: 'jpg', quality: 75 }
+      })
+    ).toThrow()
+  })
+
+  it('effect 合法通过（M40）', () => {
+    expect(
+      processPayloadSchema.parse({
+        mode: 'effect',
+        files,
+        outputDir: 'C:\\out',
+        options: { effect: 'binary', threshold: 200, quality: 75 }
+      })
+    ).toMatchObject({ mode: 'effect' })
+  })
+
+  it('effect 阈值越界/未知效果拒绝', () => {
+    expect(() =>
+      effectOptionsSchema.parse({ effect: 'binary', threshold: 256, quality: 75 })
+    ).toThrow()
+    expect(() =>
+      effectOptionsSchema.parse({ effect: 'sepia', threshold: 128, quality: 75 })
+    ).toThrow()
+  })
+})
+
+describe('gifOptionsSchema / makeGifPayloadSchema（M40，spec §2.5）', () => {
+  it('durationMs 50–5000 边界', () => {
+    expect(gifOptionsSchema.parse({ durationMs: 50, loop: 0, width: 0 })).toMatchObject({
+      durationMs: 50
+    })
+    expect(gifOptionsSchema.parse({ durationMs: 5000, loop: -1, width: 4096 })).toMatchObject({
+      durationMs: 5000
+    })
+    expect(() => gifOptionsSchema.parse({ durationMs: 49, loop: 0, width: 0 })).toThrow()
+    expect(() => gifOptionsSchema.parse({ durationMs: 5001, loop: 0, width: 0 })).toThrow()
+  })
+
+  it('loop 仅 -1/0/2–10', () => {
+    for (const loop of [-1, 0, 2, 5, 10]) {
+      expect(gifOptionsSchema.parse({ durationMs: 500, loop, width: 0 })).toMatchObject({ loop })
+    }
+    for (const loop of [-2, 1, 11]) {
+      expect(() => gifOptionsSchema.parse({ durationMs: 500, loop, width: 0 })).toThrow()
+    }
+  })
+
+  it('width 仅 0 或 64–4096', () => {
+    expect(() => gifOptionsSchema.parse({ durationMs: 500, loop: 0, width: 63 })).toThrow()
+    expect(() => gifOptionsSchema.parse({ durationMs: 500, loop: 0, width: 4097 })).toThrow()
+    expect(gifOptionsSchema.parse({ durationMs: 500, loop: 0, width: 64 })).toMatchObject({
+      width: 64
+    })
+  })
+
+  it('make-gif 文件数 1–100', () => {
+    const one = makeGifPayloadSchema.parse({
+      files: ['C:\\a.png'],
+      outputDir: 'C:\\out',
+      options: { durationMs: 500, loop: 0, width: 0 }
+    })
+    expect(one.files).toHaveLength(1)
+    const many = Array.from({ length: 101 }, (_, i) => `C:\\f${i}.png`)
+    expect(() =>
+      makeGifPayloadSchema.parse({
+        files: many,
+        outputDir: 'C:\\out',
+        options: { durationMs: 500, loop: 0, width: 0 }
       })
     ).toThrow()
   })

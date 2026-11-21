@@ -18,7 +18,7 @@ import type {
 import type { TaskUpdate } from '@lumin/shared'
 import { manifest } from './manifest'
 import { createNodeDeps, mapWorkerError, registerMain, registerWith, type ImageStitchDeps } from './node'
-import { MAX_IMAGE_BYTES, type StitchPayload } from './schema'
+import { MAX_IMAGE_BYTES, type SplitPayload, type StitchPayload } from './schema'
 
 interface HarnessOptions {
   result?: unknown
@@ -59,6 +59,7 @@ function createHarness(options: HarnessOptions = {}): Harness {
 
   const deps: ImageStitchDeps = {
     workerPath: join(root, 'stitch.worker.js'),
+    splitWorkerPath: join(root, 'split.worker.js'),
     run: <P, R>(runOptions: RunTaskOptions<P>): Promise<R> => {
       calls.push(runOptions as RunTaskOptions<unknown>)
       if (options.runError !== undefined) return Promise.reject(options.runError)
@@ -287,6 +288,71 @@ describe('stitch 任务', () => {
   })
 })
 
+function splitPayload(overrides: Partial<SplitPayload> = {}): SplitPayload {
+  return {
+    inputPath: 'C:\\imgs\\long.png',
+    mode: 'height',
+    height: 1000,
+    parts: 3,
+    quality: 90,
+    ...overrides
+  }
+}
+
+describe('split 任务（M40）', () => {
+  it('正常入参 → 记忆目录解析 + 参数透传 + 独立 worker', async () => {
+    const result = {
+      outputs: [{ path: 'D:\\out\\long_part01.png', width: 800, height: 1000 }],
+      sourceWidth: 800,
+      sourceHeight: 1000
+    }
+    const harness = createHarness({ result })
+    harness.settings.set('outputDir', 'D:\\out')
+    await expect(runTask(harness, 'split', splitPayload())).resolves.toEqual(result)
+    expect(harness.calls).toHaveLength(1)
+    expect(harness.calls[0]?.payload).toEqual({
+      inputPath: 'C:\\imgs\\long.png',
+      mode: 'height',
+      height: 1000,
+      parts: 3,
+      quality: 90,
+      outputDir: 'D:\\out'
+    })
+    expect(harness.calls[0]?.workerPath).toBe(join(harness.root, 'split.worker.js'))
+  })
+
+  it('非法入参（扩展名/份数/高度越界）→ IS_INVALID_PAYLOAD', async () => {
+    const harness = createHarness()
+    await expect(
+      runTask(harness, 'split', splitPayload({ inputPath: 'C:\\imgs\\a.gif' }))
+    ).rejects.toMatchObject({ code: 'IS_INVALID_PAYLOAD' })
+    await expect(runTask(harness, 'split', splitPayload({ parts: 1 }))).rejects.toMatchObject({
+      code: 'IS_INVALID_PAYLOAD'
+    })
+    await expect(runTask(harness, 'split', splitPayload({ height: 10 }))).rejects.toMatchObject({
+      code: 'IS_INVALID_PAYLOAD'
+    })
+    expect(harness.calls).toHaveLength(0)
+  })
+
+  it('输入缺失 → IS_INPUT_INVALID；体积超限 → IS_IMAGE_TOO_LARGE', async () => {
+    await expect(
+      runTask(
+        createHarness({ checkReadable: () => Promise.reject(errnoError('ENOENT')) }),
+        'split',
+        splitPayload()
+      )
+    ).rejects.toMatchObject({ code: 'IS_INPUT_INVALID', detail: 'ENOENT' })
+    await expect(
+      runTask(
+        createHarness({ statSize: () => Promise.resolve(MAX_IMAGE_BYTES + 1) }),
+        'split',
+        splitPayload()
+      )
+    ).rejects.toMatchObject({ code: 'IS_IMAGE_TOO_LARGE' })
+  })
+})
+
 describe('生产 deps 与注册入口', () => {
   it('createNodeDeps 真实 fs 实现可读/独占/体积/建目录', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'lumin-is-deps-'))
@@ -304,7 +370,7 @@ describe('生产 deps 与注册入口', () => {
     await expect(deps.statSize(join(dir, 'nope.txt'))).rejects.toThrow()
   })
 
-  it('registerMain 注册 config/set-output-dir/stitch 三通道', () => {
+  it('registerMain 注册 config/set-output-dir/stitch/split 四通道', () => {
     const seenIpc: string[] = []
     const seenTask: string[] = []
     const ctx = {
@@ -318,6 +384,6 @@ describe('生产 deps 与注册入口', () => {
     } as unknown as MainPluginContext
     registerMain(ctx)
     expect(seenIpc).toEqual(['config', 'set-output-dir'])
-    expect(seenTask).toEqual(['stitch'])
+    expect(seenTask).toEqual(['stitch', 'split'])
   })
 })

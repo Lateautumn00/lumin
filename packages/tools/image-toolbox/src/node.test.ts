@@ -170,19 +170,20 @@ async function invokeIpc(harness: Harness, action: string, payload: unknown): Pr
 async function runTask(
   harness: Harness,
   payload: unknown,
-  opts: { signal?: AbortSignal } = {}
+  opts: { signal?: AbortSignal; action?: string } = {}
 ): Promise<{ result: unknown; updates: TaskUpdate[]; error?: StructuredError }> {
+  const action = opts.action ?? 'process'
   const updates: TaskUpdate[] = []
   const taskCtx: TaskHandlerContext<unknown> = {
     toolId: manifest.id,
-    action: 'process',
+    action,
     payload,
     taskId: 'task-1',
     signal: opts.signal ?? new AbortController().signal,
     emit: (update) => updates.push(update)
   }
   try {
-    const result = await mustGet(harness.tasks, 'process')(taskCtx)
+    const result = await mustGet(harness.tasks, action)(taskCtx)
     return { result, updates }
   } catch (err) {
     return { result: undefined, updates, error: err as StructuredError }
@@ -592,5 +593,142 @@ describe('process', () => {
     writeFileSync(blocked, 'not a dir')
     const { error } = await runTask(harness, compressPayload(['C:\\a.jpg'], blocked))
     expect(error).toMatchObject({ code: 'IT_OUTPUT_WRITE_FAILED' })
+  })
+})
+
+describe('process effect（M40 调整）', () => {
+  it('灰度：输出 .gray + hue=s=0 滤镜，不探测尺寸', async () => {
+    const harness = createHarness()
+    const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
+    roots.push(outDir)
+    const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(inDir)
+    const { result, error } = await runTask(harness, {
+      mode: 'effect',
+      files: [makeInput(inDir, 'photo.jpg')],
+      outputDir: outDir,
+      options: { effect: 'grayscale', threshold: 128, quality: 75 }
+    })
+    expect(error).toBeUndefined()
+    const r = result as { outputs: { output: string }[]; failures: unknown[] }
+    expect(firstOf(r.outputs).output).toBe(join(outDir, 'photo.gray.jpg'))
+    const call = findEncodeCall(harness)
+    expect(call?.args).toContain('-vf')
+    expect(call?.args).toContain('hue=s=0')
+    expect(harness.calls.filter((c) => c.args?.[0] === '-hide_banner')).toHaveLength(0)
+  })
+
+  it('黑白二值：输出 .bw{阈值} + lut 阈值表达式', async () => {
+    const harness = createHarness()
+    const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
+    roots.push(outDir)
+    const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(inDir)
+    const { result } = await runTask(harness, {
+      mode: 'effect',
+      files: [makeInput(inDir, 'photo.png')],
+      outputDir: outDir,
+      options: { effect: 'binary', threshold: 200, quality: 75 }
+    })
+    const r = result as { outputs: { output: string }[] }
+    expect(firstOf(r.outputs).output).toBe(join(outDir, 'photo.bw200.png'))
+    expect(findEncodeCall(harness)?.args).toContain("format=gray,lut=y='if(gt(val,200),255,0)'")
+  })
+})
+
+describe('make-gif（M40）', () => {
+  const gifPayload = (files: string[], outputDir: string) => ({
+    files,
+    outputDir,
+    options: { durationMs: 500, loop: 0, width: 0 }
+  })
+
+  it('三帧 → 画布规划/帧率/循环/filter_complex + 结果体积', async () => {
+    const harness = createHarness({
+      outputBytes: 2048,
+      probeResponses: [probeStderr(200, 100, 'png'), probeStderr(100, 100, 'png')]
+    })
+    const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
+    roots.push(outDir)
+    const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(inDir)
+    const files = [
+      makeInput(inDir, '1.png'),
+      makeInput(inDir, '2.png'),
+      makeInput(inDir, '3.png')
+    ]
+    const { result, updates, error } = await runTask(harness, gifPayload(files, outDir), {
+      action: 'make-gif'
+    })
+    expect(error).toBeUndefined()
+    const r = result as { outputPath: string; width: number; height: number; frames: number; sizeBytes: number }
+    expect(r.width).toBe(200)
+    expect(r.height).toBe(200)
+    expect(r.frames).toBe(3)
+    expect(r.sizeBytes).toBe(2048)
+    expect(r.outputPath).toMatch(/动图_\d{8}-\d{6}\.gif$/)
+    const call = findEncodeCall(harness)
+    expect(call?.args).toContain('-framerate')
+    expect(call?.args).toContain('2')
+    expect(call?.args).toContain('-loop')
+    expect(call?.args).toContain('0')
+    const graph = call?.args?.[call.args.indexOf('-filter_complex') + 1]
+    expect(graph).toContain('concat=n=3:v=1:a=0')
+    expect(graph).toContain('palettegen')
+    expect(graph).toContain('paletteuse')
+    // 进度：读取 1/3、2/3、3/3 + 编码 GIF
+    expect(updates.filter((u) => u.kind === 'progress')).toHaveLength(4)
+    expect(harness.settings.get('outputDir')).toBe(outDir)
+  })
+
+  it('画布超限 → IT_GIF_TOO_LARGE（不触编码）', async () => {
+    const harness = createHarness({ probeResponses: [probeStderr(5000, 5000, 'png')] })
+    const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
+    roots.push(outDir)
+    const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(inDir)
+    const { error } = await runTask(
+      harness,
+      gifPayload([makeInput(inDir, 'big.png')], outDir),
+      { action: 'make-gif' }
+    )
+    expect(error).toMatchObject({ code: 'IT_GIF_TOO_LARGE' })
+    expect(harness.calls.filter((c) => c.args?.[0] === '-y')).toHaveLength(0)
+  })
+
+  it('取消 → IT_CANCELLED；ffmpeg 失败 → 结构化错误', async () => {
+    const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
+    roots.push(outDir)
+    const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(inDir)
+    const file = makeInput(inDir, 'a.png')
+    const cancelled = await runTask(
+      createHarness({ abortAfterRun: true }),
+      gifPayload([file], outDir),
+      { action: 'make-gif' }
+    )
+    expect(cancelled.error).toMatchObject({ code: 'IT_CANCELLED' })
+    const failed = await runTask(
+      createHarness({ ffmpegCode: 1, ffmpegStderr: 'No space left on device' }),
+      gifPayload([file], outDir),
+      { action: 'make-gif' }
+    )
+    expect(failed.error).toMatchObject({ code: 'IT_OUTPUT_WRITE_FAILED' })
+  })
+
+  it('非法入参 / 不支持的扩展名 → 结构化错误', async () => {
+    const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
+    roots.push(outDir)
+    const harness = createHarness()
+    const bad = await runTask(harness, { files: [], outputDir: outDir }, { action: 'make-gif' })
+    expect(bad.error).toMatchObject({ code: 'INVALID_PAYLOAD' })
+    const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(inDir)
+    const exe = await runTask(
+      harness,
+      gifPayload([makeInput(inDir, 'a.exe')], outDir),
+      { action: 'make-gif' }
+    )
+    expect(exe.error).toMatchObject({ code: 'IT_FILE_UNSUPPORTED' })
   })
 })

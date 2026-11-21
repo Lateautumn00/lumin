@@ -6,7 +6,7 @@
  *              锁定 probe/process/config 通道拼写与 revealPath 壳通道复用
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { config, process, probe, revealPath, saveOutputDir } from './client'
+import { config, makeGif, process, probe, revealPath, saveOutputDir } from './client'
 
 const invoke = vi.fn(async () => ({ echoed: true }))
 const reveal = vi.fn(async () => undefined)
@@ -41,6 +41,18 @@ describe('client 通道封装（AGENTS §6 白名单 bridge）', () => {
     await expect(process(payload)).resolves.toEqual({ echoed: true })
     expect(invoke).toHaveBeenCalledOnce()
     expect(invoke).toHaveBeenCalledWith('image-toolbox:process', payload)
+  })
+
+  it('make-gif 长任务（M40）：通道名与负载透传', async () => {
+    stubBridge()
+    const payload = {
+      files: ['C:\\a.png', 'C:\\b.png'],
+      outputDir: 'E:\\out',
+      options: { durationMs: 500, loop: 0, width: 320 }
+    }
+    await expect(makeGif(payload)).resolves.toEqual({ echoed: true })
+    expect(invoke).toHaveBeenCalledOnce()
+    expect(invoke).toHaveBeenCalledWith('image-toolbox:make-gif', payload)
   })
 
   it('config sync：空负载', async () => {

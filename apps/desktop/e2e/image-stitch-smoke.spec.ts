@@ -92,7 +92,7 @@ test.describe('image-stitch（图片拼接）冒烟', () => {
       await setOutputDir(page, outDir)
 
       await clickSidebarTool(page, '图片拼接')
-      await expect(page.getByRole('heading', { name: '图片拼接' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: '图片拼接与分割' })).toBeVisible()
       await expect(page.getByText('拖拽图片到此处，或点击选择（可多选）')).toBeVisible()
 
       await page.setInputFiles('input[type="file"]', [first, second])
@@ -195,6 +195,46 @@ test.describe('image-stitch（图片拼接）冒烟', () => {
         ? fs.readdirSync(outDir).filter((name) => name.endsWith('.tmp'))
         : []
       expect(leftovers).toEqual([])
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('M40 长图分割：固定高度 3 段 + 按份数 2 段 + 中文空格路径 + 冲突递增', async () => {
+    const { app, page } = await launch()
+    const workDir = freshDir('lumin-is-e2e-split')
+    const outDir = path.join(workDir, '输出 目录')
+    try {
+      const input = path.join(workDir, '长图 素材.png')
+      writePng(input, 200, 900, '#808080')
+      await setOutputDir(page, outDir)
+
+      await clickSidebarTool(page, '图片拼接')
+      const splitTab = page.locator('.n-tabs-tab[data-name="split"]')
+      await expect(splitTab).toHaveText('长图分割')
+      await splitTab.click()
+      await page.setInputFiles('input[type="file"]', input)
+      await expect(page.getByText('已选 1 张')).toBeVisible()
+
+      await page.locator('[data-testid="split-height"] input').fill('300')
+      await page.getByTestId('split-run').click()
+      await expect(page.getByTestId('split-result')).toContainText('已切分 3 段', {
+        timeout: 30_000
+      })
+      const first = path.join(outDir, '长图 素材_part01.png')
+      expect(fs.existsSync(first)).toBe(true)
+      expect(fs.existsSync(path.join(outDir, '长图 素材_part03.png'))).toBe(true)
+
+      // 按份数 2：同名冲突递增（原 3 段文件保留）
+      await page.getByText('按份数', { exact: true }).click()
+      await page.locator('[data-testid="split-parts"] input').fill('2')
+      await page.getByTestId('split-run').click()
+      await expect(page.getByTestId('split-result')).toContainText('已切分 2 段', {
+        timeout: 30_000
+      })
+      expect(fs.existsSync(path.join(outDir, '长图 素材_part01 (1).png'))).toBe(true)
+      expect(fs.existsSync(path.join(outDir, '长图 素材_part02 (1).png'))).toBe(true)
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true })
       await app.close()

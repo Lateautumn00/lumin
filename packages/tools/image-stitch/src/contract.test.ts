@@ -11,11 +11,14 @@ import {
   fitInBox,
   MAX_CANVAS_EDGE,
   MAX_CANVAS_PIXELS,
+  MAX_SPLIT_SLICES,
   outputFileName,
   planLayout,
   planOverLimit,
+  planSplit,
   scaleToHeight,
   scaleToWidth,
+  splitFileName,
   timestampName,
   type LayoutPlan
 } from './contract'
@@ -185,6 +188,63 @@ describe('planOverLimit', () => {
       planOverLimit({ width: 20_000, height: MAX_CANVAS_PIXELS / 20_000 + 1, placements: [] })
     ).toBe(true)
     expect(planOverLimit({ width: 1000, height: 1000, placements: [] })).toBe(false)
+  })
+})
+
+describe('planSplit 固定高度（M40）', () => {
+  it('整除与末段余量', () => {
+    expect(planSplit(900, 'height', 300)).toEqual({
+      slices: [
+        { y: 0, h: 300 },
+        { y: 300, h: 300 },
+        { y: 600, h: 300 }
+      ]
+    })
+    expect(planSplit(1000, 'height', 300)?.slices.map((s) => s.h)).toEqual([300, 300, 300, 100])
+  })
+
+  it('非法高度 / 超段数上限 → null', () => {
+    expect(planSplit(0, 'height', 300)).toBeNull()
+    expect(planSplit(900, 'height', 0)).toBeNull()
+    expect(planSplit(MAX_SPLIT_SLICES * 50 + 1, 'height', 50)).toBeNull()
+  })
+})
+
+describe('planSplit 按份数（M40）', () => {
+  it('余数摊到前几段', () => {
+    expect(planSplit(91, 'parts', 3)?.slices).toEqual([
+      { y: 0, h: 31 },
+      { y: 31, h: 30 },
+      { y: 61, h: 30 }
+    ])
+    expect(planSplit(10, 'parts', 4)?.slices.map((s) => s.h)).toEqual([3, 3, 2, 2])
+  })
+
+  it('份数超过图高/少于 2/超上限 → null', () => {
+    expect(planSplit(10, 'parts', 11)).toBeNull()
+    expect(planSplit(10, 'parts', 1)).toBeNull()
+    expect(planSplit(1000, 'parts', MAX_SPLIT_SLICES + 1)).toBeNull()
+  })
+
+  it('非整数高度与份数向下取整', () => {
+    expect(planSplit(100.9, 'height', 50)?.slices.map((s) => s.h)).toEqual([50, 50])
+    expect(planSplit(100, 'parts', 3.9)?.slices).toHaveLength(3)
+  })
+})
+
+describe('splitFileName（M40）', () => {
+  it('序号 1 起、补零至少 2 位', () => {
+    expect(splitFileName('长 图.png', 1, 3, 'png')).toBe('长 图_part01.png')
+    expect(splitFileName('a.jpg', 2, 3, 'jpg')).toBe('a_part02.jpg')
+  })
+
+  it('段数 ≥100 时补零到 3 位', () => {
+    expect(splitFileName('a.png', 1, 100, 'png')).toBe('a_part001.png')
+    expect(splitFileName('a.png', 100, 100, 'png')).toBe('a_part100.png')
+  })
+
+  it('无扩展名/非法序号兜底', () => {
+    expect(splitFileName('README', 0, 2, 'png')).toBe('README_part01.png')
   })
 })
 

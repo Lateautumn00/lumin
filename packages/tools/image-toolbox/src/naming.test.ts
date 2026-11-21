@@ -92,6 +92,37 @@ describe('buildOutputName（spec §6 模板）', () => {
   it('无扩展名输入 → 整名为主名', () => {
     expect(buildOutputName({ inputName: 'README', mode: 'convert', ext: 'png' })).toBe('README.png')
   })
+
+  it('调整（M40）：灰度/反色/黑白二值标签', () => {
+    expect(
+      buildOutputName({
+        inputName: 'photo.jpg',
+        mode: 'effect',
+        effect: { kind: 'grayscale' },
+        ext: 'jpg'
+      })
+    ).toBe('photo.gray.jpg')
+    expect(
+      buildOutputName({
+        inputName: 'photo.png',
+        mode: 'effect',
+        effect: { kind: 'invert' },
+        ext: 'png'
+      })
+    ).toBe('photo.invert.png')
+    expect(
+      buildOutputName({
+        inputName: 'photo.webp',
+        mode: 'effect',
+        effect: { kind: 'binary', threshold: 200 },
+        ext: 'webp'
+      })
+    ).toBe('photo.bw200.webp')
+  })
+
+  it('调整缺少 effect → 仅加扩展名（兜底路径）', () => {
+    expect(buildOutputName({ inputName: 'a.jpg', mode: 'effect', ext: 'jpg' })).toBe('a.jpg')
+  })
 })
 
 describe('uniqueName（spec §6 冲突自动重命名）', () => {

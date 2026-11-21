@@ -11,6 +11,7 @@ import {
   pickDirectory,
   revealPath,
   setOutputDir,
+  split,
   submitStitch
 } from './client'
 
@@ -53,6 +54,20 @@ describe('client 通道', () => {
     invoke.mockResolvedValueOnce({ taskId: 'task-1' })
     await expect(submitStitch(payload)).resolves.toEqual({ taskId: 'task-1' })
     expect(invoke).toHaveBeenCalledWith('image-stitch:stitch', payload)
+  })
+
+  it('split → image-stitch:split 透传载荷（M40）', async () => {
+    const payload = {
+      inputPath: 'C:\\imgs\\long.png',
+      mode: 'height' as const,
+      height: 1000,
+      parts: 3,
+      quality: 90,
+      outputDir: 'D:\\out'
+    }
+    invoke.mockResolvedValueOnce({ taskId: 'task-2' })
+    await expect(split(payload)).resolves.toEqual({ taskId: 'task-2' })
+    expect(invoke).toHaveBeenCalledWith('image-stitch:split', payload)
   })
 
   it('config / setOutputDir 走同步通道', async () => {
