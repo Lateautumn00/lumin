@@ -38,6 +38,7 @@ import {
   Settings,
   Stamp,
   Terminal,
+  Timer,
   Wrench,
   type LucideIcon
 } from '@lucide/vue'
@@ -82,6 +83,7 @@ const iconMap: Record<string, LucideIcon> = {
   palette: Palette,
   'piggy-bank': PiggyBank,
   terminal: Terminal,
+  timer: Timer,
   wrench: Wrench
 }
 
