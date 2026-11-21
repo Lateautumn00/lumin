@@ -192,6 +192,40 @@ export const pageNumberPayloadSchema = z.object({
 })
 export type PageNumberPayload = z.infer<typeof pageNumberPayloadSchema>
 
+/** 压缩档位（M38） */
+export const COMPRESS_LEVELS = ['low', 'medium', 'high'] as const
+
+export type CompressLevel = (typeof COMPRESS_LEVELS)[number]
+
+/** 档位 → 渲染 DPI 与 JPEG 质量（单源，worker 与文档同口径） */
+export const COMPRESS_PRESETS: Record<CompressLevel, { dpi: number; quality: number }> = {
+  low: { dpi: 96, quality: 60 },
+  medium: { dpi: 150, quality: 75 },
+  high: { dpi: 200, quality: 85 }
+}
+
+/** 文本提取（M38）：ranges 留空 = 全部页 */
+export const extractTextPayloadSchema = z.object({
+  inputPath: pdfPathSchema,
+  ranges: optionalRangesSchema
+})
+export type ExtractTextPayload = z.infer<typeof extractTextPayloadSchema>
+
+/** 图片提取（M38）：ranges 留空 = 全部页 */
+export const extractImagesPayloadSchema = z.object({
+  inputPath: pdfPathSchema,
+  ranges: optionalRangesSchema
+})
+export type ExtractImagesPayload = z.infer<typeof extractImagesPayloadSchema>
+
+/** 压缩（M38）：ranges 留空 = 全部页；level 三档 */
+export const compressPayloadSchema = z.object({
+  inputPath: pdfPathSchema,
+  ranges: optionalRangesSchema,
+  level: z.enum(COMPRESS_LEVELS)
+})
+export type CompressPayload = z.infer<typeof compressPayloadSchema>
+
 /** PDF 元数据快照（缺省字段归一为空串） */
 export interface PdfMetadata {
   title: string

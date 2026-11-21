@@ -23,7 +23,10 @@ export const PDF_TOOLKIT_ERROR_CODES = [
   'PT_TIMEOUT',
   'PT_OP_FAILED',
   'PT_WATERMARK_INVALID',
-  'PT_PAGE_NUMBER_INVALID'
+  'PT_PAGE_NUMBER_INVALID',
+  'PT_NO_TEXT_LAYER',
+  'PT_NO_IMAGES',
+  'PT_TOO_MANY_IMAGES'
 ] as const
 
 export type PdfToolkitErrorCode = (typeof PDF_TOOLKIT_ERROR_CODES)[number]
@@ -41,7 +44,10 @@ const MESSAGES: Record<PdfToolkitErrorCode, string> = {
   PT_TIMEOUT: '处理超时（120 秒），已终止',
   PT_OP_FAILED: '处理失败，请重试或查看详情',
   PT_WATERMARK_INVALID: '水印内容无效，请检查文字或图片',
-  PT_PAGE_NUMBER_INVALID: '页码参数无效，请检查格式、位置与起始页'
+  PT_PAGE_NUMBER_INVALID: '页码参数无效，请检查格式、位置与起始页',
+  PT_NO_TEXT_LAYER: '未检测到文本层（可能为扫描件）',
+  PT_NO_IMAGES: '未找到可提取的图片',
+  PT_TOO_MANY_IMAGES: '图片数量超过 2000 张上限，请缩小页码范围'
 }
 
 /** 可重试错误码（renderer 据此显示 [重试]） */

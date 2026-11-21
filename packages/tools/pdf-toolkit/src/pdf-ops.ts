@@ -6,13 +6,31 @@
  *              统一 load → process → write → done 进度；写入后校验 `%PDF-` 头。
  */
 import { existsSync } from 'node:fs'
-import { open, readFile, unlink, writeFile } from 'node:fs/promises'
-import { errnoCode, parsePageList, parseRangeGroups, type StructuredError } from '@lumin/shared'
+import { mkdir, open, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import {
+  errnoCode,
+  formatBytes,
+  parsePageList,
+  parseRangeGroups,
+  type StructuredError
+} from '@lumin/shared'
 import { resolveConflictPath, tail } from '@lumin/node-kit'
+import {
+  encodeCanvas,
+  ExtractedImageLimitError,
+  extractPdfImages,
+  extractPdfText,
+  openPdf,
+  renderPageToCanvas
+} from '@lumin/node-kit/pdf'
 import { degrees, PDFDocument, rgb, StandardFonts, type PDFImage } from 'pdf-lib'
 import { toolError } from './errors'
 import {
+  compressDesiredPath,
   deleteDesiredPath,
+  extractImagesDesiredDir,
+  extractTextDesiredPath,
   mergeDesiredPath,
   metadataDesiredPath,
   pageNumbersDesiredPath,
@@ -21,19 +39,23 @@ import {
   splitDesiredPaths,
   watermarkDesiredPath
 } from './naming'
-import type {
-  DeletePayload,
-  MetadataPatch,
-  MetadataPayload,
-  MergePayload,
-  PageNumberPayload,
-  PageNumberPosition,
-  PdfMetadata,
-  PdfProgress,
-  ReorderPayload,
-  RotatePayload,
-  SplitPayload,
-  WatermarkPayload
+import {
+  COMPRESS_PRESETS,
+  type CompressPayload,
+  type DeletePayload,
+  type ExtractImagesPayload,
+  type ExtractTextPayload,
+  type MetadataPatch,
+  type MetadataPayload,
+  type MergePayload,
+  type PageNumberPayload,
+  type PageNumberPosition,
+  type PdfMetadata,
+  type PdfProgress,
+  type ReorderPayload,
+  type RotatePayload,
+  type SplitPayload,
+  type WatermarkPayload
 } from './schema'
 
 /** 进度上报函数 */
@@ -63,6 +85,9 @@ export type WorkerRequest =
   | { op: 'metadata'; payload: MetadataPayload }
   | { op: 'watermark'; payload: WatermarkPayload }
   | { op: 'page-numbers'; payload: PageNumberPayload }
+  | { op: 'extract-text'; payload: ExtractTextPayload }
+  | { op: 'extract-images'; payload: ExtractImagesPayload }
+  | { op: 'compress'; payload: CompressPayload }
 
 /** 读入并解析源 PDF；不存在/占用/加密/损坏 → 结构化错误 */
 async function loadSource(inputPath: string): Promise<PDFDocument> {
@@ -90,6 +115,16 @@ export function resolveOutput(desired: string): string {
   const resolved = resolveConflictPath(desired, existsSync)
   if (resolved === null) throw toolError('PT_OUTPUT_WRITE_FAILED', 'conflict-exhausted')
   return resolved
+}
+
+/** 目录冲突递增：`dir`、`dir (1)`…（99 次耗尽 → PT_OUTPUT_WRITE_FAILED，M38） */
+export function resolveOutputDir(desired: string): string {
+  if (!existsSync(desired)) return desired
+  for (let index = 1; index <= 99; index += 1) {
+    const candidate = `${desired} (${index})`
+    if (!existsSync(candidate)) return candidate
+  }
+  throw toolError('PT_OUTPUT_WRITE_FAILED', 'dir-conflict-exhausted')
 }
 
 /** 写后校验（size>0 且头 5 字节 `%PDF-`） */
@@ -516,6 +551,151 @@ export async function addPageNumbers(
   return { outputPaths: [outputPath] }
 }
 
+/** 解析目标页：空范围 = 全部页（M38） */
+function selectPages(ranges: string | undefined, pageCount: number): number[] {
+  const parsed = parsePageList(ranges ?? '', pageCount, { allowEmpty: true })
+  if (!parsed.ok) throw rangeFailure(parsed)
+  const pages = parsed.value ?? []
+  return pages.length === 0 ? Array.from({ length: pageCount }, (_, index) => index + 1) : pages
+}
+
+/** 文本提取：逐页重建文本，页前插入分隔行；全文档无文本 → PT_NO_TEXT_LAYER（M38） */
+export async function extractText(
+  payload: ExtractTextPayload,
+  progress: EmitProgress
+): Promise<OpResult> {
+  progress({ stage: 'load', current: 0, message: '读取 PDF…' })
+  const opened = await openPdf(payload.inputPath)
+  try {
+    const targets = selectPages(payload.ranges, opened.pageCount)
+    const total = targets.length
+    const { pages, hasText } = await extractPdfText(opened.doc, targets)
+    if (!hasText) throw toolError('PT_NO_TEXT_LAYER')
+    const content = pages
+      .map((page) => `===== 第 ${page.pageNumber} 页 =====\n\n${page.text}`)
+      .join('\n\n')
+    const outputPath = resolveOutput(extractTextDesiredPath(payload.inputPath))
+    progress({ stage: 'process', current: total, total, message: '整理文本…' })
+    progress({ stage: 'write', current: total, total, message: '写出文件…' })
+    try {
+      await writeFile(outputPath, `${content}\n`, 'utf8')
+    } catch (err) {
+      await unlink(outputPath).catch(() => undefined)
+      throw toolError('PT_OUTPUT_WRITE_FAILED', errnoCode(err) || tail(messageOf(err)))
+    }
+    progress({ stage: 'done', current: total, total, message: '完成' })
+    return { outputPaths: [outputPath] }
+  } finally {
+    await opened.doc.cleanup().catch(() => undefined)
+  }
+}
+
+/** 图片提取：新建 `{基名}_图片` 目录逐张写 PNG；无图/超限给结构化错误（M38） */
+export async function extractImages(
+  payload: ExtractImagesPayload,
+  progress: EmitProgress
+): Promise<OpResult> {
+  progress({ stage: 'load', current: 0, message: '读取 PDF…' })
+  const opened = await openPdf(payload.inputPath)
+  try {
+    const targets = selectPages(payload.ranges, opened.pageCount)
+    progress({ stage: 'process', current: 0, total: targets.length, message: '解析图片…' })
+    let extracted
+    try {
+      extracted = await extractPdfImages(opened.doc, targets)
+    } catch (err) {
+      if (err instanceof ExtractedImageLimitError) throw toolError('PT_TOO_MANY_IMAGES')
+      throw toolError('PT_OP_FAILED', tail(messageOf(err)))
+    }
+    if (extracted.images.length === 0) throw toolError('PT_NO_IMAGES')
+    const outputDir = resolveOutputDir(extractImagesDesiredDir(payload.inputPath))
+    try {
+      await mkdir(outputDir)
+    } catch (err) {
+      throw toolError('PT_OUTPUT_WRITE_FAILED', errnoCode(err) || tail(messageOf(err)))
+    }
+    const total = extracted.images.length
+    const outputPaths: string[] = []
+    for (const [index, image] of extracted.images.entries()) {
+      const filePath = join(outputDir, `p${image.pageNumber}-${image.index}.png`)
+      try {
+        await writeFile(filePath, image.png)
+      } catch (err) {
+        await rm(outputDir, { recursive: true, force: true }).catch(() => undefined)
+        throw toolError('PT_OUTPUT_WRITE_FAILED', errnoCode(err) || tail(messageOf(err)))
+      }
+      outputPaths.push(filePath)
+      progress({
+        stage: 'process',
+        current: index + 1,
+        total,
+        message: `写出图片 ${index + 1}/${total}`
+      })
+    }
+    progress({ stage: 'write', current: total, total, message: '写出完成…' })
+    progress({ stage: 'done', current: total, total, message: `完成（共 ${total} 张）` })
+    return { outputPaths }
+  } finally {
+    await opened.doc.cleanup().catch(() => undefined)
+  }
+}
+
+/** 压缩：逐页按档位渲染为 JPEG 并按原页 pt 尺寸重建文档；有损（M38） */
+export async function compressPdf(
+  payload: CompressPayload,
+  progress: EmitProgress
+): Promise<OpResult> {
+  progress({ stage: 'load', current: 0, message: '读取 PDF…' })
+  const preset = COMPRESS_PRESETS[payload.level]
+  const scale = preset.dpi / 72
+  const opened = await openPdf(payload.inputPath)
+  try {
+    const targets = selectPages(payload.ranges, opened.pageCount)
+    const total = targets.length
+    const out = await PDFDocument.create()
+    for (const [index, pageNumber] of targets.entries()) {
+      try {
+        const sourcePage = await opened.doc.getPage(pageNumber)
+        const viewport = sourcePage.getViewport({ scale: 1 })
+        const pageWidth = viewport.width
+        const pageHeight = viewport.height
+        sourcePage.cleanup()
+        const rendered = await renderPageToCanvas(opened.doc, pageNumber, { scale })
+        const jpeg = await encodeCanvas(rendered.canvas, 'jpeg', preset.quality)
+        const embedded = await out.embedJpg(jpeg)
+        const page = out.addPage([pageWidth, pageHeight])
+        page.drawImage(embedded, { x: 0, y: 0, width: pageWidth, height: pageHeight })
+      } catch (err) {
+        throw toolError('PT_OP_FAILED', tail(messageOf(err)) || `page-${pageNumber}`)
+      }
+      progress({
+        stage: 'process',
+        current: index + 1,
+        total,
+        message: `第 ${index + 1}/${total} 页`
+      })
+    }
+    const outputPath = resolveOutput(compressDesiredPath(payload.inputPath))
+    progress({ stage: 'write', current: total, total, message: '写出文件…' })
+    await writeOutput(outputPath, out)
+    const originalSize = await stat(payload.inputPath)
+      .then((info) => info.size)
+      .catch(() => 0)
+    const newSize = await stat(outputPath)
+      .then((info) => info.size)
+      .catch(() => 0)
+    progress({
+      stage: 'done',
+      current: total,
+      total,
+      message: `完成（原 ${formatBytes(originalSize)} → 新 ${formatBytes(newSize)}）`
+    })
+    return { outputPaths: [outputPath] }
+  } finally {
+    await opened.doc.cleanup().catch(() => undefined)
+  }
+}
+
 /** 载荷分发（worker 唯一入口；zod 校验已在 node.ts 完成） */
 export async function runOp(request: WorkerRequest, progress: EmitProgress): Promise<OpResult> {
   switch (request.op) {
@@ -540,5 +720,11 @@ export async function runOp(request: WorkerRequest, progress: EmitProgress): Pro
       return watermarkPdf(request.payload, progress)
     case 'page-numbers':
       return addPageNumbers(request.payload, progress)
+    case 'extract-text':
+      return extractText(request.payload, progress)
+    case 'extract-images':
+      return extractImages(request.payload, progress)
+    case 'compress':
+      return compressPdf(request.payload, progress)
   }
 }
