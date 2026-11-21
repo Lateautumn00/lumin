@@ -566,6 +566,16 @@ lumin/
 - **三态**：三页签默认参数即出结果（空态无白屏）、全同步纯函数加载态豁免、各页签/小节独立 `role="alert"` 报错态
 - **验收**：单测 37 用例（本包 lines/functions/branches 均 ≥80%）；e2e 4/4（三页签、还款方式切换与报错恢复、个税 290/9710、百分比联动）；chunk 39,696 B raw / 8,415 B gzip；gate 全绿
 
+### 4.38 PDF 能力补全（M38，2026-11-21 R8 登记）
+
+- **决策**：按 `Lumin 功能清单差距审计与后续路线图.md` 的 M38，只扩展 `pdf-toolkit` 与 `@lumin/node-kit/pdf`，**零新包、零新增依赖**；加密/解密仍按 Q19 不做
+- **文本提取**：`pdfjs getTextContent` 按 items 顺序重建行（`hasEOL` 换行、裁行尾空白、去页首尾空行），页前插入 `===== 第 N 页 =====`；全文档无文本 → `PT_NO_TEXT_LAYER`；输出 `{基名}_文本.txt`（UTF-8，冲突递增）
+- **图片提取**：遍历 `OPS.paintImageXObject` / `paintInlineImageXObject`，支持 `GRAYSCALE_1BPP`（1bpp 解包）、`RGB_24BPP`（补 α）、`RGBA_32BPP`（直用）与 `bitmap`；宽或高 `<16px` 跳过、`sha256` 内容去重、上限 2000 → `PT_TOO_MANY_IMAGES`、全无 → `PT_NO_IMAGES`、单张失败不中断；输出目录 `{基名}_图片/`（递增 `(n)`），文件 `p{页}-{序号}.png`
+- **压缩**：`pdfjs` 按档位渲染（低 96 DPI / JPEG 60、中 150 / 75、高 200 / 85）→ `pdf-lib` 新建文档按原页 pt 尺寸嵌入 JPEG → 写后校验 `%PDF-`；输出 `{基名}_压缩.pdf`；有损且丢文本层/书签/表单（页内提示 + 文档注明），体积不变小属正常
+- **错误码增量**：`PT_NO_TEXT_LAYER` / `PT_NO_IMAGES` / `PT_TOO_MANY_IMAGES`（均不可重试）
+- **通道增量**：`pdf-toolkit:extract-text` / `extract-images` / `compress`（均三段式任务，载荷 `{ inputPath, ranges? }`，压缩加 `level: low|medium|high`）
+- **验收**：单测（node-kit extract + pdf-toolkit 三 op，包覆盖率 ≥80%）；e2e 12/12（原 8 + 文本含页码 / 图片 ≥1 PNG / 压缩页数不变 / 空文本层报错）；R2 八类映射；`pnpm gate` 全绿
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -645,6 +655,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M35 v3.4**  | 图片裁剪（§4.35，2026-11-21）：`image-crop` —— 比例裁剪（预设/自定义 + 九宫格锚点）+ 自由区域百分比；输出目录记忆、命名模板 + 冲突递增、原图只读；ffmpeg 串行 + 进度 + 取消；编码/失败归类上提 `node-kit`、扩展名提取上提 `shared`，零新增依赖                                                                                                  | §4.35 验收；e2e 5 用例；R2 八类映射；chunk 7,495 B gzip；gate 全绿                      | 0.5 天   |
 | **M36 v3.5**  | 第一梯队缺口补齐（§4.36，2026-11-21）：计算器阶乘 + 进制页签；时间工具箱日期差 + 倒计时；单位换算流量/角度/像素（DPI）；文本工具箱 Hex/Unicode、批量文本处理与字数统计；只扩展现有 4 包，零新包零新增依赖                                                                                                                                       | §4.36 验收；四包单测 ≥80%；R2 八类映射；chunk <200KB gzip；gate 全绿                    | 0.5–1 天 |
 | **M37 v3.6**  | 生活计算器（§4.37，2026-11-21）：`life-calculator` —— 房贷（等额本息/等额本金 + 还款计划）、工资个税（月度口径 + 五险一金 + 专项附加扣除）、百分比与折扣；纯 renderer、零 IPC、零新增依赖                                                                                                                                                       | §4.37 验收；e2e 4 用例；R2 八类映射；chunk 8,415 B gzip；gate 全绿                      | 0.5 天   |
+| **M38 v3.7**  | PDF 能力补全（§4.38，2026-11-21）：`pdf-toolkit` 扩展三 Tab —— 文本层提取导出 TXT、内嵌图片提取（sha256 去重）、按档位重采样压缩；抽取原语上提 `node-kit/pdf`，零新增依赖                                                                                                                                                                       | §4.38 验收；e2e 12/12；R2 八类映射；包覆盖率 ≥80%；gate 全绿                            | 0.5–1 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
