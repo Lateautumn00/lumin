@@ -52,6 +52,8 @@
 | Q39 | Markdown 工具 | **新增 `markdown-tool` 工具（2026-11-21 用户选定，M39）**：Markdown 预览 + MD→HTML（引入 `marked` 18.2.1）、JSON→TypeScript 类型生成（零依赖自写）、YAML→JSON / JSON→YAML / 格式化（引入 `js-yaml` 5.5.0）；解析全在 renderer，主进程仅 `config`/`set-output-dir`/`save` 同步短通道做目录记忆与原子写盘；预览用 sandbox iframe + CSP 双重防脚本；详见 §4.39 |
 | Q40 | 图片增强      | **在既有 `image-toolbox` 与 `image-stitch` 扩展页签（2026-11-21 用户选定，M40，不新建工具包）**：`image-toolbox` 新增「调整」页签（灰度/反色/黑白二值可调阈值，复用 `process` 通道 `mode:'effect'`）与「GIF」页签（1–100 张串行探尺寸 → 单进程 `filter_complex` 出片，新通道 `make-gif`）；`image-stitch` 新增「长图分割」页签（固定高度/按份数，新通道 `split` + `split.worker.ts`）；复用 `binaries/download/ffmpeg.exe` 与 `@napi-rs/canvas`，零新增依赖；详见 §4.40 |
 | Q41 | 文件清理      | **新增 `fs-cleaner` 工具（2026-11-21 用户选定，M41）**：单一包四页签——D3 目录树导出（深度 1–10 + `*` 通配排除 + 复制）、D4 空文件夹递归判定与回收、D5 批量改时间（**只改 mtime/atime；Windows 创建时间 Node 无原生 API，不引依赖故明确不支持**）、D6 临时文件按扩展名扫描与回收；扫描类任务 `tree/empty-dirs/touch/temp-clean` 只产候选，删除一律走壳 `window.lumin.trashPaths`（单批 ≤200）；零新增第三方依赖；详见 §4.41 |
+| Q42 | 开发工具      | **新增 `dev-toolbox` 工具（2026-11-21 用户选定，M42）**：三页签——端口占用查询/结束进程（`netstat`+`tasklist`+`taskkill`，`execFile` 数组传参、拒绝杀自身 PID）、CURL 转代码（fetch/axios/python，纯 renderer）、本地静态服务器（`node:http` 仅绑 `127.0.0.1`、GET/HEAD、路径穿越 403、访问日志 200 条）；**不扩展 plugin-api 与壳通道**，主进程能力全在工具 `node.ts`；零新增依赖；详见 §4.42 |
+| Q43 | 实用工具      | **新增 `misc-toolbox` 工具（2026-11-21 用户选定，M43）**：两页签——IPv4 CIDR 子网计算（/0–/32 全边界、私有/回环判定）、计时器（秒表/倒计时/番茄钟，4 轮专注后长休）；**纯 renderer、零 IPC、无 `node.ts`**、零新增依赖；详见 §4.43 |
 | —   | 硬约束        | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -612,6 +614,25 @@ lumin/
 - **三态**：四页签均有空态引导、进度 + 取消、结构化错误码中文 + 重试
 - **验收**：单测 60 例（tree/schema/client/use-task/node），本包纯函数覆盖率 ≥80%；e2e 6/6（页面四页签空态、目录树深度/排除、空文件夹列表、改时间预演不改盘 + 应用生效、临时文件匹配、`FC_ROOT_INVALID` 错误态 + 重试）；chunk 实测 **474,988 B raw / 83,078 B gzip**（<200KB gzip）；R2 八类映射见 `docs/smoke/fs-cleaner.md`；`pnpm gate` 全绿
 
+### 4.42 开发工具（M42，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：新增 `dev-toolbox`（category `misc`，icon `terminal`，order 70），单一包三页签：端口占用、CURL 转代码、本地静态服务器；零新增第三方依赖
+- **形态**：主进程能力全部落在工具 `node.ts`（`node:child_process.execFile` 与 `node:http`），**不扩展 `plugin-api`、不新增壳能力通道**；7 通道 `config` / `set-config` / `ports-query` / `port-kill` / `server-start` / `server-stop` / `server-status`，全部同步短通道 + zod 校验
+- **端口占用**：`netstat -ano -p tcp|udp` 解析 + `tasklist /FO CSV /NH` 一次性取进程名；行数上限 5000（`truncated`）；`taskkill /PID <pid> /T /F` 走 `execFile` 数组传参，拒绝 PID ≤0 与自身 PID（`DT_KILL_SELF_FORBIDDEN`）
+- **CURL 转代码**：纯 renderer 解析（`-X/-H/-d/-b/-A/-u/-I` 等 + `\` 续行 + 三种引号），输出 fetch/axios/python；不支持参数明确报 `DT_CURL_PARSE_FAILED`
+- **静态服务器**：仅绑定 `127.0.0.1`；GET/HEAD，其余 405；`path.resolve` 后必须落在根目录内否则 403；目录优先 `index.html`、否则生成 HTML 列表（转义）；内置 MIME 表；访问日志环形 200 条，`server-status` 返回最近 50 条，renderer 运行中 1s 轮询
+- **错误码**：`DT_INVALID_PAYLOAD` / `DT_INVALID_PORT` / `DT_NETSTAT_FAILED` / `DT_KILL_FAILED` / `DT_KILL_SELF_FORBIDDEN` / `DT_CURL_PARSE_FAILED` / `DT_ROOT_INVALID` / `DT_PORT_IN_USE` / `DT_SERVER_FAILED`
+- **三态**：端口页与服务器页有空态引导、加载态（按钮禁用）、结构化错误 + 重试；CURL 页无长任务但有常驻错误说明
+- **验收**：单测 114 例（curl/netstat/mime/path-guard/server/schema/errors/node），本包覆盖率 92.56 / 81.76 / 91.13 / 94.41；e2e 5/5（三页签空态、CURL 默认与切换 python、真实 netstat 查询 + `DT_INVALID_PORT`、服务器启动后真实 HTTP 可访问并停止、`DT_ROOT_INVALID` + 重试）；chunk 实测 **46,220 B raw / 11,413 B gzip**；R2 八类映射见 `docs/smoke/dev-toolbox.md`
+
+### 4.43 实用工具（M43，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：新增 `misc-toolbox`（category `misc`，icon `timer`，order 71），两页签：子网/IP 计算、计时器；**纯 renderer、零 IPC、无 `node.ts`**、零新增依赖
+- **IP 计算**：IPv4 CIDR（点分掩码亦可），输出网络/广播/掩码/反掩码/前缀/可用主机范围与数量/类别/私有/回环/掩码二进制；`/31` 记 2、`/32` 记 1，`/0` 用无符号运算避免溢出；主机位非 0 时按掩码归一化并提示；IPv6 与越界报 `MT_CIDR_INVALID`
+- **计时器**：秒表（计次 ≤20，`performance.now()` 差值）、倒计时（时/分/秒，结束 `NAlert` + `AudioContext` 短蜂鸣 + 标题标记）、番茄钟（25/5/15 可改，4 轮专注后长休，进度环）；所有 interval 与 AudioContext 在暂停/重置/`onUnmounted` 统一清理
+- **三态**：IP 页空态引导 + 预设、错误码中文 + 段号 detail；计时器无长任务与错误分支
+- **验收**：单测 47 例（ip 23 / clock 16 / schema 4 / errors 3 / manifest 1），本包覆盖率 98.55 / 92.39 / 100 / 100；e2e 5/5（两页签可见、/24 结果、/33 错误文案、秒表递增与重置、番茄钟 25:00 递减）；chunk 实测 **42,584 B raw / 10,451 B gzip**；R2 映射见 `docs/smoke/misc-toolbox.md`
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -695,6 +716,8 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M39 v3.8**  | Markdown 工具（§4.39，2026-11-21）：新增 `markdown-tool` —— Markdown 预览 + MD→HTML（`marked` 18.2.1，sandbox iframe + CSP 防脚本）、JSON→TypeScript 类型生成（零依赖自写）、YAML 互转/格式化（`js-yaml` 5.5.0）；解析全在 renderer，主进程仅目录记忆 + 原子写盘                                                                                                                                     | §4.39 验收；e2e 4 用例；R2 八类映射；chunk <200KB gzip；gate 全绿                       | 0.5–1 天 |
 | **M40 v3.9**  | 图片增强（§4.40，2026-11-21）：`image-toolbox` 增「调整」（灰度/反色/黑白二值阈值）与「GIF」（1–100 帧、`filter_complex` 调色板）页签；`image-stitch` 增「长图分割」（固定高度/按份数）页签；复用 ffmpeg 与 @napi-rs/canvas，零新增依赖                                                                                                                                                     | §4.40 验收；e2e 新增 3 用例；R2 八类映射；两包覆盖率 ≥80%；gate 全绿                     | 0.5–1 天 |
 | **M41 v4.0**  | 文件清理（§4.41，2026-11-21）：新增 `fs-cleaner` —— 目录树导出（深度/通配排除/复制）、空文件夹递归判定与回收、批量改时间（mtime/atime，创建时间不支持）、临时文件按扩展名扫描与回收；只读扫描 + 用户确认后走系统回收站；零新增依赖                                                                                                                     | §4.41 验收；e2e 6/6；R2 八类映射；chunk 83,078 B gzip；包覆盖率 ≥80%；gate 全绿          | 0.5–1 天 |
+| **M42 v4.1**  | 开发工具（§4.42，2026-11-21）：新增 `dev-toolbox` —— 端口占用查询与结束进程、CURL 转 fetch/axios/python、本地静态服务器（仅 127.0.0.1、路径穿越防护）；主进程能力全在工具 `node.ts`，不扩 plugin-api；零新增依赖                                                                                        | §4.42 验收；e2e 5/5；R2 八类映射；chunk 11,413 B gzip；包覆盖率 ≥80%                     | 0.5–1 天 |
+| **M43 v4.2**  | 实用工具（§4.43，2026-11-21）：新增 `misc-toolbox` —— IPv4 CIDR 子网计算（/0–/32 全边界）、秒表/倒计时/番茄钟；纯 renderer、零 IPC、无 `node.ts`、零新增依赖                                                                                                                                           | §4.43 验收；e2e 5/5；R2 映射；chunk 10,451 B gzip；包覆盖率 ≥80%                          | 0.5 天    |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
