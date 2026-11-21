@@ -51,6 +51,7 @@
 | Q38 | 生活计算器    | **新增 `life-calculator` 工具（2026-11-21 用户选定，M37）**：房贷（等额本息/等额本金 + 还款计划摘要）、工资个税（月度口径 + 五险一金 + 专项附加扣除）、百分比与折扣（增减/变化率/折后价/反推原价）；纯 renderer、零 IPC、零新增依赖；详见 §4.37                                                                                                                                                                                                                     |
 | Q39 | Markdown 工具 | **新增 `markdown-tool` 工具（2026-11-21 用户选定，M39）**：Markdown 预览 + MD→HTML（引入 `marked` 18.2.1）、JSON→TypeScript 类型生成（零依赖自写）、YAML→JSON / JSON→YAML / 格式化（引入 `js-yaml` 5.5.0）；解析全在 renderer，主进程仅 `config`/`set-output-dir`/`save` 同步短通道做目录记忆与原子写盘；预览用 sandbox iframe + CSP 双重防脚本；详见 §4.39 |
 | Q40 | 图片增强      | **在既有 `image-toolbox` 与 `image-stitch` 扩展页签（2026-11-21 用户选定，M40，不新建工具包）**：`image-toolbox` 新增「调整」页签（灰度/反色/黑白二值可调阈值，复用 `process` 通道 `mode:'effect'`）与「GIF」页签（1–100 张串行探尺寸 → 单进程 `filter_complex` 出片，新通道 `make-gif`）；`image-stitch` 新增「长图分割」页签（固定高度/按份数，新通道 `split` + `split.worker.ts`）；复用 `binaries/download/ffmpeg.exe` 与 `@napi-rs/canvas`，零新增依赖；详见 §4.40 |
+| Q41 | 文件清理      | **新增 `fs-cleaner` 工具（2026-11-21 用户选定，M41）**：单一包四页签——D3 目录树导出（深度 1–10 + `*` 通配排除 + 复制）、D4 空文件夹递归判定与回收、D5 批量改时间（**只改 mtime/atime；Windows 创建时间 Node 无原生 API，不引依赖故明确不支持**）、D6 临时文件按扩展名扫描与回收；扫描类任务 `tree/empty-dirs/touch/temp-clean` 只产候选，删除一律走壳 `window.lumin.trashPaths`（单批 ≤200）；零新增第三方依赖；详见 §4.41 |
 | —   | 硬约束        | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -598,6 +599,19 @@ lumin/
 - **三态**：两工具空态引导不变；GIF/分割为长任务（进度可取消）；报错态结构化错误码 + 重试（可重试码）
 - **验收**：单测（encode/gif/naming/schema/node/client + contract/schema/node/split.worker/client，两包各 ≥80%）；e2e 新增 3 用例（调整像素断言、GIF89a+NETSCAPE2.0、固定高度/按份数切片与冲突递增）；chunk 记录见 `docs/smoke/image-toolbox.md` §8 与 `docs/smoke/image-stitch.md` §7
 
+### 4.41 文件清理（M41，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：新增 `fs-cleaner`（category `file`，icon `folder-cog`，order 66），单一工具包四页签；零新增第三方依赖
+- **形态**：`node.ts` 直用 `node:fs/promises`（无外部进程、无 worker）；通道 `config` / `set-config`（同步，记忆 lastRoot / treeDepth / treeExclude / tempExtensions）+ `tree` / `empty-dirs` / `touch` / `temp-clean`（三段式任务，进度节流 200 条、可取消）；递归一律迭代栈，条目上限 20 万（超限 `FC_TOO_MANY_FILES`）；不跟随符号链接
+- **安全口径**：扫描类任务只产候选列表，**用户在页面勾选 + 二次确认后**由 renderer 分批（≤200）调壳 `window.lumin.trashPaths` 移入回收站；主进程无任何删除调用，`fs.rm`/`unlink` 零使用
+- **D3 目录树**：`maxDepth 1–10`（默认 3）、排除规则支持精确与 `*` 通配（大小写不敏感）、目录优先 + 名称排序，输出 Box-drawing 文本，`truncated` 标记深度截断；复制走 `navigator.clipboard`
+- **D4 空文件夹**：自底向上判定（子目录全空则父目录也空；符号链接等非目录条目计入「非空」），结果按深度降序（深层在前），便于先子后父回收
+- **D5 批量改时间**：`fs.utimes` 同时设置 mtime/atime；**Windows CreationTime 无 Node 原生 API，按「零新增依赖」原则明确不支持**（页内常驻说明 + spec 明示）；`dryRun` 预演只统计与返回前 20 条样例，应用逐条失败不中断
+- **D6 临时文件**：默认规则 `tmp,temp,log,bak,old,cache`，可改；列表含大小/修改时间，支持「仅选 7 天前」
+- **错误码**：`FC_INVALID_PAYLOAD` / `FC_ROOT_INVALID` / `FC_TOO_MANY_FILES` / `FC_TASK_FAILED` / `FC_TOUCH_FAILED`（取消由壳统一 `CANCELLED`）
+- **三态**：四页签均有空态引导、进度 + 取消、结构化错误码中文 + 重试
+- **验收**：单测 60 例（tree/schema/client/use-task/node），本包纯函数覆盖率 ≥80%；e2e 6/6（页面四页签空态、目录树深度/排除、空文件夹列表、改时间预演不改盘 + 应用生效、临时文件匹配、`FC_ROOT_INVALID` 错误态 + 重试）；chunk 实测 **474,988 B raw / 83,078 B gzip**（<200KB gzip）；R2 八类映射见 `docs/smoke/fs-cleaner.md`；`pnpm gate` 全绿
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -680,6 +694,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M38 v3.7**  | PDF 能力补全（§4.38，2026-11-21）：`pdf-toolkit` 扩展三 Tab —— 文本层提取导出 TXT、内嵌图片提取（sha256 去重）、按档位重采样压缩；抽取原语上提 `node-kit/pdf`，零新增依赖                                                                                                                                                                       | §4.38 验收；e2e 12/12；R2 八类映射；包覆盖率 ≥80%；gate 全绿                            | 0.5–1 天 |
 | **M39 v3.8**  | Markdown 工具（§4.39，2026-11-21）：新增 `markdown-tool` —— Markdown 预览 + MD→HTML（`marked` 18.2.1，sandbox iframe + CSP 防脚本）、JSON→TypeScript 类型生成（零依赖自写）、YAML 互转/格式化（`js-yaml` 5.5.0）；解析全在 renderer，主进程仅目录记忆 + 原子写盘                                                                                                                                     | §4.39 验收；e2e 4 用例；R2 八类映射；chunk <200KB gzip；gate 全绿                       | 0.5–1 天 |
 | **M40 v3.9**  | 图片增强（§4.40，2026-11-21）：`image-toolbox` 增「调整」（灰度/反色/黑白二值阈值）与「GIF」（1–100 帧、`filter_complex` 调色板）页签；`image-stitch` 增「长图分割」（固定高度/按份数）页签；复用 ffmpeg 与 @napi-rs/canvas，零新增依赖                                                                                                                                                     | §4.40 验收；e2e 新增 3 用例；R2 八类映射；两包覆盖率 ≥80%；gate 全绿                     | 0.5–1 天 |
+| **M41 v4.0**  | 文件清理（§4.41，2026-11-21）：新增 `fs-cleaner` —— 目录树导出（深度/通配排除/复制）、空文件夹递归判定与回收、批量改时间（mtime/atime，创建时间不支持）、临时文件按扩展名扫描与回收；只读扫描 + 用户确认后走系统回收站；零新增依赖                                                                                                                     | §4.41 验收；e2e 6/6；R2 八类映射；chunk 83,078 B gzip；包覆盖率 ≥80%；gate 全绿          | 0.5–1 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

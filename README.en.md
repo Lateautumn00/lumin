@@ -25,6 +25,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | PDF toolkit        | Merge, split, delete, rotate, reorder pages, edit metadata, add watermarks and page numbers, text extraction, image extraction and compression — output beside the source |
 | File hasher        | Batch MD5/SHA-1/SHA-256 with paste-to-verify against an expected digest, TSV copy                                                                                         |
 | Duplicate finder   | Scan a folder, confirm duplicate groups with two-stage SHA-256, keep the oldest and trash the rest                                                                        |
+| File cleaner       | Export a directory tree, scan & trash empty folders or temp files (after picking), batch-set file times (mtime/atime)                                                      |
 | Disk usage         | Recursively scan a folder, list entries by size with usage bars, drill down level by level (read-only)                                                                    |
 | Folder compare     | Pair files by relative path across two folders, diff by size/mtime with filters and reveal (read-only, no content)                                                        |
 | Zip tool           | Pack files/folders into ZIP (keeps relative structure) or extract ZIPs safely (zip-slip guarded, no overwrite)                                                            |
