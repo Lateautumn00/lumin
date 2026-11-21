@@ -2,8 +2,8 @@
  * @file misc-toolbox（实用工具）e2e 冒烟：真实 Electron 驱动页面交互（spec §5）
  * @author cuilanchao
  * @date 2026-11-21
- * @description 覆盖：两页签可见、CIDR /24 计算、/33 报错码 → 中文文案、秒表开始/重置、番茄钟默认 25:00 与递减。
- *              纯 renderer 工具，零 IPC。
+ * @description 覆盖：三页签可见、CIDR /24 计算、/33 报错码 → 中文文案、秒表开始/重置、
+ *              番茄钟默认 25:00 与递减、屏幕标尺截屏/框选/测量/Esc 关闭。
  */
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
@@ -44,13 +44,14 @@ async function openTimerTab(
 }
 
 test.describe('misc-toolbox（实用工具）冒烟', () => {
-  test('侧栏「实用工具」可进入，两页签均可见', async () => {
+  test('侧栏「实用工具」可进入，三页签均可见', async () => {
     const { app, page } = await launch()
     await ensureReady(page)
     try {
       await clickSidebarTool(page, '实用工具')
       await expect(page.getByRole('heading', { name: '实用工具' })).toBeVisible()
       await expect(page.locator('.n-tabs-tab[data-name="ip"]')).toBeVisible()
+      await expect(page.locator('.n-tabs-tab[data-name="ruler"]')).toBeVisible()
       await expect(page.locator('.n-tabs-tab[data-name="timer"]')).toBeVisible()
       await expect(page.getByText('输入 CIDR（如 192.168.1.0/24）', { exact: false })).toBeVisible()
     } finally {
@@ -86,6 +87,43 @@ test.describe('misc-toolbox（实用工具）冒烟', () => {
       await expect(page.getByText(/子网 \/ IP 输入无效/)).toBeVisible()
       await expect(page.getByText(/MT_CIDR_INVALID/)).toBeVisible()
       await expect(page.getByText(/前缀长度 33 超出 0–32/)).toBeVisible()
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('屏幕标尺：截屏后拖拽框选显示测量值，Esc 关闭', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '实用工具')
+      await page.locator('.n-tabs-tab[data-name="ruler"]').click()
+      await page.getByTestId('ruler-start').click()
+
+      const overlay = page.getByTestId('ruler-overlay')
+      await expect(overlay).toBeVisible({ timeout: 15_000 })
+      await expect(page.getByText(/DPI 仅用于 cm \/ inch 名义换算/)).toBeVisible()
+
+      const image = page.getByTestId('ruler-image')
+      const box = await image.boundingBox()
+      expect(box).not.toBeNull()
+      if (box !== null) {
+        const startX = box.x + box.width * 0.2
+        const startY = box.y + box.height * 0.2
+        await page.mouse.move(startX, startY)
+        await page.mouse.down()
+        await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.45, { steps: 8 })
+        await page.mouse.up()
+      }
+
+      const metrics = page.getByTestId('ruler-metrics')
+      await expect(metrics.getByText(/宽 \d+ px/)).toBeVisible()
+      await expect(metrics.getByText(/高 \d+ px/)).toBeVisible()
+      await expect(metrics.getByText(/对角线 \d+ px/)).toBeVisible()
+      await expect(metrics.getByText(/逻辑尺寸/)).toBeVisible()
+
+      await page.keyboard.press('Escape')
+      await expect(overlay).toBeHidden()
     } finally {
       await app.close()
     }
