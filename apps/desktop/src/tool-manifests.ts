@@ -2,6 +2,7 @@ import type { ToolManifest } from '@lumin/plugin-api'
 import { manifest as batchOcrManifest } from '@lumin/tool-batch-ocr/manifest'
 import { manifest as calculatorManifest } from '@lumin/tool-calculator/manifest'
 import { manifest as colorToolboxManifest } from '@lumin/tool-color-toolbox/manifest'
+import { manifest as devToolboxManifest } from '@lumin/tool-dev-toolbox/manifest'
 import { manifest as diskAnalyzerManifest } from '@lumin/tool-disk-analyzer/manifest'
 import { manifest as docx2pdfManifest } from '@lumin/tool-docx2pdf/manifest'
 import { manifest as duplicateFinderManifest } from '@lumin/tool-duplicate-finder/manifest'
@@ -63,5 +64,6 @@ export const toolManifests: readonly ToolManifest[] = [
   colorToolboxManifest,
   timeToolboxManifest,
   passwordGeneratorManifest,
+  devToolboxManifest,
   exampleManifest
 ]

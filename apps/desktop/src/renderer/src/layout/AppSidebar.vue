@@ -37,6 +37,7 @@ import {
   Scissors,
   Settings,
   Stamp,
+  Terminal,
   Wrench,
   type LucideIcon
 } from '@lucide/vue'
@@ -80,6 +81,7 @@ const iconMap: Record<string, LucideIcon> = {
   'key-round': KeyRound,
   palette: Palette,
   'piggy-bank': PiggyBank,
+  terminal: Terminal,
   wrench: Wrench
 }
 

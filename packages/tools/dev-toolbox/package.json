@@ -1,0 +1,41 @@
+{
+  "name": "@lumin/tool-dev-toolbox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./manifest": {
+      "types": "./src/manifest.ts",
+      "default": "./src/manifest.ts"
+    },
+    "./node": {
+      "types": "./src/node.ts",
+      "default": "./src/node.ts"
+    },
+    "./schema": {
+      "types": "./src/schema.ts",
+      "default": "./src/schema.ts"
+    },
+    "./errors": {
+      "types": "./src/errors.ts",
+      "default": "./src/errors.ts"
+    },
+    "./renderer/*": {
+      "types": "./src/renderer/*",
+      "default": "./src/renderer/*"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@lucide/vue": "1.72.0",
+    "@lumin/node-kit": "workspace:*",
+    "@lumin/plugin-api": "workspace:*",
+    "@lumin/shared": "workspace:*",
+    "@lumin/ui": "workspace:*",
+    "naive-ui": "2.45.3",
+    "vue": "3.5.45",
+    "zod": "4.6.7"
+  }
+}

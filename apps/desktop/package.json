@@ -27,6 +27,7 @@
     "@lumin/tool-batch-ocr": "workspace:*",
     "@lumin/tool-calculator": "workspace:*",
     "@lumin/tool-color-toolbox": "workspace:*",
+    "@lumin/tool-dev-toolbox": "workspace:*",
     "@lumin/tool-disk-analyzer": "workspace:*",
     "@lumin/tool-docx2pdf": "workspace:*",
     "@lumin/tool-duplicate-finder": "workspace:*",
