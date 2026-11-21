@@ -10,9 +10,9 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'image-stitch',
   name: '图片拼接',
-  description: '多张图片拼成纵向/横向长图或网格拼图（间距/外边距/背景色可调）',
+  description: '多张图片拼成纵向/横向长图或网格拼图，或按固定高度/份数分割长图',
   icon: 'layout-grid',
   category: 'image',
   order: 86,
-  version: '0.1.0'
+  version: '0.2.0'
 })

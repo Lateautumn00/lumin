@@ -117,3 +117,57 @@ export interface StitchRequest {
   bgColor: string
   outputDir: string
 }
+
+// —— M40 长图分割（spec §5.1–§5.4） ——
+
+/** 分割方式 */
+export const SPLIT_MODES = ['height', 'parts'] as const
+export type SplitModeValue = (typeof SPLIT_MODES)[number]
+
+/** 分割数值边界（与 §3.6 一致） */
+export const SPLIT_LIMITS = {
+  minHeight: 50,
+  maxHeight: 30_000,
+  minParts: 2,
+  maxParts: 50
+} as const
+
+export const splitPayloadSchema = z.object({
+  inputPath: z.string().min(1).regex(IMAGE_INPUT_RE, '仅支持 PNG/JPG/WebP 图片'),
+  mode: z.enum(SPLIT_MODES),
+  height: z.number().int().min(SPLIT_LIMITS.minHeight).max(SPLIT_LIMITS.maxHeight),
+  parts: z.number().int().min(SPLIT_LIMITS.minParts).max(SPLIT_LIMITS.maxParts),
+  quality: z
+    .number()
+    .int()
+    .min(LIMITS.minQuality, `质量最小 ${LIMITS.minQuality}`)
+    .max(LIMITS.maxQuality, `质量最大 ${LIMITS.maxQuality}`),
+  /** 输出目录；缺省用记忆目录/userData 默认 */
+  outputDir: z.string().min(1).optional()
+})
+
+export type SplitPayload = z.infer<typeof splitPayloadSchema>
+
+/** split worker 请求（node 侧已解析输出目录） */
+export interface SplitRequest {
+  inputPath: string
+  mode: SplitModeValue
+  height: number
+  parts: number
+  quality: number
+  outputDir: string
+}
+
+/** 单段输出 */
+export interface SplitOutput {
+  path: string
+  width: number
+  height: number
+}
+
+/** `image-stitch:split` done 结果 */
+export interface SplitResult {
+  outputs: SplitOutput[]
+  sourceWidth: number
+  sourceHeight: number
+}

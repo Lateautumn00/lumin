@@ -4,7 +4,7 @@
  * 三态：空态（DropZone）/ 加载态（量尺寸 + 绘制两阶段，可取消）/ 报错态（重试或重选）；结果态内联展示。
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { FolderOpen, Plus, RefreshCw, Trash2, X } from '@lucide/vue'
+import { FolderOpen, Plus, RefreshCw, Scissors, Trash2, X } from '@lucide/vue'
 import {
   NAlert,
   NButton,
@@ -13,7 +13,9 @@ import {
   NInputNumber,
   NRadio,
   NRadioGroup,
-  NSlider
+  NSlider,
+  NTabPane,
+  NTabs
 } from 'naive-ui'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
@@ -24,9 +26,13 @@ import {
   LIMITS,
   MAX_IMAGE_BYTES,
   MAX_IMAGES,
+  SPLIT_LIMITS,
   type ImageEncoder,
   type LayoutOptions,
   type SizeMode,
+  type SplitModeValue,
+  type SplitPayload,
+  type SplitResult,
   type StitchMode,
   type StitchPayload,
   type StitchResult
@@ -37,6 +43,7 @@ import {
   pickDirectory,
   revealPath,
   setOutputDir,
+  split,
   submitStitch
 } from './client'
 
@@ -72,8 +79,13 @@ const ENCODER_LABELS: Record<ImageEncoder, string> = {
 
 const STAGE_LABELS: Record<string, string> = {
   measure: '量尺寸',
-  draw: '绘制'
+  draw: '绘制',
+  read: '读取',
+  split: '切分'
 }
+
+/** 页签（M40：新增长图分割） */
+type TabKey = 'stitch' | 'split'
 
 const files = ref<PickedImage[]>([])
 const mode = ref<StitchMode>('vertical')
@@ -98,6 +110,15 @@ const progress = ref<{
 } | null>(null)
 const error = ref<StructuredError | null>(null)
 const result = ref<StitchResult | null>(null)
+// 长图分割（M40，spec §3.6/§5）
+const activeTab = ref<TabKey>('stitch')
+const activeTask = ref<TabKey>('stitch')
+const splitFile = ref<PickedImage | null>(null)
+const splitMode = ref<SplitModeValue>('height')
+const splitHeight = ref(1000)
+const splitParts = ref(3)
+const splitQuality = ref(90)
+const splitResult = ref<SplitResult | null>(null)
 
 let currentTaskId = ''
 let unsubscribe: (() => void) | undefined
@@ -115,6 +136,16 @@ const layout = computed<LayoutOptions>(() => ({
 
 const canStart = computed(
   () => files.value.length > 0 && outputDir.value !== '' && phase.value !== 'running'
+)
+
+/** 长图分割可提交（单图 + 输出目录 + 非运行中） */
+const canSplit = computed(
+  () => splitFile.value !== null && outputDir.value !== '' && phase.value !== 'running'
+)
+
+/** 分割输出为 PNG 时质量无效（spec §5.3） */
+const splitIsLossless = computed(
+  () => (splitFile.value?.path ?? '').toLowerCase().endsWith('.png')
 )
 
 const progressMessage = computed(() => {
@@ -265,7 +296,11 @@ function onEvent(event: TaskEvent): void {
   detach()
   progress.value = null
   if (event.kind === 'done') {
-    result.value = (event.result as StitchResult | undefined) ?? null
+    if (activeTask.value === 'split') {
+      splitResult.value = (event.result as SplitResult | undefined) ?? null
+    } else {
+      result.value = (event.result as StitchResult | undefined) ?? null
+    }
     phase.value = 'idle'
     return
   }
@@ -281,9 +316,11 @@ async function start(): Promise<void> {
   if (!canStart.value) return
   detach()
   currentTaskId = ''
+  activeTask.value = 'stitch'
   phase.value = 'running'
   error.value = null
   result.value = null
+  splitResult.value = null
   progress.value = { current: 0, total: files.value.length, stage: 'measure', message: '准备处理…' }
   const payload: StitchPayload = {
     inputPaths: files.value.map((item) => item.path),
@@ -295,6 +332,34 @@ async function start(): Promise<void> {
   }
   try {
     const { taskId } = await submitStitch(payload)
+    currentTaskId = taskId
+    unsubscribe = window.lumin.onTaskEvent(onEvent)
+  } catch (err) {
+    setError(err)
+  }
+}
+
+async function startSplit(): Promise<void> {
+  const picked = splitFile.value
+  if (!canSplit.value || picked === null) return
+  detach()
+  currentTaskId = ''
+  activeTask.value = 'split'
+  phase.value = 'running'
+  error.value = null
+  result.value = null
+  splitResult.value = null
+  progress.value = { current: 0, total: 1, stage: 'read', message: '准备处理…' }
+  const payload: SplitPayload = {
+    inputPath: picked.path,
+    mode: splitMode.value,
+    height: splitHeight.value,
+    parts: splitParts.value,
+    quality: splitQuality.value,
+    outputDir: outputDir.value
+  }
+  try {
+    const { taskId } = await split(payload)
     currentTaskId = taskId
     unsubscribe = window.lumin.onTaskEvent(onEvent)
   } catch (err) {
@@ -314,14 +379,42 @@ async function onCancel(): Promise<void> {
 function resetBatch(): void {
   detach()
   clearFiles()
+  removeSplitFile()
   result.value = null
+  splitResult.value = null
   error.value = null
   progress.value = null
   phase.value = 'idle'
 }
 
 function retry(): void {
+  if (activeTask.value === 'split') {
+    void startSplit()
+    return
+  }
   void start()
+}
+
+/** 单张长图选择（体积极限同拼接） */
+function addSplitFile(payload: { file: File; path: string }): void {
+  invalidHint.value = ''
+  if (payload.file.size > MAX_IMAGE_BYTES) {
+    invalidHint.value = `图片超过 40MB，已跳过：${payload.file.name}`
+    return
+  }
+  removeSplitFile()
+  splitFile.value = {
+    file: payload.file,
+    path: payload.path,
+    url: URL.createObjectURL(payload.file),
+    size: payload.file.size
+  }
+}
+
+function removeSplitFile(): void {
+  if (splitFile.value !== null) URL.revokeObjectURL(splitFile.value.url)
+  splitFile.value = null
+  splitResult.value = null
 }
 
 /** 系统目录选择：选中回填并记忆；取消保持原值 */
@@ -353,17 +446,30 @@ onUnmounted(() => {
   detach()
   if (previewTimer !== undefined) window.clearTimeout(previewTimer)
   clearFiles()
+  removeSplitFile()
 })
 </script>
 
 <template>
   <div class="flex max-w-4xl flex-col gap-4">
     <header class="flex flex-col gap-1">
-      <h2 class="text-lg font-semibold text-[var(--lumin-color-text)]">图片拼接</h2>
+      <h2 class="text-lg font-semibold text-[var(--lumin-color-text)]">图片拼接与分割</h2>
       <p class="text-sm text-[var(--lumin-color-text-secondary)]">
-        多张图片拼成纵向/横向长图或网格拼图，原图不修改，全程离线
+        多张图片拼成纵向/横向长图或网格拼图，或把一张长图按高度/份数切段，原图不修改，全程离线
       </p>
     </header>
+
+    <!-- 页签：拼接 / 长图分割（M40） -->
+    <NTabs v-model:value="activeTab" type="line">
+      <NTabPane name="stitch">
+        <template #tab>拼接</template>
+      </NTabPane>
+      <NTabPane name="split">
+        <template #tab>长图分割</template>
+      </NTabPane>
+    </NTabs>
+
+    <template v-if="activeTab === 'stitch'">
 
     <DropZone
       v-if="files.length === 0"
@@ -572,6 +678,181 @@ onUnmounted(() => {
             再拼一次
           </NButton>
         </div>
+      </template>
+    </template>
+    </template>
+
+    <!-- 长图分割（M40，spec §3.6/§5） -->
+    <template v-else>
+      <DropZone
+        v-if="splitFile === null"
+        :accept="ACCEPT"
+        hint="拖入一张长图，或点击选择"
+        @select="addSplitFile"
+        @invalid="(reason: string) => (invalidHint = reason)"
+      />
+      <p
+        v-if="splitFile === null"
+        class="text-xs text-[var(--lumin-color-text-secondary)]"
+      >
+        支持 PNG / JPG / WebP，单张不超过 40MB；按固定高度或按份数切分，输出沿用原格式。
+      </p>
+
+      <p v-if="invalidHint !== ''" class="text-sm text-[var(--lumin-color-error)]">
+        {{ invalidHint }}
+      </p>
+
+      <template v-if="splitFile !== null">
+        <section class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-[var(--lumin-color-text)]">已选 1 张</span>
+            <NButton size="small" quaternary @click="removeSplitFile">
+              <template #icon><Trash2 :size="14" /></template>
+              清空
+            </NButton>
+          </div>
+          <div
+            class="flex items-center gap-2 rounded-[var(--lumin-radius-sm)] border border-[var(--lumin-color-border)] px-2 py-1"
+          >
+            <img
+              :src="splitFile.url"
+              :alt="splitFile.file.name"
+              class="h-8 w-8 rounded-[var(--lumin-radius-sm)] object-cover"
+            />
+            <span class="flex-1 truncate text-sm text-[var(--lumin-color-text)]">
+              {{ splitFile.file.name }}
+            </span>
+            <span class="text-xs text-[var(--lumin-color-text-secondary)]">
+              {{ formatSize(splitFile.size) }}
+            </span>
+            <NButton size="tiny" quaternary @click="removeSplitFile">
+              <template #icon><X :size="12" /></template>
+            </NButton>
+          </div>
+        </section>
+
+        <section class="flex flex-col gap-3">
+          <div class="flex flex-col gap-1">
+            <span class="text-sm text-[var(--lumin-color-text)]">切分方式</span>
+            <NRadioGroup v-model:value="splitMode" data-testid="split-mode">
+              <NRadio value="height">按固定高度</NRadio>
+              <NRadio value="parts">按份数</NRadio>
+            </NRadioGroup>
+          </div>
+
+          <div v-if="splitMode === 'height'" class="flex items-center gap-3">
+            <span class="w-24 shrink-0 text-sm text-[var(--lumin-color-text)]">每段高度</span>
+            <NInputNumber
+              v-model:value="splitHeight"
+              data-testid="split-height"
+              :min="SPLIT_LIMITS.minHeight"
+              :max="SPLIT_LIMITS.maxHeight"
+              :step="100"
+              class="max-w-32"
+            >
+              <template #suffix>px</template>
+            </NInputNumber>
+          </div>
+
+          <div v-else class="flex items-center gap-3">
+            <span class="w-24 shrink-0 text-sm text-[var(--lumin-color-text)]">份数</span>
+            <NInputNumber
+              v-model:value="splitParts"
+              data-testid="split-parts"
+              :min="SPLIT_LIMITS.minParts"
+              :max="SPLIT_LIMITS.maxParts"
+              class="max-w-32"
+            />
+          </div>
+
+          <div class="flex items-center gap-3">
+            <span class="w-24 shrink-0 text-sm text-[var(--lumin-color-text)]">
+              质量 {{ splitQuality }}
+            </span>
+            <NSlider
+              v-model:value="splitQuality"
+              :min="LIMITS.minQuality"
+              :max="LIMITS.maxQuality"
+              :step="1"
+              :disabled="splitIsLossless"
+            />
+          </div>
+        </section>
+
+        <section class="flex items-center gap-2">
+          <NInput :value="outputDir" readonly placeholder="输出目录" class="flex-1" />
+          <NButton @click="chooseDir">
+            <template #icon><FolderOpen :size="16" /></template>
+            选择目录
+          </NButton>
+        </section>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <NButton
+            type="primary"
+            data-testid="split-run"
+            :disabled="!canSplit"
+            @click="startSplit"
+          >
+            <template #icon><Scissors :size="16" /></template>
+            开始分割
+          </NButton>
+          <NButton v-if="splitResult !== null" quaternary @click="resetBatch">
+            再处理一张
+          </NButton>
+        </div>
+
+        <TaskProgress
+          v-if="phase === 'running' && progress !== null"
+          :message="progressMessage"
+          :current="progress.current"
+          :total="progress.total"
+          @cancel="onCancel"
+        />
+
+        <template v-if="phase === 'error' && error !== null">
+          <NAlert type="error" :title="error.message">
+            <p class="text-xs opacity-80">
+              {{ error.code }}<template v-if="error.detail"> · {{ error.detail }}</template>
+            </p>
+          </NAlert>
+          <div class="flex gap-2">
+            <NButton v-if="isRetryable(error.code)" type="primary" @click="retry">重试</NButton>
+            <NButton quaternary @click="resetBatch">返回重新选择</NButton>
+          </div>
+        </template>
+
+        <template v-if="phase === 'idle' && splitResult !== null">
+          <NAlert
+            data-testid="split-result"
+            type="success"
+            :title="`已切分 ${splitResult.outputs.length} 段 · 源图 ${splitResult.sourceWidth} × ${splitResult.sourceHeight}`"
+          />
+          <ul class="flex max-h-48 flex-col gap-1 overflow-auto">
+            <li
+              v-for="item in splitResult.outputs"
+              :key="item.path"
+              class="flex items-center justify-between gap-2 rounded-[var(--lumin-radius-sm)] border border-[var(--lumin-color-border)] px-2 py-1"
+            >
+              <span class="flex-1 truncate text-xs text-[var(--lumin-color-text)]">
+                {{ item.path }}
+              </span>
+              <span class="shrink-0 text-xs text-[var(--lumin-color-text-secondary)]">
+                {{ item.width }} × {{ item.height }}
+              </span>
+            </li>
+          </ul>
+          <div class="flex gap-2">
+            <NButton
+              v-if="splitResult.outputs.length > 0"
+              quaternary
+              @click="revealPath(splitResult.outputs[0]?.path ?? '')"
+            >
+              <template #icon><FolderOpen :size="16" /></template>
+              打开输出目录
+            </NButton>
+          </div>
+        </template>
       </template>
     </template>
   </div>

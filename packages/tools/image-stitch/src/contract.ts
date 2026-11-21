@@ -256,3 +256,80 @@ export function outputFileName(date: Date, ext: string): string {
 export function extForEncoder(encoder: ImageEncoder): 'png' | 'jpg' | 'webp' {
   return encoder === 'jpeg' ? 'jpg' : encoder
 }
+
+// —— M40 长图分割（spec §3.6/§4） ——
+
+/** 输出段数上限（防误切出上百段） */
+export const MAX_SPLIT_SLICES = 100
+
+/** 分割方式：固定高度 / 按份数 */
+export type SplitMode = 'height' | 'parts'
+
+/** 单段落位（y 为源图纵坐标，h 为段高） */
+export interface SplitSlice {
+  y: number
+  h: number
+}
+
+/** 分割计划 */
+export interface SplitPlan {
+  slices: SplitSlice[]
+}
+
+/**
+ * 计算长图分割计划（单一真相源，spec §4）
+ * - height：段数 = ceil(图高 / 高度)，末段保留实际高度
+ * - parts：`base = floor(高/份数)`，余数依次摊到前几段（`base + 1`）
+ * @param height 源图高（px）
+ * @param mode 分割方式
+ * @param param 固定高度（height）或份数（parts）
+ * @returns 切片计划；非法（参数 ≤0 / 份数 > 图高 / 段数 > 100）返回 null
+ */
+export function planSplit(height: number, mode: SplitMode, param: number): SplitPlan | null {
+  if (!Number.isFinite(height) || height <= 0) return null
+  const sourceHeight = Math.floor(height)
+  const value = Math.floor(param)
+  if (!Number.isFinite(value) || value <= 0) return null
+
+  const slices: SplitSlice[] = []
+  if (mode === 'height') {
+    if (value < 1) return null
+    const count = Math.ceil(sourceHeight / value)
+    if (count > MAX_SPLIT_SLICES) return null
+    for (let y = 0; y < sourceHeight; y += value) {
+      slices.push({ y, h: Math.min(value, sourceHeight - y) })
+    }
+    return { slices }
+  }
+
+  if (value < 2 || value > sourceHeight || value > MAX_SPLIT_SLICES) return null
+  const base = Math.floor(sourceHeight / value)
+  const remainder = sourceHeight % value
+  let y = 0
+  for (let index = 0; index < value; index += 1) {
+    const h = base + (index < remainder ? 1 : 0)
+    slices.push({ y, h })
+    y += h
+  }
+  return { slices }
+}
+
+/**
+ * 分段文件名：`{原名}_part{序号}.{ext}`（序号 1 起，补零位 = max(2, 段数位数)）
+ * @param inputName 输入文件名（含扩展名）
+ * @param index 段序号（1 起）
+ * @param total 总段数
+ * @param ext 输出扩展名（不含点）
+ */
+export function splitFileName(
+  inputName: string,
+  index: number,
+  total: number,
+  ext: string
+): string {
+  const dot = inputName.lastIndexOf('.')
+  const stem = dot <= 0 ? inputName : inputName.slice(0, dot)
+  const digits = Math.max(2, String(Math.max(1, total)).length)
+  const seq = String(Math.max(1, Math.round(index))).padStart(digits, '0')
+  return `${stem}_part${seq}.${ext}`
+}
