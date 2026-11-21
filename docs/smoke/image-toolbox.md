@@ -61,3 +61,31 @@
   - 损坏 jpg（文本改名）→ `No JPEG data found in image` + 无尺寸 Video 行 → `IT_FILE_CORRUPT` ✅
   - 无法解析 stderr → `IT_PROBE_FAILED` ✅；探测超时 10s 杀树不变
 - **回归**：单测 28 全绿；e2e 套件 **5/5 通过**（probe 元信息 / 压缩 / 占用+损坏混合批次 / gif 动画 / 页签渲染）。
+
+## 8. M40 图片增强（2026-11-21）：调整 + GIF
+
+### 8.1 功能与验收
+
+- **调整页签**：灰度 `hue=s=0` / 反色 `negate` / 黑白二值 `format=gray,lut=y='if(gt(val,T),255,0)'`（阈值 0–255 可调，默认 128）；输出沿用原格式映射，命名 `{原名}.gray|.invert|.bw{T}.{ext}`。
+- **GIF 页签**：1–100 帧，帧时长 50–5000ms（`fps = 1000/帧时长`）、循环 `-1|0|2..10`、宽度 0（首图宽）或 64–4096；高度按目标宽等比自动取最大；画布超 4096px 或 16,777,216 像素 → `IT_GIF_TOO_LARGE`。
+- **实测（真实 ffmpeg，2026-11-21）**：红色 32×32 → 灰度三通道 76/76/76、反色 2/255/255、二值阈值 100 → 0/0/0、阈值 50 → 255/255/255（e2e 像素断言）；3 帧 64×64 → GIF89a + `NETSCAPE2.0`（循环扩展位于全局色板后，偏移约 784）。
+- **e2e**：`image-toolbox-smoke.spec.ts` 新增 2 用例；页签回归扩展为 5 个页签（压缩/转换/缩放/调整/GIF）。
+
+### 8.2 R2 八类映射（增量）
+
+| 类别         | 验证                                                                                                                                   |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 中文/空格路径 | e2e 使用 `红 色.png`，输出 `红 色.gray.png` 等正常落盘                                                                                  |
+| 文件被占用   | GIF 逐帧探测/读取失败 → `IT_FILE_UNSUPPORTED`（沿用既有 probe 归类）                                                                    |
+| 加密文件     | `ffmpeg` 解码失败 → `IT_FILE_CORRUPT`（沿用既有 `classifyFfmpegFailure`）                                                               |
+| 超大文件     | 单文件 >200MB → `IT_FILE_UNSUPPORTED`；GIF 画布超限 → `IT_GIF_TOO_LARGE`                                                                 |
+| 任务取消     | 三段式 `cancel` 杀树，GIF 单进程整体中止 → `IT_CANCELLED`（无需清理半成品）                                                             |
+| 并发溢出     | 壳任务队列并发上限不变；GIF 为单任务单进程                                                                                              |
+| 磁盘满       | 输出侧 `no space left on device`/`access denied` → `IT_OUTPUT_WRITE_FAILED`                                                             |
+| 断电恢复     | GIF 输出为单文件，断电最多留下 `-y` 覆盖的半成品，重跑覆盖同名（命名含时间戳，不会误删）                                                |
+
+### 8.3 R5 体积记录（增量）
+
+- `image-toolbox-*.js`：**55,320 B raw / 12,541 B gzip**（新增两页签后）。
+- `NTabs` / `NSlider` 现由 image-toolbox 与 image-stitch 共用，按 R5 口径属共享 vendor，**不计入工具专属增量**；独占依赖 chunk 仍为 0。
+- 无新增运行时资产；仍走 `binaries/download/ffmpeg.exe`。**12.5KB gzip ≪ 200KB，达标**。

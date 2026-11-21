@@ -7,7 +7,7 @@
 
 ---
 
-## 1. 决策总表（Q1–Q39 锁定）
+## 1. 决策总表（Q1–Q40 锁定）
 
 | #   | 决策项        | 结论                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | --- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -50,6 +50,7 @@
 | Q37 | 图片裁剪      | **新增 `image-crop` 工具（2026-11-21 用户选定）**：多选静态图片（PNG/JPG/WebP/BMP/TIFF，1–500 张、单张 ≤200MB）批量裁剪——比例模式（1:1/4:3/3:4/16:9/9:16/自定义 + 九宫格锚点）取原图内最大同比例矩形；自由模式按百分比区域（左/上/宽/高）；输出目录记忆、`{原名}_裁剪{标签}.{ext}`、冲突递增、原图只读；主进程 ffmpeg 串行 + 进度 + 取消，单张失败不中断整批；公共编码/失败归类上提 `node-kit/ffmpeg`、扩展名提取上提 `shared/naming`，零新增第三方依赖；详见 §4.35 |
 | Q38 | 生活计算器    | **新增 `life-calculator` 工具（2026-11-21 用户选定，M37）**：房贷（等额本息/等额本金 + 还款计划摘要）、工资个税（月度口径 + 五险一金 + 专项附加扣除）、百分比与折扣（增减/变化率/折后价/反推原价）；纯 renderer、零 IPC、零新增依赖；详见 §4.37                                                                                                                                                                                                                     |
 | Q39 | Markdown 工具 | **新增 `markdown-tool` 工具（2026-11-21 用户选定，M39）**：Markdown 预览 + MD→HTML（引入 `marked` 18.2.1）、JSON→TypeScript 类型生成（零依赖自写）、YAML→JSON / JSON→YAML / 格式化（引入 `js-yaml` 5.5.0）；解析全在 renderer，主进程仅 `config`/`set-output-dir`/`save` 同步短通道做目录记忆与原子写盘；预览用 sandbox iframe + CSP 双重防脚本；详见 §4.39 |
+| Q40 | 图片增强      | **在既有 `image-toolbox` 与 `image-stitch` 扩展页签（2026-11-21 用户选定，M40，不新建工具包）**：`image-toolbox` 新增「调整」页签（灰度/反色/黑白二值可调阈值，复用 `process` 通道 `mode:'effect'`）与「GIF」页签（1–100 张串行探尺寸 → 单进程 `filter_complex` 出片，新通道 `make-gif`）；`image-stitch` 新增「长图分割」页签（固定高度/按份数，新通道 `split` + `split.worker.ts`）；复用 `binaries/download/ffmpeg.exe` 与 `@napi-rs/canvas`，零新增依赖；详见 §4.40 |
 | —   | 硬约束        | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -588,6 +589,15 @@ lumin/
 - **三态**：空态（三页签引导 + 主操作）、加载态豁免（同步纯函数，导出按钮 loading）、报错态（各页签独立 `role="alert"`）
 - **验收**：单测（markdown / json-to-ts / yaml / save / schema / node / errors / manifest，本包 ≥80%）；e2e 4/4（预览、JSON→TS 报错恢复、YAML 三模式、导出冲突 `(1)`）；R2 八类映射；chunk（`marked` + `js-yaml` 独占依赖）<200KB gzip；`pnpm gate` 全绿
 
+### 4.40 图片增强（M40，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：不新建工具包——`image-toolbox` 增「调整」「GIF」两页签，`image-stitch` 增「长图分割」页签；零新增第三方依赖（复用 `ffmpeg.exe`、`@napi-rs/canvas`）
+- **调整口径（spec image-toolbox §2.4）**：`process` 增 `mode:'effect'`，`options = { effect:'grayscale'|'invert'|'binary', threshold:0–255, quality:1–100 }`；灰度 `hue=s=0`、反色 `negate`、黑白 `format=gray,lut=y='if(gt(val,T),255,0)'`；输出沿用原格式映射，命名 `{原名}.gray|.invert|.bw{T}.{ext}`
+- **GIF 口径（§2.5）**：新通道 `image-toolbox:make-gif`（task）`{files 1–100, outputDir, options:{durationMs 50–5000, loop:-1|0|2..10, width:0|64–4096}}` → done `{outputPath,width,height,frames,sizeBytes}`；画布上限 4096px / 16,777,216 像素（超限 `IT_GIF_TOO_LARGE`），高度按目标宽等比自动取最大；`filter_complex` = 逐帧 scale+pad → concat → split → palettegen → paletteuse；命名 `动图_{yyyyMMdd-HHmmss}.gif`、冲突递增
+- **长图分割口径（spec image-stitch §3.6/§5）**：新通道 `image-stitch:split`（task，`split.worker.ts`）`{inputPath, mode:'height'|'parts', height 50–30000, parts 2–50, quality 60–100, outputDir?}` → done `{outputs[{path,width,height}], sourceWidth, sourceHeight}`；`planSplit` 固定高度取 ceil 段数、按份数余数摊到前几段，段数 >100 或份数 > 图高 → `IS_SPLIT_INVALID`；命名 `{原名}_part{补零 max(2,段数位数)}.{ext}`、沿用输入扩展名、冲突 `(1)`
+- **三态**：两工具空态引导不变；GIF/分割为长任务（进度可取消）；报错态结构化错误码 + 重试（可重试码）
+- **验收**：单测（encode/gif/naming/schema/node/client + contract/schema/node/split.worker/client，两包各 ≥80%）；e2e 新增 3 用例（调整像素断言、GIF89a+NETSCAPE2.0、固定高度/按份数切片与冲突递增）；chunk 记录见 `docs/smoke/image-toolbox.md` §8 与 `docs/smoke/image-stitch.md` §7
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -669,6 +679,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M37 v3.6**  | 生活计算器（§4.37，2026-11-21）：`life-calculator` —— 房贷（等额本息/等额本金 + 还款计划）、工资个税（月度口径 + 五险一金 + 专项附加扣除）、百分比与折扣；纯 renderer、零 IPC、零新增依赖                                                                                                                                                       | §4.37 验收；e2e 4 用例；R2 八类映射；chunk 8,415 B gzip；gate 全绿                      | 0.5 天   |
 | **M38 v3.7**  | PDF 能力补全（§4.38，2026-11-21）：`pdf-toolkit` 扩展三 Tab —— 文本层提取导出 TXT、内嵌图片提取（sha256 去重）、按档位重采样压缩；抽取原语上提 `node-kit/pdf`，零新增依赖                                                                                                                                                                       | §4.38 验收；e2e 12/12；R2 八类映射；包覆盖率 ≥80%；gate 全绿                            | 0.5–1 天 |
 | **M39 v3.8**  | Markdown 工具（§4.39，2026-11-21）：新增 `markdown-tool` —— Markdown 预览 + MD→HTML（`marked` 18.2.1，sandbox iframe + CSP 防脚本）、JSON→TypeScript 类型生成（零依赖自写）、YAML 互转/格式化（`js-yaml` 5.5.0）；解析全在 renderer，主进程仅目录记忆 + 原子写盘                                                                                                                                     | §4.39 验收；e2e 4 用例；R2 八类映射；chunk <200KB gzip；gate 全绿                       | 0.5–1 天 |
+| **M40 v3.9**  | 图片增强（§4.40，2026-11-21）：`image-toolbox` 增「调整」（灰度/反色/黑白二值阈值）与「GIF」（1–100 帧、`filter_complex` 调色板）页签；`image-stitch` 增「长图分割」（固定高度/按份数）页签；复用 ffmpeg 与 @napi-rs/canvas，零新增依赖                                                                                                                                                     | §4.40 验收；e2e 新增 3 用例；R2 八类映射；两包覆盖率 ≥80%；gate 全绿                     | 0.5–1 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

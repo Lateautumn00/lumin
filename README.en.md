@@ -10,7 +10,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | Unit converter     | Length, area, volume, mass, temperature, speed, pressure, energy, power, data (no FX rates)                                                                               |
 | Office to PDF      | Batch-convert `.doc/.docx/.xls/.xlsx/.ppt/.pptx` to PDF, saved next to the source, auto `(1)` suffix on conflicts                                                         |
 | Exam splitter      | PDF split/merge/delete/crop + OCR question slicing (images/PDF → per-question export)                                                                                     |
-| Image toolbox      | Compress / convert / resize — JPG, PNG, WebP, AVIF, BMP, TIFF; GIF→WebP keeps animation                                                                                   |
+| Image toolbox      | Compress / convert / resize / adjust (grayscale/invert/binary threshold) / GIF from frames — JPG, PNG, WebP, AVIF, BMP, TIFF |
 | Image rotate       | Batch rotate (90°/180°/270°) and horizontal/vertical flip, combinable; remembers output folder, never overwrites originals                                                |
 | Image crop         | Batch crop by aspect ratio (with 9-grid anchor) or percentage region; remembers output folder, never overwrites originals                                                 |
 | Batch renamer      | Six stacked rules in one directory, live preview, conflict detection, single-step undo                                                                                    |
@@ -33,7 +33,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | OCR text           | Offline PP-OCR text extraction from images, editable preview, copy and TXT export                                                                                         |
 | Batch OCR          | Batch OCR over multiple images, per-image editable preview, copy or export one/merged TXT                                                                                 |
 | Image watermark    | Batch text/image watermarks on multiple images (9-grid, opacity, rotation, tiling); originals untouched                                                                   |
-| Image stitching    | Stitch multiple images into vertical/horizontal long images or a grid (spacing, margin, background color adjustable)                                                      |
+| Image stitching    | Stitch multiple images into vertical/horizontal long images or a grid, or split one long image by fixed height / part count (spacing, margin, background adjustable)        |
 | Video downloader   | Bilibili/Douyin/YouTube presets (online, local parsing only; respect platform terms and copyright)                                                                        |
 | Theme              | Follow system / light / dark, applied app-wide via design tokens with no per-tool overrides                                                                               |
 

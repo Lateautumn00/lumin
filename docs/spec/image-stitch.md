@@ -1,7 +1,7 @@
 # 图片拼接（image-stitch）字段级功能清单
 
-> 里程碑：M22（已登记 plan §1 Q26 / §4.22 / §6）
-> 状态：**已批准并于 2026-11-20 实施**（冒烟见 `docs/smoke/image-stitch.md`）
+> 里程碑：M22（已登记 plan §1 Q26 / §4.22 / §6）；**M40 增补「长图分割」Tab（2026-11-21 用户拍板，登记 plan §4.40）**
+> 状态：**已批准并于 2026-11-20 实施**（冒烟见 `docs/smoke/image-stitch.md`）；M40 增补项待实施后回写冒烟
 > 关联规范：`AGENTS.md` §2（零耦合）、§5（三态/tokens/图标）、§6（IPC 三段式）、§7（测试门禁）、§8（性能）
 
 ---
@@ -30,12 +30,13 @@
 | 输出     | 目录选择器 + 记忆（settings `outputDir`，缺省 `userData/image-stitch`）；命名 `拼接_{yyyyMMdd-HHmmss}.{ext}`，冲突 `(n)` 递增 |
 | 进度     | worker 两阶段：`measure`（逐张量尺寸）→ `draw`（逐张绘制），`progress` 逐张上报              |
 | 取消     | 长任务三段式（invoke → progress → done/error）+ `lumin:task:cancel`                       |
+| 长图分割（M40） | 单张长图按**固定高度**（50–30000px）或**按份数**（2–50）切成多张；输出沿用原格式（png 无损 / jpg、webp q60–100）；命名 `{原名}_part01.{ext}` |
+| 分割上限 | 单边 ≤30,000px；份数 ≤ 图高；输出段数 ≤ 100                                                |
 
 ### 1.3 不做（防范围膨胀）
 
 - 自由画布 / 拖拽排版 / 旋转 / 圆角 / 边框 / 阴影
 - 水印叠加（`image-watermark` 范围）、格式转换与压缩（`image-toolbox` 范围）
-- 分页输出、超长图自动切段
 - 拖拽排序（顺序 = 选择顺序，可逐条移除后重选）
 - 历史记录、撤销、模板保存
 
@@ -55,7 +56,7 @@
 {
   id: 'image-stitch',
   name: '图片拼接',
-  description: '多张图片拼成纵向/横向长图或网格拼图（间距/外边距/背景色可调）',
+  description: '多张图片拼成纵向/横向长图或网格拼图，或将长图按高度/份数分割',
   icon: 'layout-grid',
   order: 86,
   version: '0.1.0'
@@ -99,6 +100,19 @@
 - 成功：`NAlert success`「已生成 2400 × 5600 · 5 张图」
 - 显示输出绝对路径 + `[打开输出目录]` + `[再拼一次]` + `[再处理一批]`
 
+### 3.6 长图分割 Tab（M40）
+
+- 页签：`拼接` / `长图分割`（默认拼接；`#tab` 插槽写法，规避 naive-ui 自闭合 pane 不渲染标签）
+- 输入：单张 PNG/JPG/WebP（拖拽 + 选择器）；≤40MB；选中后展示宽高
+- 切分方式：`固定高度` / `按份数`（单选）
+  - 固定高度：数字输入 50–30000px（默认 1000）；段数 = `ceil(图高 / 高度)`，末段不足保留实际高度
+  - 按份数：数字输入 2–50（默认 3）；`base = floor(高/份数)`，余数依次摊到前几段（`base + 1`），份数不得超过图高
+- 输出格式：沿用输入扩展名（png 无损；jpg/webp 质量滑杆 60–100，默认 90）
+- 输出目录：与拼接 Tab 共用（settings 记忆，缺省 `userData/image-stitch`）
+- 命名：`{原名}_part01.{ext}`（序号按段数补零，至少 2 位；冲突 `(1)` 递增）
+- 加载态：`读取 i/1` → `切分 i/n` + `[取消]`；取消后不留 `.tmp`
+- 结果态：「已生成 N 段 · 源图 W×H」+ 逐段尺寸列表 + `[打开输出目录]`
+
 ---
 
 ## 4. 布局纯函数（`contract.ts`）
@@ -115,6 +129,8 @@
 | `timestampName(date)`                    | `yyyyMMdd-HHmmss`                                                    |
 | `outputFileName(date, ext)`              | `拼接_{timestamp}.{ext}`                                              |
 | `extForEncoder(encoder)`                 | `png` / `jpg` / `webp`                                               |
+| `planSplit(height, mode, param)`         | **M40**：`{mode:'height', height}`/`{mode:'parts', parts}` → `{slices:[{y,h}]}`；非法（份数>图高/高度≤0/段数>100）返回 null |
+| `splitFileName(inputName, index, total, ext)` | **M40**：`{原名}_part{序号补零}.{ext}`（补零位 = max(2, 段数位数)）           |
 
 **纵向**：`contentW = base`；每张 `scaleToWidth`；`contentH = Σh + gutter×(n-1)`。
 **横向**：`contentH = base`；每张 `scaleToHeight`；`contentW = Σw + gutter×(n-1)`。
@@ -145,6 +161,16 @@ const stitchPayloadSchema = z.object({
   bgColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   outputDir: z.string().min(1).optional()
 })
+
+// M40 长图分割
+const splitPayloadSchema = z.object({
+  inputPath: z.string().min(1).regex(/\.(png|jpe?g|webp)$/i),
+  mode: z.enum(['height', 'parts']),
+  height: z.number().int().min(50).max(30_000),
+  parts: z.number().int().min(2).max(50),
+  quality: z.number().int().min(60).max(100),
+  outputDir: z.string().min(1).optional()
+})
 ```
 
 ### 5.2 主进程（`node.ts`）
@@ -152,6 +178,7 @@ const stitchPayloadSchema = z.object({
 - `config` → `{ outputDir }`（记忆值，缺省 `userData/image-stitch`）
 - `set-output-dir` → 建目录并记忆；失败 `IS_OUTPUT_DIR_INVALID`
 - `stitch` → 逐张预检（可读 / 独占 / ≤40MB）→ 解析输出目录 → `runTask`（600s、可取消）
+- `split`（M40）→ 单张预检 → 解析输出目录 → `runTask`（split worker，600s、可取消）
 - 预检错误分类：`ENOENT → IS_INPUT_INVALID`、占用 → `IS_FILE_LOCKED`、超限 → `IS_IMAGE_TOO_LARGE`
 
 ### 5.3 worker（`stitch.worker.ts`）
@@ -161,6 +188,14 @@ const stitchPayloadSchema = z.object({
 - `createCanvas` 填充 `bgColor` → 第二遍逐张解码绘制（progress `draw`）
 - `encode`（png 无损 / jpeg、webp q=quality）→ `.tmp` + `rename` 原子写；`uniqueFileName` 冲突递增
 - done `{ outputPath, width, height, count }`
+
+### 5.4 split worker（`split.worker.ts`，M40）
+
+- `readFile → loadImage` 得源图宽高（progress `读取`）
+- `planSplit` → 非法 `IS_SPLIT_INVALID`；单边 >30,000px 同样 `IS_SPLIT_INVALID`（源图异常）
+- 逐段 `createCanvas(源宽, 段高)` + `drawImage(源, 0, -y)` → 按输入扩展名编码（png 无损 / jpeg、webp q=quality）→ `.tmp` + `rename` 原子写；progress `切分 i/n`
+- 命名 `{原名}_part{序号}.{ext}`，`uniqueFileName` 冲突递增（逐段加入占用集合）
+- done `{ outputs: [{ path, width, height }], sourceWidth, sourceHeight }`
 
 ---
 
@@ -174,6 +209,7 @@ const stitchPayloadSchema = z.object({
 | `IS_IMAGE_TOO_LARGE`    | 图片超过 40MB，请压缩后重试              | 否     |
 | `IS_IMAGE_CORRUPT`      | 图片无法解码，可能已损坏                 | 是     |
 | `IS_OUTPUT_TOO_LARGE`   | 拼接结果超出画布上限，请减少图片或尺寸   | 否     |
+| `IS_SPLIT_INVALID`      | **M40** 切分参数非法（份数超过图高/段数>100/源图异常） | 否 |
 | `IS_OUTPUT_DIR_INVALID` | 输出目录不可用或不可写                   | 是     |
 | `IS_WRITE_FAILED`       | 写入失败，请检查磁盘空间与目录权限       | 是     |
 | `IS_PROCESS_FAILED`     | 处理失败，请重试或查看详情               | 是     |
@@ -211,6 +247,7 @@ const stitchPayloadSchema = z.object({
 6. 预览与正式出图布局一致（同一 `planLayout`）
 7. 单测覆盖 contract / schema / errors / node / worker / client；本包 ≥80%
 8. e2e 2/2；`pnpm gate` 全绿
+9. **M40**：固定高度切分（200×900、高 300 → 3 段 200×300）与按份数切分（2 份 → 200×450 两段）尺寸断言一致；`{原名}_part01` 命名与冲突 `(1)` 递增；中文+空格路径可用；取消无 `.tmp` 残留
 
 ---
 
