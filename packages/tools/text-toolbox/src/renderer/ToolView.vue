@@ -22,6 +22,7 @@ import { decodeMorse, encodeMorse } from '../morse'
 import { collectMatches, replacePreview, type RegexMatchInfo } from '../regex'
 import { applyLineOps, replaceText, type CaseMode, type SortMode } from '../text-ops'
 import { countText } from '../stats'
+import { csvToJson, jsonToCsv, type CsvDelimiter } from '../csv'
 
 /** 超过该字节数先渲染「处理中」再分帧计算，避免输入后界面卡住无反馈 */
 const HEAVY_BYTES = 200 * 1024
@@ -62,6 +63,21 @@ const codecOutput = ref('')
 // —— 摩尔斯 Tab ——
 const morseInput = ref('')
 const morseOutput = ref('')
+
+// —— CSV/JSON Tab（M47）——
+const csvDirection = ref<'csv2json' | 'json2csv'>('csv2json')
+const csvDelimiter = ref<CsvDelimiter>(',')
+const csvHasHeader = ref(true)
+const csvIncludeHeader = ref(true)
+const csvInput = ref('')
+const csvOutput = ref('')
+
+/** 输入 placeholder 随转换方向变化 */
+const csvPlaceholder = computed(() =>
+  csvDirection.value === 'csv2json'
+    ? '粘贴 CSV 文本（支持引号包裹与字段内换行）'
+    : '粘贴 JSON 对象数组，如 [{"name":"张三"}]'
+)
 
 // —— 正则 Tab ——
 const regexPattern = ref('')
@@ -269,6 +285,57 @@ function fillMorseSample(): void {
   morseOutput.value = ''
 }
 
+/* ---------- CSV/JSON Tab ---------- */
+
+watch(csvDirection, () => {
+  clearFeedback()
+  csvOutput.value = ''
+})
+
+function runCsv(): void {
+  clearFeedback()
+  if (csvInput.value.trim() === '') {
+    notice.value = '请先输入要转换的文本'
+    return
+  }
+  runMaybeHeavy(csvInput.value, () => {
+    const result =
+      csvDirection.value === 'csv2json'
+        ? csvToJson(csvInput.value, {
+            delimiter: csvDelimiter.value,
+            hasHeader: csvHasHeader.value
+          })
+        : jsonToCsv(csvInput.value, {
+            delimiter: csvDelimiter.value,
+            includeHeader: csvIncludeHeader.value
+          })
+    if (!result.ok) {
+      csvOutput.value = ''
+      showError(result.error)
+      return
+    }
+    csvOutput.value = result.value
+    notice.value = `转换完成 · ${byteLength(result.value)} 字节`
+  })
+}
+
+function swapCsv(): void {
+  if (csvOutput.value === '') return
+  clearFeedback()
+  csvInput.value = csvOutput.value
+  csvOutput.value = ''
+  csvDirection.value = csvDirection.value === 'csv2json' ? 'json2csv' : 'csv2json'
+}
+
+function fillCsvSample(): void {
+  clearFeedback()
+  csvOutput.value = ''
+  csvInput.value =
+    csvDirection.value === 'csv2json'
+      ? 'name,role,active\n张三,管理员,true\n李四,编辑,false'
+      : '[{"name":"张三","role":"管理员"},{"name":"李四","role":"编辑"}]'
+}
+
 /* ---------- 文本处理 Tab ---------- */
 
 /** 统计对象：已处理则统计输出，否则统计输入 */
@@ -424,8 +491,8 @@ function messageOf(code: string): string {
     <div>
       <h1 class="text-base font-semibold">文本工具箱</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        JSON 格式化压缩、Base64/URL/Hex/Unicode
-        编解码、正则测试、批量文本处理与字数统计、摩尔斯电码（本地处理，不联网）
+        JSON 格式化压缩、Base64/URL/Hex/Unicode 编解码、正则测试、批量文本处理与字数统计、摩尔斯电码、CSV/JSON
+        互转（本地处理，不联网）
       </p>
     </div>
 
@@ -446,6 +513,9 @@ function messageOf(code: string): string {
       </NTabPane>
       <NTabPane name="morse">
         <template #tab>摩尔斯</template>
+      </NTabPane>
+      <NTabPane name="csv">
+        <template #tab>CSV/JSON</template>
       </NTabPane>
     </NTabs>
 
@@ -766,6 +836,72 @@ function messageOf(code: string): string {
       </div>
       <NText depth="3" class="text-xs">
         支持 A–Z、0–9 与常用标点；编码不区分大小写，解码结果统一为大写。
+      </NText>
+    </div>
+
+    <!-- CSV/JSON：RFC 4180 解析 + 扁平对象数组序列化 -->
+    <div v-if="activeTab === 'csv'" class="flex flex-col gap-3">
+      <div class="flex flex-wrap items-center gap-2 text-sm">
+        <NText depth="2">方向</NText>
+        <select
+          v-model="csvDirection"
+          aria-label="转换方向"
+          class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+        >
+          <option value="csv2json">CSV → JSON</option>
+          <option value="json2csv">JSON → CSV</option>
+        </select>
+        <NText depth="2">分隔符</NText>
+        <select
+          v-model="csvDelimiter"
+          aria-label="CSV 分隔符"
+          class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+        >
+          <option :value="','">逗号 ( , )</option>
+          <option :value="'\t'">制表符 ( Tab )</option>
+          <option :value="';'">分号 ( ; )</option>
+          <option :value="'|'">竖线 ( | )</option>
+        </select>
+        <NCheckbox v-if="csvDirection === 'csv2json'" v-model:checked="csvHasHeader">
+          首行作为表头
+        </NCheckbox>
+        <NCheckbox v-else v-model:checked="csvIncludeHeader">输出表头</NCheckbox>
+        <NButton size="tiny" quaternary @click="fillCsvSample">填入示例</NButton>
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-2">
+        <div class="flex flex-col gap-2">
+          <NText depth="2" class="text-sm">输入</NText>
+          <NInput
+            v-model:value="csvInput"
+            type="textarea"
+            :placeholder="csvPlaceholder"
+            :autosize="{ minRows: 8, maxRows: 16 }"
+          />
+        </div>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <NText depth="2" class="text-sm">输出</NText>
+            <NButton size="tiny" quaternary @click="copyText(csvOutput, 'csv')">
+              <Copy class="mr-1 h-3 w-3" />{{ copiedLabel === 'csv' ? '已复制' : '复制' }}
+            </NButton>
+          </div>
+          <NInput
+            :value="csvOutput"
+            type="textarea"
+            readonly
+            placeholder="转换结果"
+            :autosize="{ minRows: 8, maxRows: 16 }"
+          />
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <NButton type="primary" :disabled="busy" @click="runCsv">转换</NButton>
+        <NButton quaternary :disabled="busy || csvOutput === ''" @click="swapCsv">交换</NButton>
+      </div>
+      <NText depth="3" class="text-xs">
+        CSV 解析遵循 RFC 4180（引号包裹、"" 转义、字段内换行）；JSON → CSV 仅接受扁平对象数组，值一律按字符串输出。
       </NText>
     </div>
 

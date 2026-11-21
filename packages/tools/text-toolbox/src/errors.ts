@@ -19,7 +19,8 @@ export const TEXT_TOOLBOX_ERROR_CODES = [
   'TT_HEX_INVALID',
   'TT_UNICODE_INVALID',
   'TT_REPLACE_INVALID',
-  'TT_MORSE_INVALID'
+  'TT_MORSE_INVALID',
+  'TT_CSV_INVALID'
 ] as const
 
 export type TextToolboxErrorCode = (typeof TEXT_TOOLBOX_ERROR_CODES)[number]
@@ -34,7 +35,8 @@ const MESSAGES: Record<TextToolboxErrorCode, string> = {
   TT_HEX_INVALID: '不是有效的十六进制文本',
   TT_UNICODE_INVALID: '不是有效的 Unicode 转义文本',
   TT_REPLACE_INVALID: '查找内容不能为空',
-  TT_MORSE_INVALID: '不是有效的摩尔斯电码文本'
+  TT_MORSE_INVALID: '不是有效的摩尔斯电码文本',
+  TT_CSV_INVALID: 'CSV/JSON 数据格式不正确'
 }
 
 /** 纯函数统一结果：成功带值，失败带结构化错误（不含 throw） */
