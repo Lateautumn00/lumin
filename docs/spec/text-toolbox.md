@@ -1,11 +1,11 @@
 # 文本工具箱（text-toolbox）字段级功能清单
 
-> 版本：v0.1.0 · 定稿日期：2026-11-18（R8）· 工具 id：`text-toolbox`
+> 版本：v0.2.0 · 定稿日期：2026-11-21（R8）· 工具 id：`text-toolbox`
 > 本文件为该里程碑验收附件；实现与本文件不一致时以本文件为准，变更须走 R8 流程。
 
 ## 1. 范围与边界
 
-**做**：JSON 格式化 / 压缩 / 校验（含错误行列定位）、Base64 与 URL Component 编解码、正则测试与替换预览。
+**做**：JSON 格式化 / 压缩 / 校验（含错误行列定位）、Base64 / URL Component / Hex / Unicode 编解码、正则测试与替换预览、批量文本处理（替换 / 清空空白行 / 去重 / 排序 / 大小写）、字数统计（字符 / 汉字 / 字母 / 数字 / 词 / 行 / UTF-8 字节）。
 
 **不做**：哈希计算、文本 diff、语法高亮、文件读写（纯剪贴板/输入框文本）、联网能力。
 
@@ -13,7 +13,7 @@
 
 ## 2. 页面字段清单
 
-页签为 `JSON / 编解码 / 正则`；页签仅作切换器，内容区随 `v-if` 渲染（非活动页签不挂载）。
+页签为 `JSON / 编解码 / 正则 / 文本处理`；页签仅作切换器，内容区随 `v-if` 渲染（非活动页签不挂载）。
 
 ### 2.1 JSON Tab
 
@@ -27,12 +27,12 @@
 
 ### 2.2 编解码 Tab
 
-| 区域   | 控件                                      | 行为                                                         | 空/默认              |
-| ------ | ----------------------------------------- | ------------------------------------------------------------ | -------------------- |
-| 模式行 | 模式下拉 `Base64（UTF-8）/ URL Component` | Base64 走 UTF-8 分片编解码；URL 走 `encodeURIComponent` 语义 | Base64               |
-| 输入区 | 多行文本域                                | placeholder「粘贴要编码或解码的文本」；支持「填入示例」      | 空                   |
-| 输出区 | 只读多行文本域 + [复制]                   | placeholder「处理结果」                                      | 空                   |
-| 操作区 | [编码] [解码] [交换]                      | 「交换」把输出内容回填输入并清空输出；无输出时禁用           | 可点（空输入仅提示） |
+| 区域   | 控件                                                                             | 行为                                                                                                            | 空/默认              |
+| ------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------- |
+| 模式行 | 模式下拉 `Base64（UTF-8）/ URL Component / Hex（UTF-8 字节）/ Unicode（\uXXXX）` | Base64/Hex 走 UTF-8 字节；URL 走 `encodeURIComponent` 语义；Unicode 每个 UTF-16 码元转 `\uXXXX`（代理对拆两段） | Base64               |
+| 输入区 | 多行文本域                                                                       | placeholder「粘贴要编码或解码的文本」；支持「填入示例」                                                         | 空                   |
+| 输出区 | 只读多行文本域 + [复制]                                                          | placeholder「处理结果」                                                                                         | 空                   |
+| 操作区 | [编码] [解码] [交换]                                                             | 「交换」把输出内容回填输入并清空输出；无输出时禁用                                                              | 可点（空输入仅提示） |
 
 ### 2.3 正则 Tab
 
@@ -43,6 +43,15 @@
 | 操作区 | [测试匹配] [替换预览]                                                     | 空模式 → 提示「请输入正则表达式」；非法模式 → `TT_REGEX_INVALID`                                                              | 可点     |
 | 匹配区 | 「匹配 N 处」+ 匹配列表 + [复制结果]                                      | 每条展示序号、字符下标 `index`、匹配值与捕获分组；最多收集 500 条（滚动区展示，超限标注「仅展示前 500 条」）；复制结果为 JSON | 空态文案 |
 | 替换区 | 替换串输入（placeholder「替换为（支持 $1–$9 / $&）」）+ 只读结果 + [复制] | `String.replace` 语义；count 为实际替换次数                                                                                   | 空       |
+
+### 2.4 文本处理 Tab（M36）
+
+| 区域      | 控件                                                                           | 行为                                                                                   |
+| --------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| 替换行    | 查找 / 替换为 输入 + `正则` / `区分大小写` 勾选 + `[替换]`                     | 空查找 → `TT_REPLACE_INVALID`；非法正则 → `TT_REGEX_INVALID`；字面量模式自动转义元字符 |
+| 行处理行  | `清空空白行` / `去重` 勾选 + 排序下拉 + 大小写下拉 + `[处理行]`                | 固定顺序：去空行 → 大小写 → 去重 → 排序；`[填入示例]` / `[清空]`                       |
+| 输入/输出 | 双栏多行文本域                                                                 | 输出只读 + `[复制]`；输入改动后输出视为过期，统计回落到输入                            |
+| 统计区    | 9 个卡片：字符 / 不含空白 / 汉字 / 字母 / 数字 / 词 / 行 / 非空行 / UTF-8 字节 | 实时统计（处理过则统计输出，否则统计输入）；字符按码点计，emoji 记 1                   |
 
 ## 3. 纯函数契约（`src/*.ts`，≥80% 覆盖）
 
@@ -60,12 +69,16 @@
 
 ### 3.2 编解码（`encoding.ts`）
 
-| 函数                 | 行为                                                                                                                                     |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `encodeBase64(text)` | TextEncoder → 32KB 分片 `btoa`（防参数展开爆栈）                                                                                         |
-| `decodeBase64(text)` | 去空白 → 字符集 `/^[A-Za-z0-9+/]*={0,2}$/`、长度 %4≠1 → `atob` → `TextDecoder('utf-8', { fatal: true })`；非 UTF-8 → `TT_BASE64_INVALID` |
-| `encodeUrl(text)`    | `encodeURIComponent`；孤立代理项等失败 → `TT_URL_INVALID`                                                                                |
-| `decodeUrl(text)`    | `decodeURIComponent`；非法百分号 → `TT_URL_INVALID`                                                                                      |
+| 函数                  | 行为                                                                                                                                     |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `encodeBase64(text)`  | TextEncoder → 32KB 分片 `btoa`（防参数展开爆栈）                                                                                         |
+| `decodeBase64(text)`  | 去空白 → 字符集 `/^[A-Za-z0-9+/]*={0,2}$/`、长度 %4≠1 → `atob` → `TextDecoder('utf-8', { fatal: true })`；非 UTF-8 → `TT_BASE64_INVALID` |
+| `encodeUrl(text)`     | `encodeURIComponent`；孤立代理项等失败 → `TT_URL_INVALID`                                                                                |
+| `decodeUrl(text)`     | `decodeURIComponent`；非法百分号 → `TT_URL_INVALID`                                                                                      |
+| `encodeHex(text)`     | TextEncoder → 每字节两位小写十六进制、空格分隔                                                                                           |
+| `decodeHex(text)`     | 去空白 → 仅十六进制字符、长度偶数 → `TextDecoder('utf-8', { fatal: true })`；非法字符/奇数长度/非 UTF-8 → `TT_HEX_INVALID`               |
+| `encodeUnicode(text)` | 每个 UTF-16 码元输出 `\uXXXX`（大写，代理对拆两段）                                                                                      |
+| `decodeUnicode(text)` | 逐个识别 `\uXXXX`，其余字符原样保留；转义不完整 → `TT_UNICODE_INVALID`                                                                   |
 
 ### 3.3 正则（`regex.ts`）
 
@@ -74,6 +87,17 @@
 | `compileRegex(pattern, flags)`                                   | `new RegExp`；失败 → `TT_REGEX_INVALID`（带原生消息）                                                              |
 | `collectMatches(pattern, flags, text, limit=500)`                | 空模式 → 0 匹配；无 `g` 只取首条；零长度匹配 `lastIndex++` 防死循环；超上限 `truncated=true` 且 `total` 为已扫描数 |
 | `replacePreview(pattern, flags, text, replacement, limit=10000)` | 无 `g` 只替换首条；零长度匹配防死循环；`count` 为扫描替换次数、`truncated` 标记超限                                |
+
+### 3.4 文本处理与统计（`text-ops.ts` / `stats.ts`）
+
+| 函数                                                             | 行为                                                                                             |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `replaceText(text, find, replacement, { regex, caseSensitive })` | 空查找 → `TT_REPLACE_INVALID`；字面量自动转义；正则编译失败 → `TT_REGEX_INVALID`；返回替换后文本 |
+| `convertCase(text, 'upper'\|'lower'\|'title'\|'none')`           | title：先小写，再把每个单词首字母大写（字母/数字之外为分隔）                                     |
+| `applyLineOps(text, { removeEmpty, dedupe, sort, caseMode })`    | 固定顺序：去空行 → 大小写 → 去重 → 排序（`localeCompare` + numeric）；空文本返回空串             |
+| `countText(text)`                                                | `{ chars, charsNoSpaces, chinese, letters, digits, words, lines, nonEmptyLines, bytes }`         |
+
+统计口径：`chars` 按 Unicode 码点；`chinese` 为 `\p{Script=Han}`；`letters` 为 `\p{L}` 去掉汉字；`digits` 为 `\p{N}`；`lines` 按 CRLF/CR/LF 拆分（空文本 0 行）；`bytes` 为 UTF-8 字节。
 
 ## 4. 三态与限制
 
@@ -95,6 +119,9 @@
 | `TT_BASE64_INVALID`   | 不是有效的 Base64 文本        | 非 Base64 字符集/长度/非 UTF-8     |
 | `TT_URL_INVALID`      | 不是有效的 URL 编码文本       | 非法百分号编码 / 无法编码字符      |
 | `TT_REGEX_INVALID`    | 正则表达式不正确              | 模式或 flags 非法                  |
+| `TT_HEX_INVALID`      | 不是有效的十六进制文本        | 非十六进制字符/奇数长度/非 UTF-8   |
+| `TT_UNICODE_INVALID`  | 不是有效的 Unicode 转义文本   | `\u` 后不是 4 位十六进制           |
+| `TT_REPLACE_INVALID`  | 查找内容不能为空              | 文本处理 Tab 空查找                |
 | `TT_CLIPBOARD_FAILED` | 复制失败，请手动选择文本复制  | 渲染层剪贴板写入失败（UI 兜底）    |
 
 ## 6. R5 体积口径
