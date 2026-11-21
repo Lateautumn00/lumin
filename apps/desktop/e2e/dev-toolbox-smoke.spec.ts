@@ -180,7 +180,7 @@ test.describe('dev-toolbox（开发工具）冒烟', () => {
 
       await page.getByRole('button', { name: '启动' }).click()
       await expect(page.getByText('服务运行中', { exact: true })).toBeVisible({ timeout: 15_000 })
-      await expect(page.getByText(`http://127.0.0.1:${port}/`)).toBeVisible()
+      await expect(page.getByText(`http://127.0.0.1:${port}/`).first()).toBeVisible()
 
       const index = await httpGet(port, '/')
       expect(index.status).toBe(200)
