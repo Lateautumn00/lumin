@@ -10,7 +10,7 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'time-toolbox',
   name: '时间工具箱',
-  description: '时间戳与日期互转、多时区、时长、日历差、倒计时与 Cron 解析',
+  description: '时间戳与日期互转、多时区、时长、日历差与 Cron 解析',
   icon: 'clock',
   category: 'compute',
   order: 70,

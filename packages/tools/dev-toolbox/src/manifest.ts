@@ -10,7 +10,7 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'dev-toolbox',
   name: '开发工具',
-  description: '端口占用查询与进程结束、CURL 转代码、JWT 解码、UUID 生成、本地静态服务器',
+  description: '端口占用查询与进程结束、CURL 转代码、JWT 解码、本地静态服务器',
   icon: 'terminal',
   category: 'misc',
   order: 70,

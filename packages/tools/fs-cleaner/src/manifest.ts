@@ -13,6 +13,6 @@ export const manifest = defineManifest({
   description: '导出目录树、清理空文件夹与临时文件、批量修改文件时间（删除均移入回收站）',
   icon: 'folder-cog',
   category: 'file',
-  order: 66,
+  order: 69,
   version: '0.1.0'
 })
