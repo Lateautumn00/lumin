@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  compressDesiredPath,
   deleteDesiredPath,
+  extractImagesDesiredDir,
+  extractTextDesiredPath,
   mergeDesiredPath,
   metadataDesiredPath,
   pageNumbersDesiredPath,
@@ -42,5 +45,11 @@ describe('pdf-toolkit naming（spec §6）', () => {
   it('水印/页码命名（M17）', () => {
     expect(watermarkDesiredPath('C:/a/卷.pdf')).toBe('C:/a/卷_水印.pdf')
     expect(pageNumbersDesiredPath('C:/a/卷.pdf')).toBe('C:/a/卷_页码.pdf')
+  })
+
+  it('提取/压缩命名（M38）', () => {
+    expect(extractTextDesiredPath('C:/a/卷.pdf')).toBe('C:/a/卷_文本.txt')
+    expect(extractImagesDesiredDir('C:/a/卷.pdf')).toBe('C:/a/卷_图片')
+    expect(compressDesiredPath('C:/a/卷.pdf')).toBe('C:/a/卷_压缩.pdf')
   })
 })

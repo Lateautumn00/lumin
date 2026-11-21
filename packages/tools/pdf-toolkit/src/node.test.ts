@@ -244,6 +244,44 @@ describe('pdf-toolkit node:任务通道', () => {
     ])
   })
 
+  it('extract-text/extract-images/compress 映射到同名 op', async () => {
+    const { ctx, harness } = makeCtx()
+    const { deps, runs } = makeDeps()
+    registerWith(ctx, deps)
+    const base = { signal: new AbortController().signal, emit: (): void => undefined }
+    await getTask(
+      harness,
+      'extract-text'
+    )({
+      ...base,
+      payload: { inputPath: input, ranges: '1-2' }
+    })
+    await getTask(harness, 'extract-images')({ ...base, payload: { inputPath: input } })
+    await getTask(harness, 'compress')({ ...base, payload: { inputPath: input, level: 'low' } })
+    expect(runs.map((run) => run.payload.op)).toEqual([
+      'extract-text',
+      'extract-images',
+      'compress'
+    ])
+  })
+
+  it('compress 缺 level → INVALID_PAYLOAD 且不发 worker', async () => {
+    const { ctx, harness } = makeCtx()
+    const { deps, runs } = makeDeps()
+    registerWith(ctx, deps)
+    await expect(
+      getTask(
+        harness,
+        'compress'
+      )({
+        payload: { inputPath: input },
+        signal: new AbortController().signal,
+        emit: () => undefined
+      })
+    ).rejects.toMatchObject({ code: 'INVALID_PAYLOAD' })
+    expect(runs).toHaveLength(0)
+  })
+
   it('水印图片预检失败 → PT_WATERMARK_INVALID', async () => {
     const { ctx, harness } = makeCtx()
     const { deps, runs } = makeDeps({
@@ -423,7 +461,7 @@ describe('pdf-toolkit node:错误分类与默认依赖', () => {
     expect(typeof deps.checkExclusive).toBe('function')
   })
 
-  it('registerMain 注册 info + 八个任务通道', () => {
+  it('registerMain 注册 info + 十一个任务通道', () => {
     const { ctx, harness } = makeCtx()
     registerMain(ctx)
     expect([...harness.ipc.keys()]).toEqual(['info'])
@@ -435,7 +473,10 @@ describe('pdf-toolkit node:错误分类与默认依赖', () => {
       'reorder',
       'metadata',
       'watermark',
-      'page-numbers'
+      'page-numbers',
+      'extract-text',
+      'extract-images',
+      'compress'
     ])
   })
 })

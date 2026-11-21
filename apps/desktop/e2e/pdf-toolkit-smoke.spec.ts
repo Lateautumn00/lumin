@@ -4,7 +4,8 @@
  * @date 2026-11-19
  * @description 覆盖：页面加载/空态/八 Tab、合并（中文+空格路径 R2.1）、拆分/删页/越界、
  *              旋转/重排/元数据、水印/页码（M17）、损坏/不存在、占用（R2.2）、取消（R2.5）、
- *              并发（R2.6）、源目录不可写（R2.7）、强杀恢复（R2.8）。
+ *              并发（R2.6）、源目录不可写（R2.7）、强杀恢复（R2.8）、
+ *              M38 文本提取/图片提取/压缩。
  *              样本 PDF 由同仓 pdf-images 工具生成（e2e 专用，不引入运行期依赖）。
  *              前置：pnpm -F @lumin/desktop build（playwright 启动 out/main/index.js）
  */
@@ -612,6 +613,72 @@ test.describe('pdf-toolkit（PDF 工具集）冒烟', () => {
       }
       fs.rmSync(workDir, { recursive: true, force: true })
       await first.app.close().catch(() => undefined)
+    }
+  })
+
+  test('文本/图片提取 + 压缩（M38）', async () => {
+    test.setTimeout(120_000)
+    const { app, page } = await launch()
+    const workDir = freshDir('lumin-pt-e2e-m38')
+    try {
+      // 图片型 PDF（由 PNG 转入，无文本层）：中文 + 空格路径
+      const input = await makePdf(page, workDir, '提取 卷', 2)
+
+      // 无文本层 → PT_NO_TEXT_LAYER
+      const noText = await runTask(page, 'pdf-toolkit:extract-text', { inputPath: input })
+      expect(noText.error?.code).toBe('PT_NO_TEXT_LAYER')
+
+      // 加页码产生文本层后抽文本：产物命名 + 分隔行 + 页码字符
+      const numbered = await runTask(page, 'pdf-toolkit:page-numbers', {
+        inputPath: input,
+        format: '{n}/{total}',
+        position: 'bottom-center',
+        startPage: 1,
+        fontSize: 12,
+        color: '#333333',
+        margin: 24
+      })
+      const numberedFile = numbered.done?.outputPaths?.[0] ?? ''
+      expect(numberedFile).toBe(path.join(workDir, '提取 卷_页码.pdf'))
+
+      const text = await runTask(page, 'pdf-toolkit:extract-text', { inputPath: numberedFile })
+      const textFile = text.done?.outputPaths?.[0] ?? ''
+      expect(textFile).toBe(path.join(workDir, '提取 卷_页码_文本.txt'))
+      const content = fs.readFileSync(textFile).toString('utf8')
+      expect(content).toContain('===== 第 1 页 =====')
+      expect(content).toContain('1/2')
+
+      // 图片提取：目录 `提取 卷_图片` 下至少 1 张 PNG，签名校验
+      const images = await runTask(page, 'pdf-toolkit:extract-images', { inputPath: input })
+      const imagePaths = images.done?.outputPaths ?? []
+      expect(imagePaths.length).toBeGreaterThanOrEqual(1)
+      const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      for (const file of imagePaths) {
+        expect(path.dirname(file)).toBe(path.join(workDir, '提取 卷_图片'))
+        expect(fs.readFileSync(file).subarray(0, 8).equals(pngSignature)).toBe(true)
+      }
+
+      // 压缩：产物命名、%PDF- 头、页数不变
+      const compressed = await runTask(page, 'pdf-toolkit:compress', {
+        inputPath: input,
+        level: 'low'
+      })
+      const compressedFile = compressed.done?.outputPaths?.[0] ?? ''
+      expect(compressedFile).toBe(path.join(workDir, '提取 卷_压缩.pdf'))
+      expectPdf(compressedFile)
+      expect((await infoOf(page, compressedFile)).pageCount).toBe(2)
+
+      // UI：三新页签可见；压缩 Tab 未选 PDF 时按钮禁用 + 档位可见
+      await clickSidebarTool(page, 'PDF 工具集')
+      for (const tab of ['文本提取', '图片提取', '压缩']) {
+        await expect(page.getByText(tab, { exact: true }).first()).toBeVisible()
+      }
+      await page.getByText('压缩', { exact: true }).first().click()
+      await expect(page.getByRole('button', { name: '开始压缩' })).toBeDisabled()
+      await expect(page.getByText('压缩档位', { exact: true })).toBeVisible()
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
     }
   })
 })

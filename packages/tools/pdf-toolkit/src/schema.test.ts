@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  COMPRESS_LEVELS,
+  COMPRESS_PRESETS,
+  compressPayloadSchema,
   deletePayloadSchema,
+  extractImagesPayloadSchema,
+  extractTextPayloadSchema,
   infoPayloadSchema,
   MAX_MERGE_FILES,
   MAX_WATERMARK_IMAGE_CHARS,
@@ -180,5 +185,51 @@ describe('watermark / page-number schema（M17）', () => {
     expect(pageNumberPayloadSchema.safeParse({ ...pageBase, color: 'red' }).success).toBe(false)
     expect(pageNumberPayloadSchema.safeParse({ ...pageBase, margin: 11 }).success).toBe(false)
     expect(pageNumberPayloadSchema.safeParse({ ...pageBase, margin: 73 }).success).toBe(false)
+  })
+})
+
+describe('extract / compress schema（M38）', () => {
+  it('文本提取：合法载荷且 ranges 可缺省/可空串', () => {
+    expect(extractTextPayloadSchema.parse({ inputPath: PDF })).toEqual({ inputPath: PDF })
+    expect(extractTextPayloadSchema.parse({ inputPath: PDF, ranges: '1-3,5' }).ranges).toBe('1-3,5')
+    expect(extractTextPayloadSchema.parse({ inputPath: PDF, ranges: '' }).ranges).toBe('')
+  })
+
+  it('文本提取：拒绝非 PDF 与非法页码语法', () => {
+    expect(extractTextPayloadSchema.safeParse({ inputPath: 'a.txt' }).success).toBe(false)
+    expect(extractTextPayloadSchema.safeParse({ inputPath: PDF, ranges: '1;2' }).success).toBe(
+      false
+    )
+  })
+
+  it('图片提取：合法载荷且 ranges 可缺省/可空串', () => {
+    expect(extractImagesPayloadSchema.safeParse({ inputPath: PDF }).success).toBe(true)
+    expect(extractImagesPayloadSchema.safeParse({ inputPath: PDF, ranges: '1-3,5' }).success).toBe(
+      true
+    )
+    expect(extractImagesPayloadSchema.safeParse({ inputPath: PDF, ranges: '' }).success).toBe(true)
+  })
+
+  it('图片提取：拒绝非 PDF 与非法页码语法', () => {
+    expect(extractImagesPayloadSchema.safeParse({ inputPath: 'a.txt' }).success).toBe(false)
+    expect(extractImagesPayloadSchema.safeParse({ inputPath: PDF, ranges: '1;2' }).success).toBe(
+      false
+    )
+  })
+
+  it('压缩：level 三档必填，非法档位与页码语法拒绝', () => {
+    expect(compressPayloadSchema.parse({ inputPath: PDF, level: 'medium' }).level).toBe('medium')
+    expect(compressPayloadSchema.safeParse({ inputPath: PDF, level: 'ultra' }).success).toBe(false)
+    expect(compressPayloadSchema.safeParse({ inputPath: PDF }).success).toBe(false)
+    expect(
+      compressPayloadSchema.safeParse({ inputPath: PDF, level: 'high', ranges: '1;2' }).success
+    ).toBe(false)
+  })
+
+  it('档位常量与预设数值单源', () => {
+    expect(COMPRESS_LEVELS).toEqual(['low', 'medium', 'high'])
+    expect(COMPRESS_PRESETS.low).toEqual({ dpi: 96, quality: 60 })
+    expect(COMPRESS_PRESETS.medium).toEqual({ dpi: 150, quality: 75 })
+    expect(COMPRESS_PRESETS.high).toEqual({ dpi: 200, quality: 85 })
   })
 })
