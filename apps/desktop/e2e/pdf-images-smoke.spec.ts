@@ -13,6 +13,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawn, execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { inflateSync } from 'node:zlib'
 import { createCanvas } from '@napi-rs/canvas'
 import {
   test,
@@ -58,6 +59,38 @@ function writePng(file: string, width: number, height: number, color: string): v
   ctx.fillStyle = color
   ctx.fillRect(0, 0, width, height)
   fs.writeFileSync(file, canvas.toBuffer('image/png'))
+}
+
+/**
+ * 提取 PDF 全部 MediaBox（pdf-lib 默认对象流压缩，需先解压 Flate 流再匹配）
+ * @param buffer PDF 字节
+ */
+function mediaBoxes(buffer: Buffer): { width: number; height: number }[] {
+  const texts: string[] = [buffer.toString('latin1')]
+  const latin = buffer.toString('latin1')
+  const streamRe = /(?<!d)stream\r?\n/g
+  let match = streamRe.exec(latin)
+  while (match !== null) {
+    const start = match.index + match[0].length
+    const end = latin.indexOf('endstream', start)
+    if (end < 0) break
+    try {
+      texts.push(inflateSync(buffer.subarray(start, end)).toString('latin1'))
+    } catch {
+      // 非 Flate 流（图片/字体）忽略
+    }
+    streamRe.lastIndex = end + 9
+    match = streamRe.exec(latin)
+  }
+
+  const boxRe = /\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/g
+  const boxes: { width: number; height: number }[] = []
+  for (const text of texts) {
+    for (const box of text.matchAll(boxRe)) {
+      boxes.push({ width: Number(box[1]), height: Number(box[2]) })
+    }
+  }
+  return boxes
 }
 
 /** 提交三段式任务并等待终态（done / error），失败仅 reject 传输层错误 */
@@ -599,6 +632,46 @@ test.describe('pdf-images（PDF 图片转换）冒烟', () => {
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true })
       await first.app.close().catch(() => undefined)
+    }
+  })
+
+  test('Letter 横版 + 边距预设 + 自定义文件名与冲突递增（M34）', async () => {
+    const { app, page } = await launch()
+    const workDir = freshDir('lumin-pi-e2e-layout')
+    try {
+      const first = path.join(workDir, '横图 一.png')
+      const second = path.join(workDir, '竖图二.png')
+      writePng(first, 800, 300, '#114477')
+      writePng(second, 300, 800, '#774411')
+
+      const payload = {
+        inputPaths: [first, second],
+        pageSize: 'letter',
+        orientation: 'landscape',
+        marginMm: 20,
+        outputName: '自定义 名称',
+        outputDir: workDir
+      }
+      const outcome = await runTask(page, 'pdf-images:images-to-pdf', payload)
+      expect(outcome.done?.pages).toBe(2)
+      expect(outcome.done?.failures).toEqual([])
+      expect(outcome.done?.output).toBe(path.join(workDir, '自定义 名称.pdf'))
+
+      const bytes = fs.readFileSync(outcome.done?.output ?? '')
+      const boxes = mediaBoxes(bytes)
+      expect(boxes).toHaveLength(2)
+      for (const box of boxes) {
+        expect(box.width).toBeCloseTo(792, 0)
+        expect(box.height).toBeCloseTo(612, 0)
+      }
+
+      // 同名冲突自动递增，不覆盖既有产物
+      const again = await runTask(page, 'pdf-images:images-to-pdf', payload)
+      expect(again.done?.output).toBe(path.join(workDir, '自定义 名称 (1).pdf'))
+      expect(fs.existsSync(path.join(workDir, '自定义 名称.pdf'))).toBe(true)
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
     }
   })
 })

@@ -59,6 +59,7 @@ function request(overrides: Partial<ImagesToPdfRequest> = {}): ImagesToPdfReques
   return {
     inputPaths: [],
     pageSize: 'auto',
+    orientation: 'auto',
     marginMm: 0,
     outputDir: join(root, 'out'),
     ffmpegPath: join(root, 'binaries', 'ffmpeg.exe'),
@@ -100,7 +101,7 @@ describe('runImagesToPdf', () => {
     const image = join(root, '横图.png')
     await writeImage(image, 200, 100, 'png')
     const result = await runImagesToPdf(
-      request({ inputPaths: [image], pageSize: 'a4', marginMm: 10 }),
+      request({ inputPaths: [image], pageSize: 'a4', orientation: 'portrait', marginMm: 10 }),
       ctxUpdates().ctx,
       { runProcess: fakeFfmpeg() }
     )
@@ -108,6 +109,47 @@ describe('runImagesToPdf', () => {
     const size = doc.getPage(0).getSize()
     expect(size.width).toBeCloseTo(595.28, 1)
     expect(size.height).toBeCloseTo(841.89, 1)
+  })
+
+  it('letter 横版 + 边距：页面 792×612', async () => {
+    const image = join(root, '高图.png')
+    await writeImage(image, 100, 400, 'png')
+    const result = await runImagesToPdf(
+      request({
+        inputPaths: [image],
+        pageSize: 'letter',
+        orientation: 'landscape',
+        marginMm: 20
+      }),
+      ctxUpdates().ctx,
+      { runProcess: fakeFfmpeg() }
+    )
+    const doc = await PDFDocument.load(await readFile(result.output))
+    expect(doc.getPageCount()).toBe(1)
+    expect(doc.getPage(0).getSize()).toMatchObject({ width: 792, height: 612 })
+  })
+
+  it('自定义输出文件名（.PDF 自动归一为 .pdf）', async () => {
+    const image = join(root, 'a.png')
+    await writeImage(image, 10, 10, 'png')
+    const result = await runImagesToPdf(
+      request({ inputPaths: [image], outputName: '自定义 名称.PDF' }),
+      ctxUpdates().ctx,
+      { runProcess: fakeFfmpeg() }
+    )
+    expect(result.output).toBe(join(root, 'out', '自定义 名称.pdf'))
+  })
+
+  it('自定义名冲突自动递增（自定义 名称 (1).pdf）', async () => {
+    const image = join(root, 'a.png')
+    await writeImage(image, 10, 10, 'png')
+    await writeFile(join(root, 'out', '自定义 名称.pdf'), 'occupied')
+    const result = await runImagesToPdf(
+      request({ inputPaths: [image], outputName: '自定义 名称' }),
+      ctxUpdates().ctx,
+      { runProcess: fakeFfmpeg() }
+    )
+    expect(result.output).toBe(join(root, 'out', '自定义 名称 (1).pdf'))
   })
 
   it('非 png/jpg：经 ffmpeg 转码后嵌入', async () => {

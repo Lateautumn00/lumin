@@ -2,19 +2,23 @@
  * @file contract.test.ts contract.ts 纯函数单测
  * @author cuilanchao
  * @date 2026-11-19
- * @description DPI 换算、命名模板、图片格式归一、A4 contain 布局、列表移动、失败项投影
+ * @description DPI 换算、命名模板、图片格式归一、纸型布局与方向、列表移动、失败项投影
  */
 import { describe, expect, it } from 'vitest'
 import {
   A4_HEIGHT_PT,
   A4_WIDTH_PT,
-  a4Layout,
+  LETTER_HEIGHT_PT,
+  LETTER_WIDTH_PT,
   dpiToScale,
   imageKind,
   mergedPdfName,
   mmToPt,
   moveItem,
   outputImageName,
+  pageLayout,
+  pdfOutputName,
+  resolveOrientation,
   toFailure
 } from './contract'
 
@@ -50,38 +54,91 @@ describe('imageKind', () => {
   })
 })
 
-describe('a4Layout', () => {
-  it('横图受可用宽度约束，水平边距即为页边距', () => {
-    const layout = a4Layout(200, 100, 10)
-    expect(layout).not.toBeNull()
+describe('pageLayout', () => {
+  it('auto：页面等于图片尺寸，忽略方向与边距', () => {
+    expect(
+      pageLayout(200, 100, { pageSize: 'auto', orientation: 'landscape', marginMm: 20 })
+    ).toEqual({ pageWidth: 200, pageHeight: 100, x: 0, y: 0, width: 200, height: 100 })
+  })
+
+  it('A4：auto 方向跟随横图 → 横版，受可用宽度约束', () => {
+    const layout = pageLayout(200, 100, { pageSize: 'a4', orientation: 'auto', marginMm: 10 })
+    const value = layout as NonNullable<typeof layout>
+    expect(value.pageWidth).toBeCloseTo(A4_HEIGHT_PT, 6)
+    expect(value.pageHeight).toBeCloseTo(A4_WIDTH_PT, 6)
+    expect(value.width).toBeCloseTo(A4_HEIGHT_PT - mmToPt(10) * 2, 6)
+    expect(value.height).toBeCloseTo(value.width / 2, 6)
+    expect(value.x).toBeCloseTo(mmToPt(10), 6)
+    expect(value.y).toBeCloseTo((A4_WIDTH_PT - value.height) / 2, 6)
+  })
+
+  it('A4：竖图显式竖版，受可用高度约束并水平居中', () => {
+    const layout = pageLayout(100, 400, { pageSize: 'a4', orientation: 'portrait', marginMm: 0 })
     const value = layout as NonNullable<typeof layout>
     expect(value.pageWidth).toBeCloseTo(A4_WIDTH_PT, 6)
     expect(value.pageHeight).toBeCloseTo(A4_HEIGHT_PT, 6)
-    expect(value.width).toBeCloseTo(A4_WIDTH_PT - mmToPt(10) * 2, 6)
-    expect(value.height).toBeCloseTo(value.width / 2, 6)
-    expect(value.x).toBeCloseTo(mmToPt(10), 6)
-    expect(value.y).toBeCloseTo((A4_HEIGHT_PT - value.height) / 2, 6)
-  })
-
-  it('竖图受可用高度约束，垂直居中', () => {
-    const layout = a4Layout(100, 400, 0)
-    const value = layout as NonNullable<typeof layout>
     expect(value.height).toBeCloseTo(A4_HEIGHT_PT, 6)
     expect(value.width).toBeCloseTo(A4_HEIGHT_PT / 4, 6)
     expect(value.y).toBeCloseTo(0, 6)
     expect(value.x).toBeCloseTo((A4_WIDTH_PT - value.width) / 2, 6)
   })
 
+  it('Letter：强制横版 792×612，强制竖版 612×792', () => {
+    const landscape = pageLayout(100, 400, {
+      pageSize: 'letter',
+      orientation: 'landscape',
+      marginMm: 0
+    }) as NonNullable<ReturnType<typeof pageLayout>>
+    expect(landscape.pageWidth).toBe(LETTER_HEIGHT_PT)
+    expect(landscape.pageHeight).toBe(LETTER_WIDTH_PT)
+    expect(landscape.width).toBeLessThanOrEqual(LETTER_HEIGHT_PT)
+    expect(landscape.height).toBeLessThanOrEqual(LETTER_WIDTH_PT)
+
+    const portrait = pageLayout(400, 100, {
+      pageSize: 'letter',
+      orientation: 'portrait',
+      marginMm: 0
+    }) as NonNullable<ReturnType<typeof pageLayout>>
+    expect(portrait.pageWidth).toBe(LETTER_WIDTH_PT)
+    expect(portrait.pageHeight).toBe(LETTER_HEIGHT_PT)
+  })
+
   it('边距过大 / 非法尺寸 → null', () => {
-    expect(a4Layout(100, 100, 400)).toBeNull()
-    expect(a4Layout(0, 100, 10)).toBeNull()
-    expect(a4Layout(100, -1, 10)).toBeNull()
+    expect(pageLayout(100, 100, { pageSize: 'a4', orientation: 'auto', marginMm: 400 })).toBeNull()
+    expect(
+      pageLayout(100, 100, { pageSize: 'letter', orientation: 'portrait', marginMm: 120 })
+    ).toBeNull()
+    expect(pageLayout(0, 100, { pageSize: 'auto', orientation: 'auto', marginMm: 10 })).toBeNull()
+    expect(pageLayout(100, -1, { pageSize: 'auto', orientation: 'auto', marginMm: 10 })).toBeNull()
+  })
+})
+
+describe('resolveOrientation', () => {
+  it('auto 跟随图片（正方形按竖版），显式值原样返回', () => {
+    expect(resolveOrientation('auto', 100, 100)).toBe('portrait')
+    expect(resolveOrientation('auto', 100, 400)).toBe('portrait')
+    expect(resolveOrientation('auto', 200, 100)).toBe('landscape')
+    expect(resolveOrientation('landscape', 100, 400)).toBe('landscape')
+    expect(resolveOrientation('portrait', 400, 100)).toBe('portrait')
   })
 })
 
 describe('mergedPdfName', () => {
   it('首图基名 + _合并.pdf', () => {
     expect(mergedPdfName('E:\\相机\\第一张.png')).toBe('E:\\相机\\第一张_合并.pdf')
+  })
+})
+
+describe('pdfOutputName', () => {
+  it('留空 / 纯空白回退首图基名模板', () => {
+    expect(pdfOutputName('E:\\相机\\第一张.png')).toBe('E:\\相机\\第一张_合并.pdf')
+    expect(pdfOutputName('E:\\相机\\第一张.png', '')).toBe('E:\\相机\\第一张_合并.pdf')
+    expect(pdfOutputName('a.png', '   ')).toBe('a_合并.pdf')
+  })
+
+  it('自定义名去尾部 .pdf 后统一补 .pdf（大小写不敏感）', () => {
+    expect(pdfOutputName('a.png', '自定义 名称')).toBe('自定义 名称.pdf')
+    expect(pdfOutputName('a.png', ' 报告.PDF ')).toBe('报告.pdf')
   })
 })
 

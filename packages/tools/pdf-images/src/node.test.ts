@@ -265,10 +265,55 @@ describe('images-to-pdf', () => {
     expect(harness.calls[0]?.payload).toEqual<ImagesToPdfRequest>({
       inputPaths: ['a.png', 'b.jpg'],
       pageSize: 'a4',
+      orientation: 'auto',
       marginMm: 10,
       outputDir: target,
       ffmpegPath: join(harness.root, 'binaries', 'download', 'ffmpeg.exe')
     })
+  })
+
+  it('透传页面方向与自定义输出文件名', async () => {
+    const harness = createHarness({
+      result: { output: 'x.pdf', pages: 1, failures: [] }
+    })
+    const target = join(harness.root, 'out')
+    await runTask(harness, 'images-to-pdf', {
+      inputPaths: ['a.png'],
+      pageSize: 'letter',
+      orientation: 'landscape',
+      marginMm: 20,
+      outputName: '自定义 名称',
+      outputDir: target
+    })
+    expect(harness.calls[0]?.payload).toEqual<ImagesToPdfRequest>({
+      inputPaths: ['a.png'],
+      pageSize: 'letter',
+      orientation: 'landscape',
+      marginMm: 20,
+      outputName: '自定义 名称',
+      outputDir: target,
+      ffmpegPath: join(harness.root, 'binaries', 'download', 'ffmpeg.exe')
+    })
+  })
+
+  it('非法文件名 / 非法方向 → INVALID_PAYLOAD', async () => {
+    const harness = createHarness()
+    await expect(
+      runTask(harness, 'images-to-pdf', {
+        inputPaths: ['a.png'],
+        pageSize: 'a4',
+        marginMm: 0,
+        outputName: '..\\逃逸'
+      })
+    ).rejects.toMatchObject({ code: 'INVALID_PAYLOAD' })
+    await expect(
+      runTask(harness, 'images-to-pdf', {
+        inputPaths: ['a.png'],
+        pageSize: 'a4',
+        marginMm: 0,
+        orientation: 'diagonal'
+      })
+    ).rejects.toMatchObject({ code: 'INVALID_PAYLOAD' })
   })
 
   it('超 200 张 / 空列表 / 越界边距 → INVALID_PAYLOAD', async () => {
