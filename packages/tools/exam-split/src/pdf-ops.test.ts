@@ -3,15 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { PDFDocument } from 'pdf-lib'
-import {
-  cropPages,
-  deletePages,
-  mergePdf,
-  rotatePages,
-  runOp,
-  splitPdf,
-  type OpProgress
-} from './pdf-ops'
+import { cropPages, runOp, splitPdf, type OpProgress } from './pdf-ops'
 
 const ENCRYPTED_FIXTURE = new URL('../fixtures/encrypted.pdf', import.meta.url).pathname.replace(
   /^\//,
@@ -101,74 +93,6 @@ describe('splitPdf', () => {
   })
 })
 
-describe('mergePdf', () => {
-  it('按序合并页数，产物在首文件目录（spec §7.1）', async () => {
-    const a = await makePdf('甲卷.pdf', 3)
-    const b = await makePdf('乙卷.pdf', 2)
-    const { updates, emit } = collect()
-    const result = await mergePdf([a, b], emit)
-    expect(result.outputPaths).toEqual([join(tempRoot(), 'in', '甲卷_合并.pdf')])
-    expect(await pageCount(result.outputPaths[0]!)).toBe(5)
-    expect(updates.filter((update) => update.stage === 'process').at(-1)).toMatchObject({
-      current: 2,
-      total: 2
-    })
-  })
-
-  it('中途文件加密 → PDF_ENCRYPTED 且不留半成品', async () => {
-    const a = await makePdf('前卷.pdf', 2)
-    const encrypted = join(tempRoot(), 'in', '加密卷.pdf')
-    const { copyFileSync } = await import('node:fs')
-    copyFileSync(ENCRYPTED_FIXTURE, encrypted)
-    await expectCode(() => mergePdf([a, encrypted], () => undefined), 'PDF_ENCRYPTED')
-    expect(existsSync(join(tempRoot(), 'in', '前卷_合并.pdf'))).toBe(false)
-  })
-})
-
-describe('deletePages', () => {
-  it('删除指定页保留其余，命名带删页标签（spec §3.2/§7.2）', async () => {
-    const input = await makePdf('删页卷.pdf', 5)
-    const result = await deletePages(input, '2,4-5', () => undefined)
-    expect(result.outputPaths[0]).toContain('删页卷_删p2,4-5.pdf')
-    expect(await pageCount(result.outputPaths[0]!)).toBe(2)
-  })
-
-  it('删后剩余 0 页 → NO_PAGES_LEFT', async () => {
-    const input = await makePdf('全删卷.pdf', 3)
-    await expectCode(() => deletePages(input, '1-3', () => undefined), 'NO_PAGES_LEFT')
-    expect(existsSync(join(tempRoot(), 'in', '全删卷_删p1-3.pdf'))).toBe(false)
-  })
-})
-
-describe('rotatePages', () => {
-  it('仅旋转指定页并叠加既有角度（spec §3.2）', async () => {
-    const input = await makePdf('旋转卷.pdf', 3)
-    await rotatePages(input, '2', 90, () => undefined)
-    const once = await PDFDocument.load(
-      await readFileBytes(join(tempRoot(), 'in', '旋转卷_旋转90.pdf'))
-    )
-    expect(once.getPage(0).getRotation().angle).toBe(0)
-    expect(once.getPage(1).getRotation().angle).toBe(90)
-    expect(once.getPage(2).getRotation().angle).toBe(0)
-
-    const again = await rotatePages(
-      join(tempRoot(), 'in', '旋转卷_旋转90.pdf'),
-      '2',
-      90,
-      () => undefined
-    )
-    const twice = await PDFDocument.load(await readFileBytes(again.outputPaths[0]!))
-    expect(twice.getPage(1).getRotation().angle).toBe(180)
-  })
-
-  it('空区间 = 全部页（spec §1）', async () => {
-    const input = await makePdf('整旋卷.pdf', 4)
-    const result = await rotatePages(input, undefined, 270, () => undefined)
-    const doc = await PDFDocument.load(await readFileBytes(result.outputPaths[0]!))
-    for (const page of doc.getPages()) expect(page.getRotation().angle).toBe(270)
-  })
-})
-
 describe('cropPages', () => {
   it('按比例逐页应用 CropBox 并翻转到左下原点（spec §1）', async () => {
     const input = await makePdf('裁剪卷.pdf', 2)
@@ -243,25 +167,12 @@ describe('性能（R5/plan §4.4）', () => {
 })
 
 describe('runOp（worker 分发入口，spec §4）', () => {
-  it('五算子按 op 分发到对应实现', async () => {
+  it('两算子按 op 分发到对应实现', async () => {
     const a = await makePdf('dispatch-a.pdf', 3)
-    const b = await makePdf('dispatch-b.pdf', 2)
     const { emit } = collect()
 
     const split = await runOp({ op: 'split', payload: { inputPath: a, ranges: '1,2' } }, emit)
     expect(split.outputPaths).toHaveLength(2)
-
-    const merged = await runOp({ op: 'merge', payload: { inputPaths: [a, b] } }, emit)
-    expect(merged.outputPaths).toHaveLength(1)
-
-    const deleted = await runOp({ op: 'delete', payload: { inputPath: a, ranges: '3' } }, emit)
-    expect(deleted.outputPaths).toHaveLength(1)
-
-    const rotated = await runOp(
-      { op: 'rotate', payload: { inputPath: a, ranges: '', degrees: 180 } },
-      emit
-    )
-    expect(rotated.outputPaths).toHaveLength(1)
 
     const cropped = await runOp(
       { op: 'crop', payload: { inputPath: a, box: { x: 0, y: 0, width: 0.5, height: 0.5 } } },

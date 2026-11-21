@@ -16,7 +16,6 @@ declare global {
 const appDir = path.resolve(__dirname, '..')
 const fixturesDir = path.resolve(__dirname, '../../../packages/tools/exam-split/fixtures')
 const threePageFixture = path.join(fixturesDir, '三页卷.pdf')
-const twoPageFixture = path.join(fixturesDir, '两页卷.pdf')
 const hundredPageFixture = path.join(fixturesDir, '百页卷.pdf')
 const encryptedFixture = path.join(fixturesDir, 'encrypted.pdf')
 
@@ -42,19 +41,17 @@ function makeWorkDir(name: string): string {
 }
 
 test.describe('exam-split（试卷切割 · PDF 操作）冒烟', () => {
-  test('五算子真实执行（R2.1 中文+空格路径）：拆分/合并/删页/旋转/裁剪产物 %PDF-', async () => {
+  test('两算子真实执行（R2.1 中文+空格路径）：拆分/裁剪产物 %PDF-', async () => {
     test.setTimeout(180_000)
     const { app, page } = await launch()
     const workDir = makeWorkDir('lumin exam split e2e')
     try {
       test.skip(!fs.existsSync(threePageFixture), '缺少 fixtures（exam-split/fixtures）')
       const inputA = path.join(workDir, '期中 卷甲.pdf')
-      const inputB = path.join(workDir, '乙 卷.pdf')
       fs.copyFileSync(threePageFixture, inputA)
-      fs.copyFileSync(twoPageFixture, inputB)
 
       const outcome = await page.evaluate(
-        ([a, b]) =>
+        (a) =>
           new Promise<Record<string, { result: unknown; error: { code: string } | null }>>(
             (resolve, reject) => {
               const collected: Record<string, { result: unknown; error: { code: string } | null }> =
@@ -92,9 +89,6 @@ test.describe('exam-split（试卷切割 · PDF 操作）冒烟', () => {
                   ranges: '1',
                   nameTemplate: '{name}-{op}-{label}'
                 })
-                await runOne('merge', 'exam-split:merge', { inputPaths: [a, b] })
-                await runOne('delete', 'exam-split:delete', { inputPath: a, ranges: '2' })
-                await runOne('rotate', 'exam-split:rotate', { inputPath: a, degrees: 180 })
                 await runOne('crop', 'exam-split:crop', {
                   inputPath: a,
                   box: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 }
@@ -103,7 +97,7 @@ test.describe('exam-split（试卷切割 · PDF 操作）冒烟', () => {
               })().catch(reject)
             }
           ),
-        [inputA, inputB]
+        inputA
       )
 
       for (const [key, entry] of Object.entries(outcome)) {
@@ -120,12 +114,9 @@ test.describe('exam-split（试卷切割 · PDF 操作）冒烟', () => {
       ])
       // 自定义命名模板（spec §7.2）：{name}-{op}-{label}
       expect(pathsOf('splitNamed')).toEqual([path.join(workDir, '期中 卷甲-拆分-1.pdf')])
-      expect(pathsOf('merge')).toEqual([path.join(workDir, '期中 卷甲_合并.pdf')])
-      expect(pathsOf('delete')).toEqual([path.join(workDir, '期中 卷甲_删p2.pdf')])
-      expect(pathsOf('rotate')).toEqual([path.join(workDir, '期中 卷甲_旋转180.pdf')])
       expect(pathsOf('crop')).toEqual([path.join(workDir, '期中 卷甲_裁剪.pdf')])
 
-      for (const key of ['split', 'splitNamed', 'merge', 'delete', 'rotate', 'crop']) {
+      for (const key of ['split', 'splitNamed', 'crop']) {
         for (const output of pathsOf(key)) {
           expect(fs.existsSync(output), output).toBe(true)
           expect(pdfHead(output), output).toBe('%PDF-')
@@ -407,6 +398,16 @@ test.describe('exam-split（试卷切割 · PDF 操作）冒烟', () => {
       test.skip(!fs.existsSync(threePageFixture), '缺少三页 fixture')
       await clickSidebarTool(page, '试卷切割')
       await expect(page.getByRole('tab', { name: 'PDF 操作' })).toBeVisible()
+
+      // PDF 页签收敛（M49）：仅拆分/裁剪；合并/删页/旋转下线并引导到 PDF 工具集
+      await expect(page.getByRole('radio', { name: '拆分' })).toBeVisible()
+      await expect(page.getByRole('radio', { name: '裁剪' })).toBeVisible()
+      await expect(page.getByRole('radio', { name: '合并' })).toHaveCount(0)
+      await expect(page.getByRole('radio', { name: '删页' })).toHaveCount(0)
+      await expect(page.getByRole('radio', { name: '旋转' })).toHaveCount(0)
+      await expect(
+        page.getByText('合并、删页、旋转、重排等请使用「PDF 工具集」。')
+      ).toBeVisible()
 
       await page.locator('input[type="file"]').setInputFiles(threePageFixture)
 

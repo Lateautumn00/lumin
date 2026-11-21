@@ -1,12 +1,12 @@
 /**
- * @file ocr.worker 单测（假 ocr-kit：验证进度上抛与结果/错误透传）
+ * @file ocr.worker 单测（假 ocr-kit：验证进度上抛与逐张结果/错误透传）
  * @author cuilanchao
- * @date 2026-11-19
+ * @date 2026-11-20
  * @description exposeTask 在非 worker 线程为空操作，可直接 import 处理器。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RenderedPage } from '@lumin/ocr-kit'
-import type { StructuredError, TaskUpdate } from '@lumin/shared'
+import type { TaskUpdate } from '@lumin/shared'
 import { handleOcrTextTask } from './ocr.worker'
 
 const mocks = vi.hoisted(() => ({
@@ -17,7 +17,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@lumin/ocr-kit', () => ({
   renderOcrInput: mocks.render,
   createOcrEngine: mocks.createEngine,
-  sortReadingOrder: (lines: unknown[]) => lines
+  sortReadingOrder: (lines: unknown[]) => lines,
+  composeText: (lines: { text: string }[]) => lines.map((line) => line.text).join('\n')
 }))
 
 function fakePage(): RenderedPage {
@@ -35,43 +36,47 @@ beforeEach(() => {
 })
 
 describe('handleOcrTextTask', () => {
-  it('进度以 kind:progress 上抛，返回识别结果', async () => {
+  it('进度以 kind:progress 上抛，返回逐张结果', async () => {
     mocks.render.mockResolvedValue([fakePage()])
     mocks.createEngine.mockResolvedValue({
       detectLines: async () => [{ text: '你好', x: 0.1, y: 0.2, width: 0.3, height: 0.1 }]
     })
     const emit = vi.fn<(update: TaskUpdate) => void>()
     const result = await handleOcrTextTask(
-      { inputPath: 'C:/a.png', binariesDir: 'C:/models' },
+      { inputPaths: ['C:/a.png', 'C:/b.png'], binariesDir: 'C:/models' },
       { emit }
     )
-    expect(result.width).toBe(120)
-    expect(result.height).toBe(60)
-    expect(result.lines).toHaveLength(1)
+    expect(result.items).toHaveLength(2)
+    expect(result.items[0]).toMatchObject({ status: 'done', width: 120, height: 60, text: '你好' })
     const first = emit.mock.calls[0]?.[0]
     expect(first?.kind).toBe('progress')
     expect(first?.kind === 'progress' ? first.stage : undefined).toBe('render')
   })
 
-  it('未识别到文字 → OCR_NO_TEXT', async () => {
-    mocks.render.mockResolvedValue([fakePage()])
-    mocks.createEngine.mockResolvedValue({ detectLines: async () => [] })
-    const emit = vi.fn<(update: TaskUpdate) => void>()
-    await expect(
-      handleOcrTextTask({ inputPath: 'C:/a.png', binariesDir: 'C:/models' }, { emit })
-    ).rejects.toMatchObject({ code: 'OCR_NO_TEXT' })
+  it('单张渲染失败保留为失败项，其余继续', async () => {
+    mocks.render.mockImplementation(async (path: string) => {
+      if (path.endsWith('bad.png')) throw new Error('decode boom')
+      return [fakePage()]
+    })
+    mocks.createEngine.mockResolvedValue({ detectLines: async () => [{ text: 'ok' }] })
+    const result = await handleOcrTextTask(
+      { inputPaths: ['C:/bad.png', 'C:/ok.png'], binariesDir: 'C:/models' },
+      { emit: vi.fn() }
+    )
+    expect(result.items[0]).toMatchObject({
+      status: 'failed',
+      error: { code: 'OCR_FAILED', detail: 'decode boom' }
+    })
+    expect(result.items[1]).toMatchObject({ status: 'done' })
   })
 
-  it('非结构化异常 → OCR_FAILED（保留 detail）', async () => {
-    mocks.render.mockRejectedValue(new Error('decode boom'))
-    const emit = vi.fn<(update: TaskUpdate) => void>()
-    try {
-      await handleOcrTextTask({ inputPath: 'C:/a.png', binariesDir: 'C:/models' }, { emit })
-      expect.unreachable('应当抛出结构化错误')
-    } catch (err) {
-      const structured = err as StructuredError
-      expect(structured.code).toBe('OCR_FAILED')
-      expect(structured.detail).toContain('decode boom')
-    }
+  it('未识别到文字 → 单张失败 OCR_NO_TEXT', async () => {
+    mocks.render.mockResolvedValue([fakePage()])
+    mocks.createEngine.mockResolvedValue({ detectLines: async () => [] })
+    const result = await handleOcrTextTask(
+      { inputPaths: ['C:/a.png'], binariesDir: 'C:/models' },
+      { emit: vi.fn() }
+    )
+    expect(result.items[0]).toMatchObject({ status: 'failed', error: { code: 'OCR_NO_TEXT' } })
   })
 })

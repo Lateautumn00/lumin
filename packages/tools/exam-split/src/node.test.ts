@@ -119,16 +119,13 @@ function makeInput(root: string, name = '卷.pdf'): string {
   return path
 }
 
-describe('registerWith 七通道（spec §2 任务表 / §10.4 IPC）', () => {
-  it('注册 split/merge/delete/rotate/crop/ocr-detect/ocr-export 七个任务', () => {
+describe('registerWith 四通道（spec §2 任务表 / §10.4 IPC）', () => {
+  it('注册 split/crop/ocr-detect/ocr-export 四个任务', () => {
     const harness = createHarness()
     expect([...harness.tasks.keys()].sort()).toEqual([
       'crop',
-      'delete',
-      'merge',
       'ocr-detect',
       'ocr-export',
-      'rotate',
       'split'
     ])
   })
@@ -148,25 +145,6 @@ describe('registerWith 七通道（spec §2 任务表 / §10.4 IPC）', () => {
     expect(harness.updates[0]).toMatchObject({ stage: 'load' })
   })
 
-  it('merge：多文件入参按 inputPaths 转发', async () => {
-    const harness = createHarness()
-    const root = roots[0]!
-    const a = makeInput(root, 'a.pdf')
-    const b = makeInput(root, 'b.pdf')
-    const { error } = await runTask(harness, 'merge', { inputPaths: [a, b] })
-    expect(error).toBeUndefined()
-    expect(harness.calls[0]?.payload).toMatchObject({ op: 'merge' })
-  })
-
-  it('rotate：degrees 必填且仅 90/180/270', async () => {
-    const harness = createHarness()
-    const input = makeInput(roots[0]!)
-    const bad = await runTask(harness, 'rotate', { inputPath: input, degrees: 45 })
-    expect(bad.error).toMatchObject({ code: 'INVALID_PAYLOAD' })
-    const good = await runTask(harness, 'rotate', { inputPath: input, degrees: 180 })
-    expect(good.error).toBeUndefined()
-  })
-
   it('crop：box 越界 → INVALID_PAYLOAD，且不触碰预检', async () => {
     const prechecked: string[] = []
     const harness = createHarness({
@@ -184,19 +162,15 @@ describe('registerWith 七通道（spec §2 任务表 / §10.4 IPC）', () => {
     expect(harness.calls).toHaveLength(0)
   })
 
-  it('delete/crop：合法入参 → 校验+预检+转发 worker', async () => {
+  it('crop：合法入参 → 校验+预检+转发 worker', async () => {
     const harness = createHarness()
     const input = makeInput(roots[0]!)
-    const deleted = await runTask(harness, 'delete', { inputPath: input, ranges: '1' })
-    expect(deleted.error).toBeUndefined()
-    expect(harness.calls[0]?.payload).toMatchObject({ op: 'delete' })
-
     const cropped = await runTask(harness, 'crop', {
       inputPath: input,
       box: { x: 0, y: 0, width: 1, height: 1 }
     })
     expect(cropped.error).toBeUndefined()
-    expect(harness.calls[1]?.payload).toMatchObject({ op: 'crop' })
+    expect(harness.calls[0]?.payload).toMatchObject({ op: 'crop' })
   })
 
   it('非法入参 → INVALID_PAYLOAD（zod 拒绝，不进 worker）', async () => {
@@ -216,24 +190,6 @@ describe('registerWith 七通道（spec §2 任务表 / §10.4 IPC）', () => {
     const locked = createHarness({ checkExclusive: async () => Promise.reject(busy) })
     const lockedResult = await runTask(locked, 'split', { inputPath: 'x.pdf', ranges: '1' })
     expect(lockedResult.error).toMatchObject({ code: 'PDF_LOCKED', detail: 'EBUSY' })
-  })
-
-  it('merge 预检逐个检查，任一失败即中止', async () => {
-    const checked: string[] = []
-    const enoent = Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
-    const harness = createHarness({
-      checkReadable: async (path) => {
-        checked.push(path)
-        if (path.endsWith('b.pdf')) throw enoent
-      }
-    })
-    const root = roots[0]!
-    const { error } = await runTask(harness, 'merge', {
-      inputPaths: [makeInput(root, 'a.pdf'), join(root, 'b.pdf')]
-    })
-    expect(error).toMatchObject({ code: 'PDF_NOT_FOUND' })
-    expect(checked).toHaveLength(2)
-    expect(harness.calls).toHaveLength(0)
   })
 
   it('run 抛结构化错误 → 原样透传（worker 内 PDF_ENCRYPTED 等）', async () => {
@@ -418,18 +374,15 @@ describe('createNodeDeps（生产实现）', () => {
 })
 
 describe('registerMain（生产入口）', () => {
-  it('组装生产 deps 并注册七通道', () => {
+  it('组装生产 deps 并注册四通道', () => {
     const root = mkdtempSync(join(tmpdir(), 'lumin-exam-reg-'))
     roots.push(root)
     const tasks = new Map<string, TaskHandler<unknown, unknown>>()
     registerMain(createCtx(root, tasks))
     expect([...tasks.keys()].sort()).toEqual([
       'crop',
-      'delete',
-      'merge',
       'ocr-detect',
       'ocr-export',
-      'rotate',
       'split'
     ])
   })

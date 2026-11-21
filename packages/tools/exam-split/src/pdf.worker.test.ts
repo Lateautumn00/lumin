@@ -32,7 +32,10 @@ describe('pdf.worker handleTask（exposeTask 回调）', () => {
     const input = await makePdf('worker.pdf', 2)
     const updates: TaskUpdate[] = []
     const result = await handleTask(
-      { op: 'rotate', payload: { inputPath: input, ranges: '', degrees: 90 } },
+      {
+        op: 'crop',
+        payload: { inputPath: input, box: { x: 0, y: 0, width: 0.5, height: 0.5 } }
+      },
       { emit: (update) => updates.push(update) }
     )
     expect(result.outputPaths).toHaveLength(1)

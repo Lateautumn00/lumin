@@ -2,15 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   OCR_INPUT_RE,
   cropPayloadSchema,
-  deletePayloadSchema,
-  mergePayloadSchema,
   nameTemplateSchema,
   ocrDetectPayloadSchema,
   ocrDetectResultSchema,
   ocrExportPayloadSchema,
   ocrRegionSchema,
   ocrRotationSchema,
-  rotatePayloadSchema,
   splitPayloadSchema
 } from './schema'
 
@@ -30,19 +27,10 @@ describe('nameTemplateSchema（spec §7.2 命名模板）', () => {
     expect(nameTemplateSchema.safeParse('   ').success).toBe(false)
   })
 
-  it('五操作 payload 接受可选模板，非法模板整包拒绝', () => {
+  it('两操作 payload 接受可选模板，非法模板整包拒绝', () => {
     const tpl = '{name}-{label}'
     expect(
       splitPayloadSchema.safeParse({ inputPath: PDF, ranges: '1', nameTemplate: tpl }).success
-    ).toBe(true)
-    expect(
-      mergePayloadSchema.safeParse({ inputPaths: [PDF, 'D:/b.pdf'], nameTemplate: tpl }).success
-    ).toBe(true)
-    expect(
-      deletePayloadSchema.safeParse({ inputPath: PDF, ranges: '1', nameTemplate: tpl }).success
-    ).toBe(true)
-    expect(
-      rotatePayloadSchema.safeParse({ inputPath: PDF, degrees: 90, nameTemplate: tpl }).success
     ).toBe(true)
     expect(
       cropPayloadSchema.safeParse({
@@ -68,40 +56,6 @@ describe('splitPayloadSchema', () => {
     expect(splitPayloadSchema.safeParse({ inputPath: PDF, ranges: '' }).success).toBe(false)
     expect(splitPayloadSchema.safeParse({ inputPath: PDF, ranges: '1;a' }).success).toBe(false)
     expect(splitPayloadSchema.safeParse({ inputPath: PDF }).success).toBe(false)
-  })
-})
-
-describe('mergePayloadSchema', () => {
-  it('接受 2–100 个文件', () => {
-    expect(mergePayloadSchema.safeParse({ inputPaths: [PDF, 'b.pdf'] }).success).toBe(true)
-    const many = Array.from({ length: 100 }, (_, index) => `${index}.pdf`)
-    expect(mergePayloadSchema.safeParse({ inputPaths: many }).success).toBe(true)
-  })
-
-  it('拒绝 1 个与 101 个、非 pdf 路径', () => {
-    expect(mergePayloadSchema.safeParse({ inputPaths: [PDF] }).success).toBe(false)
-    const tooMany = Array.from({ length: 101 }, (_, index) => `${index}.pdf`)
-    expect(mergePayloadSchema.safeParse({ inputPaths: tooMany }).success).toBe(false)
-    expect(mergePayloadSchema.safeParse({ inputPaths: [PDF, 'b.doc'] }).success).toBe(false)
-  })
-})
-
-describe('deletePayloadSchema', () => {
-  it('区间必填', () => {
-    expect(deletePayloadSchema.safeParse({ inputPath: PDF, ranges: '1-2' }).success).toBe(true)
-    expect(deletePayloadSchema.safeParse({ inputPath: PDF, ranges: '' }).success).toBe(false)
-    expect(deletePayloadSchema.safeParse({ inputPath: PDF }).success).toBe(false)
-  })
-})
-
-describe('rotatePayloadSchema', () => {
-  it('角度仅 90/180/270，区间可省略', () => {
-    expect(rotatePayloadSchema.safeParse({ inputPath: PDF, degrees: 90 }).success).toBe(true)
-    expect(
-      rotatePayloadSchema.safeParse({ inputPath: PDF, ranges: '1-3', degrees: 270 }).success
-    ).toBe(true)
-    expect(rotatePayloadSchema.safeParse({ inputPath: PDF, degrees: 45 }).success).toBe(false)
-    expect(rotatePayloadSchema.safeParse({ inputPath: PDF, degrees: 360 }).success).toBe(false)
   })
 })
 

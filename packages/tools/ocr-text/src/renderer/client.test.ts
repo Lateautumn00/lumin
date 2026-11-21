@@ -1,20 +1,13 @@
 /**
  * @file renderer client 单测（通道名与壳契约一致）
  * @author cuilanchao
- * @date 2026-11-19
+ * @date 2026-11-20
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  cancelTask,
-  config,
-  pickDirectory,
-  revealPath,
-  saveTxt,
-  submitRecognize
-} from './client'
+import { cancelTask, config, exportTxt, pickDirectory, revealPath, submitRecognize } from './client'
 
 const invoke = vi.fn<(channel: string, payload?: unknown) => Promise<unknown>>(() =>
-  Promise.resolve({ taskId: 't1', output: 'C:/out/a-OCR.txt', outputDir: 'C:/out' })
+  Promise.resolve({ taskId: 't1', outputs: ['C:/out/a-OCR.txt'], outputDir: 'C:/out' })
 )
 const reveal = vi.fn(() => Promise.resolve())
 const pick = vi.fn(() => Promise.resolve<string | null>('C:/out'))
@@ -35,8 +28,10 @@ function stubLumin(): void {
 describe('ocr-text client', () => {
   it('submitRecognize 走 ocr-text:recognize 并透传 taskId', async () => {
     stubLumin()
-    const result = await submitRecognize({ inputPath: 'C:/a.png' })
-    expect(invoke).toHaveBeenCalledWith('ocr-text:recognize', { inputPath: 'C:/a.png' })
+    const result = await submitRecognize({ inputPaths: ['C:/a.png', 'C:/b.png'] })
+    expect(invoke).toHaveBeenCalledWith('ocr-text:recognize', {
+      inputPaths: ['C:/a.png', 'C:/b.png']
+    })
     expect(result.taskId).toBe('t1')
   })
 
@@ -46,32 +41,29 @@ describe('ocr-text client', () => {
     expect(invoke).toHaveBeenCalledWith('ocr-text:config', {})
   })
 
-  it('saveTxt 走 ocr-text:save-txt 并透传 output', async () => {
+  it('exportTxt 走 ocr-text:export 并透传 outputs', async () => {
     stubLumin()
-    const result = await saveTxt({
+    const payload = {
       outputDir: 'C:/out',
-      inputPath: 'C:/a.png',
-      text: '内容'
-    })
-    expect(invoke).toHaveBeenCalledWith('ocr-text:save-txt', {
-      outputDir: 'C:/out',
-      inputPath: 'C:/a.png',
-      text: '内容'
-    })
-    expect(result.output).toBe('C:/out/a-OCR.txt')
+      mode: 'merged' as const,
+      items: [{ fileName: 'a.png', text: '内容' }]
+    }
+    const result = await exportTxt(payload)
+    expect(invoke).toHaveBeenCalledWith('ocr-text:export', payload)
+    expect(result.outputs).toEqual(['C:/out/a-OCR.txt'])
   })
 
-  it('cancelTask 走壳通用 lumin:task:cancel', async () => {
+  it('cancelTask 走壳取消通道', async () => {
     stubLumin()
     await cancelTask('t1')
     expect(invoke).toHaveBeenCalledWith('lumin:task:cancel', { taskId: 't1' })
   })
 
-  it('revealPath / pickDirectory 委托 bridge', async () => {
+  it('revealPath / pickDirectory 复用壳通道', async () => {
     stubLumin()
-    await revealPath('C:/out/a-OCR.txt')
-    await pickDirectory('选择 TXT 导出目录')
-    expect(reveal).toHaveBeenCalledWith('C:/out/a-OCR.txt')
-    expect(pick).toHaveBeenCalledWith('选择 TXT 导出目录')
+    await revealPath('C:/out/a.txt')
+    await pickDirectory('选择导出目录')
+    expect(reveal).toHaveBeenCalledWith('C:/out/a.txt')
+    expect(pick).toHaveBeenCalledWith('选择导出目录')
   })
 })
