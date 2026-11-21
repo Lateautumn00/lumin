@@ -1,0 +1,182 @@
+# dev-toolbox 字段级功能清单（M42）
+
+> 规范源：`AGENTS.md`（强制执行）。路线图：`.trae/documents/Lumin 功能清单差距审计与后续路线图.md` §M42。
+> 分支 `feature/m42-dev-toolbox`（自 `feature/m41-fs-cleaner` 的 `50cf650` 切出）。
+> **零新增第三方依赖**；不扩展 `plugin-api` 公共契约；不新增壳能力通道。
+
+---
+
+## 0. 工具元信息
+
+| 项 | 值 |
+| --- | --- |
+| id | `dev-toolbox` |
+| name | 开发工具 |
+| description | 端口占用查询与进程结束、CURL 转代码、本地静态服务器 |
+| icon | `terminal`（`@lucide/vue` 的 `Terminal`） |
+| category | `misc` |
+| order | 70 |
+| version | `0.1.0` |
+
+包名 `@lumin/tool-dev-toolbox`，目录 `packages/tools/dev-toolbox`，形态 `manifest.ts + renderer/ + node.ts`。
+
+---
+
+## 1. 页签一：端口占用（`ports`）
+
+### 输入
+
+| 控件 | 说明 |
+| --- | --- |
+| 端口号输入框 | 可选，整数 1–65535；留空表示查全部 TCP/UDP 监听与连接 |
+| [查询] 按钮 | 同步 invoke `dev-toolbox:ports-query`；查询中禁用并显示加载态 |
+| 过滤框 | 前端按端口/PID/进程名子串过滤（不重新查询） |
+
+### 主进程行为（`node.ts`）
+
+1. 执行 `netstat -ano -p tcp` 与 `netstat -ano -p udp`（`node-kit.runProcess`，超时 15s）。
+2. 解析行：`协议 本地地址 外部地址 状态 PID`；`LISTENING`/`ESTABLISHED`/`UDP` 行（UDP 行无状态列，需兼容列数差异）。
+3. `tasklist /FO CSV /NH` 一次性取 PID→进程名映射（超时 15s，失败不影响端口列表，进程名留空）。
+4. 输出行数上限 5000，超出截断并置 `truncated: true`。
+5. 结果按端口升序、PID 升序稳定排序。
+
+### 输出
+
+表格列：协议 / 本地地址 / 端口 / 状态 / PID / 进程名。
+底部摘要：「共 N 条（已截断）」+ PID 行内 [结束进程] 按钮。
+
+[结束进程] 必须 `NPopconfirm` 二次确认，文案含进程名与 PID；确认后同步 invoke `dev-toolbox:port-kill`。
+
+### 安全约束
+
+- 拒绝 PID ≤ 0 与自身 PID（`process.pid`）→ `DT_KILL_SELF_FORBIDDEN`。
+- 命令执行一律 `execFile('taskkill', ['/PID', pid, '/T', '/F'])`，**禁止**字符串拼接进 shell。
+
+### 错误分支
+
+| 错误码 | 触发 | 文案 |
+| --- | --- | --- |
+| `DT_INVALID_PORT` | 端口非 1–65535 整数 | 端口号须为 1–65535 的整数 |
+| `DT_NETSTAT_FAILED` | netstat 非零退出/超时 | 查询端口占用失败 |
+| `DT_KILL_FAILED` | taskkill 非零退出 | 结束进程失败（可能已退出或无权限） |
+| `DT_KILL_SELF_FORBIDDEN` | 目标 PID 为自身 | 不能结束本程序进程 |
+
+---
+
+## 2. 页签二：CURL 转代码（`curl`）
+
+纯 renderer，无 IPC。左侧输入 curl 命令，右侧输出代码，350ms 防抖实时转换。
+
+### 支持参数
+
+`-X/--request`、`-H/--header`（可多次）、`-d/--data/--data-raw/--data-binary`（可多次，按 `&` 连接）、`-b/--cookie`、`-A/--user-agent`、`-u/--user`、`-I/--head`、`--compressed`、`-k/--insecure`（仅注释忽略）、URL 位置参数（取第一个）。
+
+### 不支持参数
+
+遇到其余 `-*` 参数 → 报 `DT_CURL_PARSE_FAILED`，detail 指明「暂不支持的参数：-x」。支持 `\` + 换行续行、单引号/双引号/无引号值、`$'...'` 转义按普通引号处理。
+
+### 输出目标
+
+`NRadioGroup`：`fetch` / `axios` / `python`（默认 `fetch`）。输出只读 `<pre>` + [复制]。
+
+### 生成规则
+
+- fetch：`await fetch(url, { method, headers, body })`，method 缺省 `GET`；有 body 且未显式 `-X` 时 `POST`。
+- axios：`await axios({ url, method, headers, data })`。
+- python：`requests.request(method, url, headers=..., data=...)`。
+- 字符串一律单引号转义（js）/ repr 风格（python）。
+
+### 错误分支
+
+| 错误码 | 触发 |
+| --- | --- |
+| `DT_CURL_PARSE_FAILED` | 空输入、缺少 URL、遇到不支持参数、引号未闭合 |
+
+---
+
+## 3. 页签三：静态服务器（`server`）
+
+### 输入
+
+| 控件 | 说明 |
+| --- | --- |
+| 根目录 | `window.lumin.pickDirectory()`，选中即记忆（settings `devToolboxRoot`） |
+| 端口 | 1–65535，默认 8080，记忆（settings `devToolboxPort`） |
+| [启动] / [停止] | 同步 invoke `dev-toolbox:server-start` / `dev-toolbox:server-stop` |
+| 地址显示 | 运行中显示 `http://127.0.0.1:<port>/` + [复制] |
+
+### 主进程行为
+
+- `node:http` 创建服务，仅绑定 `127.0.0.1`。
+- 仅允许 `GET`/`HEAD`，其余 405。
+- 路径解析：`decodeURIComponent` → `path.resolve(root, '.' + pathname)`；结果**必须**以 `root + sep` 开头（等值视为目录），否则 403；违反即返回 403 并记录。
+- 目录请求：存在 `index.html` 则返回；否则返回最小 HTML 列表（文件名 + 大小，`text/html; charset=utf-8`，文件名做 HTML 转义）。
+- MIME 表内置：html/htm/css/js/mjs/json/txt/md/svg/png/jpg/jpeg/gif/webp/ico/pdf/wasm/woff2/mp4/mp3/map；未知 → `application/octet-stream`。
+- 访问日志环形缓冲 200 条：`{ time, method, path, status, bytes }`。
+- `dev-toolbox:server-status` 同步 invoke 返回 `{ running, port, root, requests: 最近 50 条 }`；renderer 每 1s 轮询（仅运行中）。
+- 再次 [启动] 时先关闭旧服务。
+
+### 错误分支
+
+| 错误码 | 触发 |
+| --- | --- |
+| `DT_ROOT_INVALID` | 目录不存在或非目录 |
+| `DT_PORT_IN_USE` | `EADDRINUSE` |
+| `DT_SERVER_FAILED` | 其余监听失败（`EACCES` 等） |
+
+带宽说明：仅本机调试用，不做鉴权；页面常驻提示「仅监听 127.0.0.1，勿用于公网」。
+
+---
+
+## 4. IPC 契约
+
+| 通道 | 类型 | 入参 | 出参 |
+| --- | --- | --- | --- |
+| `dev-toolbox:ports-query` | invoke | `{ port?: number }` | `{ rows: PortRow[], truncated: boolean, elapsedMs: number }` |
+| `dev-toolbox:port-kill` | invoke | `{ pid: number }` | `{ ok: true }` |
+| `dev-toolbox:server-start` | invoke | `{ root: string, port: number }` | `{ running: true, port: number, root: string }` |
+| `dev-toolbox:server-stop` | invoke | `{}` | `{ running: false }` |
+| `dev-toolbox:server-status` | invoke | `{}` | `{ running, port?, root?, requests: AccessLog[] }` |
+| `dev-toolbox:config` | invoke | `{}` | `{ root: string \| null, port: number }` |
+| `dev-toolbox:set-config` | invoke | `{ root?: string \| null, port?: number }` | 同 config |
+
+全部入参 zod 校验；错误统一 `DT_*` 结构化错误码（`toolError` 仿 `fs-cleaner/src/errors.ts`）。
+
+`PortRow = { protocol: 'TCP' | 'UDP'; localAddress: string; port: number; state: string; pid: number; process: string }`。
+
+---
+
+## 5. 三态与 UI 约束
+
+| 页签 | 空态 | 加载态 | 报错态 |
+| --- | --- | --- | --- |
+| 端口占用 | 「输入端口或留空查询全部」+ [查询] | [查询] 禁用 + `NSpin` | 错误码 → 中文 + [重试]/详情 |
+| CURL 转代码 | 示例 curl 占位（placeholder） | 无长任务 | 解析失败原因常驻展示 |
+| 静态服务器 | 「选择根目录后启动」 | [启动] 禁用 + 状态文案 | 错误码 → 中文 + [重试]/详情 |
+
+- 样式只用 Tailwind + tokens；图标只用 `@lucide/vue`。
+- 关闭/切换工具页时若服务运行中：保留服务（跨页签不打断），页面顶部常驻「服务运行中」提示。
+
+---
+
+## 6. 测试与验收
+
+### 单测（`packages/tools/dev-toolbox/src`）
+
+- `curl.ts`：参数解析 ≥15 例（引号、续行、重复 header、多 data、`-I`、未知参数报错、缺少 URL）。
+- `netstat.ts`：固定样本解析（TCP LISTENING / ESTABLISHED / UDP 三列行、IPv6 地址、含空格）≥8 例。
+- `mime.ts`/路径穿越判定：≥6 例。
+- `errors.ts` 与 schema：≥5 例。
+- 包覆盖率 ≥80%（statements/branches/functions/lines）。
+
+### e2e（`apps/desktop/e2e/dev-toolbox-smoke.spec.ts`）
+
+1. 侧栏「开发工具」可进入，三页签均可见。
+2. CURL：输入 `curl 'https://a.com/x' -H 'X-A: 1'` → 输出含 `fetch(` 与 `'X-A': '1'`；切到 python 输出含 `requests.request`。
+3. 端口：留空查询 → 表格至少 1 行（本机必有监听）；非法端口 `70000` → `DT_INVALID_PORT` 文案可见。
+4. 静态服务器：临时目录写 `index.html` → 启动 → 页面显示 `http://127.0.0.1:` 地址；停止后状态回未运行。（HTTP 请求断言可在主进程侧用 Node `fetch` 直接在 spec 内验证 200 与内容）
+5. 错误态：无效目录启动 → `DT_ROOT_INVALID` 文案 + [重试] 可见。
+
+### 门禁
+
+`pnpm --filter @lumin/tool-dev-toolbox typecheck` → `pnpm exec vitest run packages/tools/dev-toolbox` → `pnpm --filter @lumin/desktop build`（记录 chunk raw/gzip）→ e2e（由主会话串行执行）。
