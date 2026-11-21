@@ -112,4 +112,24 @@ test.describe('text-toolbox（文本工具箱）冒烟', () => {
       await app.close()
     }
   })
+
+  test('摩尔斯编码 → 交换 → 解码往返', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '文本工具箱')
+      await page.locator('.n-tabs-tab[data-name="morse"]').click()
+      const input = page.getByPlaceholder('输入文本或摩尔斯码（字母空格分隔，单词用 / 分隔）')
+      await input.fill('SOS')
+      await page.getByRole('button', { name: '编码', exact: true }).click()
+      await expect(page.locator('textarea[readonly]').last()).toHaveValue('... --- ...')
+
+      await page.getByRole('button', { name: '交换', exact: true }).click()
+      await expect(input).toHaveValue('... --- ...')
+      await page.getByRole('button', { name: '解码', exact: true }).click()
+      await expect(page.locator('textarea[readonly]').last()).toHaveValue('SOS')
+    } finally {
+      await app.close()
+    }
+  })
 })
