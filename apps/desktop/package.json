@@ -44,6 +44,7 @@
     "@lumin/tool-life-calculator": "workspace:*",
     "@lumin/tool-markdown-tool": "workspace:*",
     "@lumin/tool-media-convert": "workspace:*",
+    "@lumin/tool-misc-toolbox": "workspace:*",
     "@lumin/tool-ocr-text": "workspace:*",
     "@lumin/tool-password-generator": "workspace:*",
     "@lumin/tool-pdf-images": "workspace:*",
