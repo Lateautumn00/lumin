@@ -5,7 +5,7 @@
  * @description baseName 扩展名剥离、uniqueFileName 冲突级联与大小写不敏感
  */
 import { describe, expect, it } from 'vitest'
-import { baseName, uniqueFileName } from './naming'
+import { baseName, extensionOf, uniqueFileName } from './naming'
 
 describe('baseName', () => {
   it('剥离最后一个扩展名', () => {
@@ -26,6 +26,29 @@ describe('baseName', () => {
     expect(baseName('README')).toBe('README')
     expect(baseName('.gitignore')).toBe('.gitignore')
     expect(baseName('dir/.env')).toBe('dir/.env')
+  })
+})
+
+describe('extensionOf', () => {
+  it('提取并小写扩展名', () => {
+    expect(extensionOf('photo.JPG')).toBe('jpg')
+    expect(extensionOf('E:\\我的 文档\\a.TiFf')).toBe('tiff')
+    expect(extensionOf('/tmp/dir/a.webp')).toBe('webp')
+  })
+
+  it('多点数取最后一段', () => {
+    expect(extensionOf('my.photo.png')).toBe('png')
+  })
+
+  it('目录中的点不算扩展名', () => {
+    expect(extensionOf('E:\\a.b\\file')).toBeNull()
+  })
+
+  it('无扩展名 / 点开头 / 末尾点返回 null', () => {
+    expect(extensionOf('README')).toBeNull()
+    expect(extensionOf('.gitignore')).toBeNull()
+    expect(extensionOf('dir/.env')).toBeNull()
+    expect(extensionOf('broken.')).toBeNull()
   })
 })
 
