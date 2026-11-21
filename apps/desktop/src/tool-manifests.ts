@@ -10,6 +10,7 @@ import { manifest as examSplitManifest } from '@lumin/tool-exam-split/manifest'
 import { manifest as fileHasherManifest } from '@lumin/tool-file-hasher/manifest'
 import { manifest as fileRenamerManifest } from '@lumin/tool-file-renamer/manifest'
 import { manifest as folderCompareManifest } from '@lumin/tool-folder-compare/manifest'
+import { manifest as imageCropManifest } from '@lumin/tool-image-crop/manifest'
 import { manifest as imageToolboxManifest } from '@lumin/tool-image-toolbox/manifest'
 import { manifest as imageRotateManifest } from '@lumin/tool-image-rotate/manifest'
 import { manifest as imageStitchManifest } from '@lumin/tool-image-stitch/manifest'
@@ -35,6 +36,7 @@ export const toolManifests: readonly ToolManifest[] = [
   examSplitManifest,
   imageToolboxManifest,
   imageRotateManifest,
+  imageCropManifest,
   imageStitchManifest,
   imageWatermarkManifest,
   pdfImagesManifest,

@@ -6,6 +6,7 @@
  *              旋转与翻转可组合，至少选一项由 refine 兜底
  */
 import { z } from 'zod'
+import { extensionOf as sharedExtensionOf } from '@lumin/shared'
 
 /** 支持的输入扩展名白名单（小写；大小写不敏感匹配，spec §3） */
 export const SUPPORTED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff'] as const
@@ -35,9 +36,8 @@ export function normalizeExtension(raw: string): SupportedExtension | null {
  * @param filePath 磁盘绝对路径
  */
 export function extensionOf(filePath: string): SupportedExtension | null {
-  const idx = filePath.lastIndexOf('.')
-  if (idx <= filePath.lastIndexOf('/') || idx <= filePath.lastIndexOf('\\')) return null
-  return normalizeExtension(filePath.slice(idx))
+  const raw = sharedExtensionOf(filePath)
+  return raw === null ? null : normalizeExtension(raw)
 }
 
 /** 输入文件列表（zod：非空字符串，去重由调用方负责，上限 MAX_BATCH_FILES） */

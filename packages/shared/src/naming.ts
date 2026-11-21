@@ -18,6 +18,19 @@ export function baseName(filePath: string): string {
   return filePath.slice(0, dot)
 }
 
+/**
+ * 提取扩展名（小写、去点、无白名单校验）
+ * 目录中的点与点开头文件视为无扩展名；末尾为点 → null
+ * @param filePath 文件路径或文件名
+ */
+export function extensionOf(filePath: string): string | null {
+  const slash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
+  const dot = filePath.lastIndexOf('.')
+  if (dot <= slash + 1) return null
+  const ext = filePath.slice(dot + 1).toLowerCase()
+  return ext.length === 0 ? null : ext
+}
+
 /** 冲突重命名比较键（Windows 文件系统大小写不敏感） */
 function keyOf(name: string): string {
   return name.toLowerCase()

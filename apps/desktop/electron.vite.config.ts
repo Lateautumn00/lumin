@@ -42,6 +42,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/exam-split/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-image-crop\/manifest$/,
+    replacement: r('../../packages/tools/image-crop/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-image-crop\/node$/,
+    replacement: r('../../packages/tools/image-crop/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-image-crop\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/image-crop/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-image-toolbox\/manifest$/,
     replacement: r('../../packages/tools/image-toolbox/src/manifest.ts')
   },

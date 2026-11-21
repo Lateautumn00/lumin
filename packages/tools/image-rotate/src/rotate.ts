@@ -4,6 +4,7 @@
  * @date 2026-11-20
  * @description 滤镜链（先翻转后旋转）、编码参数、产物命名与单张失败归类
  */
+import { classifyFfmpegFailure as classifyFfmpegImageFailure } from '@lumin/node-kit'
 import type { Flip, Rotation } from './schema'
 
 /** 操作参数（schema 校验后的旋转/翻转组合） */
@@ -59,36 +60,21 @@ export function buildRotateOutputName(args: {
 
 /**
  * 输出编码参数（保持原格式，质量固定高保真；spec §4）
+ * 实现已上提至 `@lumin/node-kit`，此处保留原导出名供工具内调用。
  * @param ext 归一输出扩展名
  */
-export function buildEncodeArgs(ext: string): string[] {
-  if (ext === 'jpg') return ['-q:v', '2']
-  if (ext === 'webp') return ['-quality', '92']
-  if (ext === 'png') return ['-compression_level', '6']
-  // bmp/tiff 无质量参数
-  return []
-}
+export { buildImageEncodeArgs as buildEncodeArgs } from '@lumin/node-kit'
 
 /** ffmpeg 单张失败归类（spec §6：磁盘满/权限/输出打开失败 vs 输入损坏） */
 export type FfmpegFailure = 'IR_OUTPUT_WRITE_FAILED' | 'IR_FILE_CORRUPT'
 
 /**
- * 按 ffmpeg stderr 归类单张失败原因
+ * 按 ffmpeg stderr 归类单张失败原因（公共实现 → 本工具错误码）
  * @param stderr ffmpeg 错误输出
  * @param outputPath 本次编码的目标输出路径（用于区分输入/输出侧 open 失败）
  */
 export function classifyFfmpegFailure(stderr: string, outputPath?: string): FfmpegFailure {
-  if (/no space left on device/i.test(stderr)) return 'IR_OUTPUT_WRITE_FAILED'
-  if (/permission denied|access is denied/i.test(stderr)) return 'IR_OUTPUT_WRITE_FAILED'
-  if (outputPath !== undefined) {
-    // Windows deny-ACL 实测：无 Permission denied 字样，仅「Could not open file : <输出路径>」
-    const escaped = outputPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    if (new RegExp(`could not open file[^\\n]*${escaped}`, 'i').test(stderr)) {
-      return 'IR_OUTPUT_WRITE_FAILED'
-    }
-    if (/error muxing a packet|error submitting a packet/i.test(stderr)) {
-      return 'IR_OUTPUT_WRITE_FAILED'
-    }
-  }
-  return 'IR_FILE_CORRUPT'
+  return classifyFfmpegImageFailure(stderr, outputPath) === 'OUTPUT_WRITE_FAILED'
+    ? 'IR_OUTPUT_WRITE_FAILED'
+    : 'IR_FILE_CORRUPT'
 }
