@@ -1,8 +1,8 @@
 # PDF 图片转换（pdf-images）冒烟记录
 
-> 里程碑 M11（2026-11-19）· 工具 `pdf-images` · 规格 `docs/spec/pdf-images.md`
+> 里程碑 M11（2026-11-19）/ M34（2026-11-21 增强）· 工具 `pdf-images` · 规格 `docs/spec/pdf-images.md`
 > 验证环境：Windows 11 x64 · Electron 45.3.1 · `pnpm -F @lumin/desktop build` 产物
-> 自动化：`pnpm -F @lumin/desktop exec playwright test e2e/pdf-images-smoke.spec.ts` → **5/5 通过（23.2s）**
+> 自动化：`pnpm -F @lumin/desktop exec playwright test e2e/pdf-images-smoke.spec.ts` → **6/6 通过**
 
 ---
 
@@ -24,6 +24,7 @@
 | 12  | R5 chunk（<200KB gzip）                        | 构建实测 | ✅ `pdf-images-*.js` **30,842 B raw / 7,825 B gzip**                                                           |
 | 13  | 运行时资产单列（R5 口径）                      | 构建实测 | ℹ️ pdfjs worker `pdf.worker.min-*.mjs` 1,271,915 B raw / 379,243 B gzip（exam-split 已单列的同一资产，非新增） |
 | 14  | 打包态实测（`release/win-unpacked/Lumin.exe`） | 打包冒烟 | ✅ 图片→PDF（`%PDF-`、1 页）+ PDF→图片（`89504e47`）均成功——asar 内 pdfjs 与解包 `@napi-rs/canvas` 加载正常    |
+| 15  | M34 Letter/横版/边距/自定义名（R2.1）          | e2e      | ✅ Letter + 横版 + 20mm + `自定义 名称` → 2 页 MediaBox **792×612**，重名 `(1)` 递增、不覆盖                  |
 
 ## 2. R2 八类异常清单（逐条实测证据）
 
@@ -45,12 +46,12 @@
 | 空态   | 两个 Tab 均有 `NEmpty` 引导 + `DropZone` 主操作，无白屏                               |
 | 加载态 | `TaskProgress` 显示 `当前/总数 + 文件名`，取消按钮可用（e2e 已验证可中断）            |
 | 报错态 | 结构化错误码 → 中文文案；可重试码显示 `[重试]`，`detail` 折叠「详情」                 |
-| 选项   | DPI 72/150/300；格式 PNG/JPG；页码范围留空=全部页；A4 边距 0–50mm；图片上移/下移/移除 |
+| 选项   | DPI 72/150/300；格式 PNG/JPG；页码范围留空=全部页；纸型 auto/A4/Letter；方向 自动/竖版/横版；边距预设 无/小/中/大；自定义输出文件名；图片上移/下移/移除 |
 
 ## 4. 实现注记
 
 - **渲染链路**：`node-kit/pdf`（pdfjs-dist legacy + `@napi-rs/canvas`）在 worker 内逐页渲染；白底补白后 `canvas.toBuffer('image/png')` / `canvas.encode('jpeg', q)`（spike 结论：无需 ffmpeg 编码兜底）
-- **合并链路**：png/jpg 直接 `pdf-lib.embedPng/embedJpg`；webp/bmp/tiff/avif/gif 走 ffmpeg `-frames:v 1` 转 PNG 中间件；A4 模式按 `a4Layout` 等比 contain 居中
+- **合并链路**：png/jpg 直接 `pdf-lib.embedPng/embedJpg`；webp/bmp/tiff/avif/gif 走 ffmpeg `-frames:v 1` 转 PNG 中间件；`pageLayout` 统一出页（auto = 原图尺寸；A4/Letter 按方向取长短边、等比 contain 居中并留边距）
 - **落盘**：`.tmp` + `rename` 原子写；最终名冲突 `{base} ({n}).pdf`（Windows 大小写不敏感）
 - **命名修复**：`mergedPdfName` 保留目录前缀（供契约单测），worker 侧用 `path.basename` 收敛为纯文件名后再 `join(outputDir, name)`（首轮 e2e 前的 ENOENT 缺陷回归点）
 - **页签渲染**：沿用 naive-ui 2.45.3 规避方案——`NTabs` 仅作切换器、内容 `v-if`、页签走 `#tab` 插槽
@@ -60,3 +61,13 @@
 - 未做 GB 级单文件压力测试（R2.4 以 100 页多页 PDF 覆盖；超时上限 10 分钟）
 - 加密 PDF 仅覆盖「有打开密码」路径；权限密码（仅限制编辑）按 pdfjs 语义直接可读，未单列
 - 输出目录默认 `userData/pdf-images-output`，首次使用不自动创建直到开始任务（避免空目录）
+
+## 6. M34 增强记录（2026-11-21）
+
+| 项 | 记录 |
+| -- | ---- |
+| 能力 | 纸型 `auto/A4/Letter`；方向 `自动/竖版/横版`（仅固定纸型）；边距预设 `无/小 10/中 20/大 40mm`；自定义输出文件名（≤80 字、非法字符行内提示） |
+| 单测 | `pnpm exec vitest run packages/tools/pdf-images` **52/52**；`contract.ts` lines 100% / branches 97.9%，`schema.ts` 100/100/100 |
+| e2e | **6/6 通过**；新增例：Letter + 横版 + 20mm + `自定义 名称` → 2 页 MediaBox `792×612`，重名 `(1)` 递增且原文件保留 |
+| chunk | `pdf-images-*.js` **34,966 B raw / 8,712 B gzip**（R5 <200KB gzip） |
+| 兼容 | 旧请求不含 `orientation` 时 zod 默认 `auto`，`auto` 页型忽略方向/边距；未填 `outputName` 仍输出 `{首图基名}_合并.pdf` |
