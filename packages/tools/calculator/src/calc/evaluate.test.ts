@@ -92,6 +92,29 @@ describe('evaluate 角度模式', () => {
   })
 })
 
+describe('evaluate 阶乘', () => {
+  it('函数与后缀两种语法结果一致', () => {
+    expect(ok('factorial(5)')).toBe(120)
+    expect(ok('5!')).toBe(120)
+    expect(ok('0!')).toBe(1)
+    expect(ok('(2+3)!')).toBe(120)
+    expect(ok('3!+2')).toBe(8)
+  })
+
+  it('负数与非整数 → EVAL_FAILED（中文文案明确）', () => {
+    err('factorial(-1)', 'EVAL_FAILED')
+    err('(-1)!', 'EVAL_FAILED')
+    err('1.5!', 'EVAL_FAILED')
+    const result = evaluate('2.5!', 'deg')
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.message).toBe('阶乘仅支持非负整数')
+  })
+
+  it('数值溢出 → NON_FINITE', () => {
+    err('171!', 'NON_FINITE')
+  })
+})
+
 describe('evaluate 错误分支', () => {
   it('语法错误 → SYNTAX_ERROR', () => {
     err('2+', 'SYNTAX_ERROR')
@@ -105,7 +128,6 @@ describe('evaluate 错误分支', () => {
   })
 
   it('白名单外符号 → UNKNOWN_SYMBOL', () => {
-    err('factorial(5)', 'UNKNOWN_SYMBOL')
     err('random()', 'UNKNOWN_SYMBOL')
     err('x=2', 'UNKNOWN_SYMBOL')
     err('1 and 1', 'UNKNOWN_SYMBOL')

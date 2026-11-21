@@ -18,8 +18,8 @@ function expectConvertError(fn: () => unknown, code: ConvertErrorCode): ConvertE
 }
 
 describe('换算表数据完整性', () => {
-  it('10 类齐全、类别 id 唯一', () => {
-    expect(CATEGORIES).toHaveLength(10)
+  it('13 类齐全、类别 id 唯一', () => {
+    expect(CATEGORIES).toHaveLength(13)
     const ids = CATEGORIES.map((category) => category.id)
     expect(new Set(ids).size).toBe(ids.length)
     const expected: CategoryId[] = [
@@ -32,7 +32,10 @@ describe('换算表数据完整性', () => {
       'time',
       'data',
       'pressure',
-      'power'
+      'power',
+      'flow',
+      'angle',
+      'resolution'
     ]
     expect([...ids].sort()).toEqual([...expected].sort())
   })
@@ -89,7 +92,7 @@ describe('换算表数据完整性', () => {
 describe('全表断言（spec §5：换算表全量断言 ≥80%）', () => {
   it('每个线性类别：各单位→基准 = factor，基准→各单位 = 1/factor', () => {
     for (const category of CATEGORIES) {
-      if (category.id === 'temperature') continue
+      if (category.id === 'temperature' || category.id === 'resolution') continue
       const base = category.units[0]
       for (const unit of category.units) {
         expect(convert(category.id, unit.id, base.id, 1)).toBeCloseTo(unit.factor, 10)
@@ -142,6 +145,12 @@ describe('全表断言（spec §5：换算表全量断言 ≥80%）', () => {
     expect(convert('speed', 'kmh', 'mps', 36)).toBeCloseTo(10, 9)
     expect(convert('time', 'h', 'min', 1)).toBe(60)
     expect(convert('weight', 'lb', 'g', 1)).toBeCloseTo(453.59237, 6)
+    expect(convert('flow', 'lps', 'lpm', 1)).toBeCloseTo(60, 9)
+    expect(convert('flow', 'm3h', 'lpm', 1)).toBeCloseTo(1000 / 60, 9)
+    expect(convert('flow', 'gpm', 'lpm', 1)).toBeCloseTo(3.785411784, 9)
+    expect(convert('angle', 'rad', 'deg', Math.PI)).toBeCloseTo(180, 9)
+    expect(convert('angle', 'turn', 'deg', 1)).toBeCloseTo(360, 9)
+    expect(convert('angle', 'grad', 'deg', 100)).toBeCloseTo(90, 9)
   })
 
   it('温度锚点：0℃=32℉=273.15K、100℃=212℉、-40℃=-40℉、0K=-273.15℃', () => {
@@ -153,6 +162,26 @@ describe('全表断言（spec §5：换算表全量断言 ≥80%）', () => {
     expect(convert('temperature', 'F', 'K', 32)).toBeCloseTo(273.15, 9)
     expect(convert('temperature', 'F', 'C', 212)).toBeCloseTo(100, 9)
     expect(convert('temperature', 'F', 'C', 98.6)).toBeCloseTo(37, 9)
+  })
+})
+
+describe('像素/分辨率（按 DPI）', () => {
+  it('默认 96 DPI：96px = 1in = 2.54cm = 25.4mm', () => {
+    expect(convert('resolution', 'px', 'in', 96)).toBeCloseTo(1, 12)
+    expect(convert('resolution', 'px', 'cm', 96)).toBeCloseTo(2.54, 12)
+    expect(convert('resolution', 'px', 'mm', 96)).toBeCloseTo(25.4, 9)
+    expect(convert('resolution', 'in', 'px', 1)).toBeCloseTo(96, 12)
+  })
+
+  it('自定义 DPI：300 DPI 下 3000px = 10in', () => {
+    expect(convert('resolution', 'px', 'in', 3000, 300)).toBeCloseTo(10, 12)
+    expect(convert('resolution', 'cm', 'px', 2.54, 300)).toBeCloseTo(300, 9)
+  })
+
+  it('DPI 非法 → INVALID_DPI', () => {
+    expectConvertError(() => convert('resolution', 'px', 'in', 1, 0), 'INVALID_DPI')
+    expectConvertError(() => convert('resolution', 'px', 'in', 1, -96), 'INVALID_DPI')
+    expectConvertError(() => convert('resolution', 'px', 'in', 1, Number.NaN), 'INVALID_DPI')
   })
 })
 

@@ -4,15 +4,25 @@ import {
   COMMON_TIME_ZONES,
   MAX_DATE_MS,
   MIN_DATE_MS,
+  countdownTo,
   detectTimestampUnit,
+  diffCalendar,
   formatDateTime,
   formatDuration,
   formatIso,
   formatOffset,
   isValidTimeZone,
+  parseLocalDate,
   parseLocalDateTime,
   parseTimestamp
 } from './time'
+
+/** 断言日期文本合法并返回毫秒 */
+function at(text: string): number {
+  const ms = parseLocalDate(text)
+  if (ms === null) throw new Error(`日期非法：${text}`)
+  return ms
+}
 
 describe('detectTimestampUnit', () => {
   it('10 位视为秒，13 位视为毫秒', () => {
@@ -143,5 +153,90 @@ describe('formatDuration', () => {
     expect(parts.days).toBe(0)
     expect(parts.hours).toBe(1)
     expect(parts.totalHours).toBe(1)
+  })
+})
+
+describe('parseLocalDate', () => {
+  it('合法日期解析为本地零点', () => {
+    const ms = at('2026-11-21')
+    const date = new Date(ms)
+    expect(date.getFullYear()).toBe(2026)
+    expect(date.getMonth()).toBe(10)
+    expect(date.getDate()).toBe(21)
+    expect(date.getHours()).toBe(0)
+  })
+
+  it('非法日期与格式返回 null', () => {
+    expect(parseLocalDate('2026-02-30')).toBeNull()
+    expect(parseLocalDate('2026-13-01')).toBeNull()
+    expect(parseLocalDate('2026-00-10')).toBeNull()
+    expect(parseLocalDate('2026-1-1')).toBeNull()
+    expect(parseLocalDate('2026-11-21T00:00')).toBeNull()
+    expect(parseLocalDate('')).toBeNull()
+  })
+})
+
+describe('diffCalendar', () => {
+  it('同日与相邻日', () => {
+    expect(diffCalendar(at('2026-11-21'), at('2026-11-21'))).toEqual({
+      negative: false,
+      years: 0,
+      months: 0,
+      days: 0,
+      totalDays: 0
+    })
+    expect(diffCalendar(at('2026-11-20'), at('2026-11-21'))).toEqual({
+      negative: false,
+      years: 0,
+      months: 0,
+      days: 1,
+      totalDays: 1
+    })
+  })
+
+  it('跨月、跨年与闰年', () => {
+    const month = diffCalendar(at('2026-01-15'), at('2026-03-20'))
+    expect([month.years, month.months, month.days]).toEqual([0, 2, 5])
+    expect(month.totalDays).toBe(64)
+
+    const year = diffCalendar(at('2024-02-29'), at('2025-02-28'))
+    expect([year.years, year.months, year.days]).toEqual([1, 0, 0])
+    expect(year.totalDays).toBe(365)
+  })
+
+  it('月末借位按加月截断（1-31 → 3-01 = 1 个月 1 天）', () => {
+    const diff = diffCalendar(at('2026-01-31'), at('2026-03-01'))
+    expect([diff.years, diff.months, diff.days]).toEqual([0, 1, 1])
+    expect(diff.totalDays).toBe(29)
+  })
+
+  it('结束早于开始：交换并标记 negative', () => {
+    const diff = diffCalendar(at('2026-11-21'), at('2026-11-20'))
+    expect(diff.negative).toBe(true)
+    expect([diff.years, diff.months, diff.days]).toEqual([0, 0, 1])
+    expect(diff.totalDays).toBe(1)
+  })
+})
+
+describe('countdownTo', () => {
+  it('未来目标：剩余天/时/分/秒', () => {
+    const result = countdownTo(90_061_000, 0)
+    expect(result.expired).toBe(false)
+    expect(result.parts.days).toBe(1)
+    expect(result.parts.hours).toBe(1)
+    expect(result.parts.minutes).toBe(1)
+    expect(result.parts.seconds).toBe(1)
+  })
+
+  it('目标已过：expired 且按绝对差分解', () => {
+    const result = countdownTo(0, 3_600_000)
+    expect(result.expired).toBe(true)
+    expect(result.parts.hours).toBe(1)
+  })
+
+  it('目标等于当前：expired 且全 0', () => {
+    const result = countdownTo(1_700_000_000_000, 1_700_000_000_000)
+    expect(result.expired).toBe(true)
+    expect(result.parts.totalSeconds).toBe(0)
   })
 })

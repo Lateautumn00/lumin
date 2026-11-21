@@ -9,7 +9,7 @@ describe('manifest', () => {
     expect(manifest.icon).toBe('clock')
     expect(manifest.category).toBe('compute')
     expect(manifest.order).toBe(70)
-    expect(manifest.version).toBe('0.1.0')
+    expect(manifest.version).toBe('0.2.0')
     expect(manifest.description.length).toBeGreaterThan(0)
   })
 })

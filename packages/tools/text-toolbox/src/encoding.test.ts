@@ -5,7 +5,16 @@
  * @description 覆盖 spec §2 编码 Tab 的成功与错误分支
  */
 import { describe, expect, it } from 'vitest'
-import { decodeBase64, decodeUrl, encodeBase64, encodeUrl } from './encoding'
+import {
+  decodeBase64,
+  decodeHex,
+  decodeUnicode,
+  decodeUrl,
+  encodeBase64,
+  encodeHex,
+  encodeUnicode,
+  encodeUrl
+} from './encoding'
 import { MAX_TEXT_BYTES } from './errors'
 
 /** 取成功值（失败时抛错便于断言） */
@@ -93,5 +102,66 @@ describe('URL', () => {
     if (result.ok) return
     expect(result.error.code).toBe('TT_URL_INVALID')
     expect(result.error.detail).toContain('URI')
+  })
+})
+
+describe('Hex', () => {
+  it('UTF-8 字节十六进制往返（中文与 emoji）', () => {
+    const text = '你好🙂'
+    const encoded = encodeHex(text)
+    expect(valueOf(encoded)).toBe('e4 bd a0 e5 a5 bd f0 9f 99 82')
+    expect(decodeHex(valueOf(encoded))).toEqual({ ok: true, value: text })
+  })
+
+  it('解码允许空白、换行与大小写混用', () => {
+    expect(decodeHex('E4 BD A0\ne5 a5 bd')).toEqual({ ok: true, value: '你好' })
+    expect(decodeHex('')).toEqual({ ok: true, value: '' })
+  })
+
+  it('非法字符 → TT_HEX_INVALID', () => {
+    const result = decodeHex('zz')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('TT_HEX_INVALID')
+  })
+
+  it('奇数长度 → TT_HEX_INVALID', () => {
+    const result = decodeHex('abc')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('TT_HEX_INVALID')
+    expect(result.error.detail).toContain('偶数')
+  })
+
+  it('非 UTF-8 字节 → TT_HEX_INVALID', () => {
+    const result = decodeHex('ff')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('TT_HEX_INVALID')
+    expect(result.error.detail).toContain('UTF-8')
+  })
+})
+
+describe('Unicode 转义', () => {
+  it('中文与 emoji（代理对）往返', () => {
+    const text = 'A你🙂'
+    const encoded = encodeUnicode(text)
+    expect(valueOf(encoded)).toBe('\\u0041\\u4F60\\uD83D\\uDE42')
+    expect(decodeUnicode(valueOf(encoded))).toEqual({ ok: true, value: text })
+  })
+
+  it('解码接受小写转义并保留非转义字符', () => {
+    expect(decodeUnicode('前\\u4f60后')).toEqual({ ok: true, value: '前你后' })
+    expect(decodeUnicode('plain')).toEqual({ ok: true, value: 'plain' })
+    expect(decodeUnicode('')).toEqual({ ok: true, value: '' })
+  })
+
+  it('转义不完整 → TT_UNICODE_INVALID', () => {
+    for (const bad of ['\\u12', '\\uZZZZ', '\\u']) {
+      const result = decodeUnicode(bad)
+      expect(result.ok).toBe(false)
+      if (result.ok) continue
+      expect(result.error.code).toBe('TT_UNICODE_INVALID')
+    }
   })
 })
