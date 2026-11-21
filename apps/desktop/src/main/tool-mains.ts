@@ -9,6 +9,7 @@ import { registerMain as examSplitRegisterMain } from '@lumin/tool-exam-split/no
 import { registerMain as fileHasherRegisterMain } from '@lumin/tool-file-hasher/node'
 import { registerMain as fileRenamerRegisterMain } from '@lumin/tool-file-renamer/node'
 import { registerMain as folderCompareRegisterMain } from '@lumin/tool-folder-compare/node'
+import { registerMain as fsCleanerRegisterMain } from '@lumin/tool-fs-cleaner/node'
 import { registerMain as imageCropRegisterMain } from '@lumin/tool-image-crop/node'
 import { registerMain as imageToolboxRegisterMain } from '@lumin/tool-image-toolbox/node'
 import { registerMain as imageRotateRegisterMain } from '@lumin/tool-image-rotate/node'
@@ -34,6 +35,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'file-hasher': fileHasherRegisterMain,
   'file-renamer': fileRenamerRegisterMain,
   'folder-compare': folderCompareRegisterMain,
+  'fs-cleaner': fsCleanerRegisterMain,
   'image-toolbox': imageToolboxRegisterMain,
   'image-crop': imageCropRegisterMain,
   'image-rotate': imageRotateRegisterMain,
