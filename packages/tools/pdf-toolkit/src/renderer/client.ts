@@ -5,7 +5,10 @@
  * @description pdf-toolkit renderer 类型化 invoke 封装（只经 window.lumin 白名单 bridge）
  */
 import type {
+  CompressPayload,
   DeletePayload,
+  ExtractImagesPayload,
+  ExtractTextPayload,
   InfoPayload,
   InfoResult,
   MergePayload,
@@ -60,6 +63,21 @@ export function watermark(payload: WatermarkPayload): Promise<{ taskId: string }
 /** 页码 */
 export function pageNumbers(payload: PageNumberPayload): Promise<{ taskId: string }> {
   return window.lumin.invoke('pdf-toolkit:page-numbers', payload)
+}
+
+/** 文本提取（M38） */
+export function extractText(payload: ExtractTextPayload): Promise<{ taskId: string }> {
+  return window.lumin.invoke('pdf-toolkit:extract-text', payload)
+}
+
+/** 图片提取（M38） */
+export function extractImages(payload: ExtractImagesPayload): Promise<{ taskId: string }> {
+  return window.lumin.invoke('pdf-toolkit:extract-images', payload)
+}
+
+/** 压缩（M38） */
+export function compress(payload: CompressPayload): Promise<{ taskId: string }> {
+  return window.lumin.invoke('pdf-toolkit:compress', payload)
 }
 
 /** 取消任务（壳通道） */

@@ -1,7 +1,8 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { PDFDocument } from 'pdf-lib'
+import { basename, dirname, join } from 'node:path'
+import { deflateSync } from 'node:zlib'
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
   addPageNumbers,
@@ -45,6 +46,77 @@ async function makePdf(
     doc.addPage(size ? [size[0], size[1]] : [300 + index * 10, 400 + index * 10])
   }
   await writeFile(path, await doc.save())
+}
+
+/** 造每页一行纯 ASCII 标准字体文本的 PDF（Helvetica 不支持中文） */
+async function makeTextPdf(path: string, lines: readonly string[]): Promise<void> {
+  const doc = await PDFDocument.create()
+  const font = await doc.embedFont(StandardFonts.Helvetica)
+  for (const line of lines) {
+    const page = doc.addPage([300, 400])
+    page.drawText(line, { x: 40, y: 340, size: 18, font, color: rgb(0, 0, 0) })
+  }
+  await writeFile(path, await doc.save())
+}
+
+/** CRC32 查表（PNG 块校验） */
+const CRC32_TABLE = ((): Uint32Array => {
+  const table = new Uint32Array(256)
+  for (let n = 0; n < 256; n += 1) {
+    let value = n
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = (value & 1) === 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1
+    }
+    table[n] = value >>> 0
+  }
+  return table
+})()
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff
+  for (let index = 0; index < bytes.length; index += 1) {
+    crc = (CRC32_TABLE[(crc ^ (bytes[index] as number)) & 0xff] as number) ^ (crc >>> 8)
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+/** 组一个 PNG 块：长度 + 类型 + 数据 + CRC */
+function pngChunk(type: string, data: Uint8Array): Buffer {
+  const typeBytes = Buffer.from(type, 'latin1')
+  const length = Buffer.alloc(4)
+  length.writeUInt32BE(data.length, 0)
+  const body = Buffer.concat([typeBytes, Buffer.from(data)])
+  const crc = Buffer.alloc(4)
+  crc.writeUInt32BE(crc32(body), 0)
+  return Buffer.concat([length, body, crc])
+}
+
+/** 生成 width×height 的 RGBA 棋盘格 PNG（IHDR + IDAT + IEND，每行 filter=0） */
+function makePng(width: number, height: number): Buffer {
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(width, 0)
+  ihdr.writeUInt32BE(height, 4)
+  ihdr[8] = 8 // 位深
+  ihdr[9] = 6 // 颜色类型：真彩 + α
+  const stride = width * 4 + 1
+  const raw = Buffer.alloc(stride * height)
+  for (let y = 0; y < height; y += 1) {
+    const row = y * stride
+    for (let x = 0; x < width; x += 1) {
+      const offset = row + 1 + x * 4
+      const dark = x < width / 2 !== y < height / 2
+      raw[offset] = dark ? 20 : 220
+      raw[offset + 1] = dark ? 60 : 220
+      raw[offset + 2] = dark ? 120 : 220
+      raw[offset + 3] = 255
+    }
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', deflateSync(raw)),
+    pngChunk('IEND', new Uint8Array(0))
+  ])
 }
 
 const noEmit = (): void => undefined
@@ -419,9 +491,9 @@ describe('pdf-ops 水印（M17）', () => {
 
     const broken = join(dir, '坏.jpg')
     await writeFile(broken, 'not an image')
-    await expect(
-      watermarkPdf({ ...imageBase, imagePath: broken }, noEmit)
-    ).rejects.toMatchObject({ code: 'PT_WATERMARK_INVALID' })
+    await expect(watermarkPdf({ ...imageBase, imagePath: broken }, noEmit)).rejects.toMatchObject({
+      code: 'PT_WATERMARK_INVALID'
+    })
 
     const valid = join(dir, '印章.png')
     await writeFile(valid, Buffer.from(TINY_PNG_BASE64, 'base64'))
@@ -453,15 +525,17 @@ describe('pdf-ops 页码（M17）', () => {
     expect(
       pageNumberPosition('bottom-center', base.pageWidth, base.pageHeight, 60, 12, 24)
     ).toEqual({ x: 120, y: 24 })
-    expect(
-      pageNumberPosition('bottom-left', base.pageWidth, base.pageHeight, 60, 12, 24)
-    ).toEqual({ x: 24, y: 24 })
-    expect(
-      pageNumberPosition('bottom-right', base.pageWidth, base.pageHeight, 60, 12, 24)
-    ).toEqual({ x: 216, y: 24 })
-    expect(
-      pageNumberPosition('top-center', base.pageWidth, base.pageHeight, 60, 12, 24)
-    ).toEqual({ x: 120, y: 264 })
+    expect(pageNumberPosition('bottom-left', base.pageWidth, base.pageHeight, 60, 12, 24)).toEqual({
+      x: 24,
+      y: 24
+    })
+    expect(pageNumberPosition('bottom-right', base.pageWidth, base.pageHeight, 60, 12, 24)).toEqual(
+      { x: 216, y: 24 }
+    )
+    expect(pageNumberPosition('top-center', base.pageWidth, base.pageHeight, 60, 12, 24)).toEqual({
+      x: 120,
+      y: 264
+    })
     expect(pageNumberPosition('top-left', base.pageWidth, base.pageHeight, 60, 12, 24)).toEqual({
       x: 24,
       y: 264
@@ -507,6 +581,125 @@ describe('pdf-ops 页码（M17）', () => {
     await expect(
       addPageNumbers({ ...pagePayload, inputPath: input, ranges: '9' }, noEmit)
     ).rejects.toMatchObject({ code: 'PT_RANGE_INVALID' })
+  })
+})
+
+describe('pdf-ops 文本提取（M38）', () => {
+  it('两页 PDF 逐页重建文本并写出 .txt', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '样本.pdf')
+    await makeTextPdf(input, ['Hello 1', 'Hello 2'])
+    const result = await runOp(
+      { op: 'extract-text', payload: { inputPath: input, ranges: '1-2' } },
+      noEmit
+    )
+    expect(result.outputPaths).toEqual([join(dir, '样本_文本.txt')])
+    const content = await readFile(result.outputPaths[0] as string, 'utf8')
+    expect(content).toContain('===== 第 1 页 =====')
+    expect(content).toContain('===== 第 2 页 =====')
+    expect(content).toContain('Hello')
+    expect(content.endsWith('\n')).toBe(true)
+  })
+
+  it('无文本层 → PT_NO_TEXT_LAYER', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '空白.pdf')
+    await makePdf(input, 2)
+    await expect(
+      runOp({ op: 'extract-text', payload: { inputPath: input } }, noEmit)
+    ).rejects.toMatchObject({ code: 'PT_NO_TEXT_LAYER' })
+  })
+
+  it('范围越界 → PT_RANGE_INVALID', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '样本.pdf')
+    await makeTextPdf(input, ['Hello 1', 'Hello 2'])
+    await expect(
+      runOp({ op: 'extract-text', payload: { inputPath: input, ranges: '1-99' } }, noEmit)
+    ).rejects.toMatchObject({ code: 'PT_RANGE_INVALID' })
+  })
+})
+
+describe('pdf-ops 图片提取（M38）', () => {
+  /** 造单页内嵌 40×30 PNG 的 PDF */
+  async function makeImagePdf(path: string): Promise<void> {
+    const doc = await PDFDocument.create()
+    const page = doc.addPage([300, 400])
+    const image = await doc.embedPng(makePng(40, 30))
+    page.drawImage(image, { x: 50, y: 60, width: 120, height: 90 })
+    await writeFile(path, await doc.save())
+  }
+
+  it('写出 p{页}-{序}.png 且文件头为 PNG 签名', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '样本.pdf')
+    await makeImagePdf(input)
+    const result = await runOp({ op: 'extract-images', payload: { inputPath: input } }, noEmit)
+    expect(result.outputPaths.length).toBeGreaterThanOrEqual(1)
+    const first = result.outputPaths[0] as string
+    expect(basename(dirname(first))).toBe('样本_图片')
+    expect(basename(first)).toMatch(/^p1-\d+\.png$/)
+    const bytes = await readFile(first)
+    expect([...bytes.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  })
+
+  it('无图 → PT_NO_IMAGES', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '空白.pdf')
+    await makePdf(input, 1)
+    await expect(
+      runOp({ op: 'extract-images', payload: { inputPath: input } }, noEmit)
+    ).rejects.toMatchObject({ code: 'PT_NO_IMAGES' })
+  })
+
+  it('目录重名递增 (1)', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '样本.pdf')
+    await makeImagePdf(input)
+    const first = await runOp({ op: 'extract-images', payload: { inputPath: input } }, noEmit)
+    const second = await runOp({ op: 'extract-images', payload: { inputPath: input } }, noEmit)
+    expect(basename(dirname(first.outputPaths[0] as string))).toBe('样本_图片')
+    expect(basename(dirname(second.outputPaths[0] as string))).toBe('样本_图片 (1)')
+  })
+})
+
+describe('pdf-ops 压缩（M38）', () => {
+  const sizes = [
+    [300, 400],
+    [400, 600]
+  ] as const
+
+  it('逐页重渲染并保留页数与尺寸', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '样本.pdf')
+    await makePdf(input, 2, sizes)
+    const result = await runOp(
+      { op: 'compress', payload: { inputPath: input, level: 'low' } },
+      noEmit
+    )
+    expect(result.outputPaths).toEqual([join(dir, '样本_压缩.pdf')])
+    const bytes = await readBytes(result.outputPaths[0] as string)
+    expect(Buffer.from(bytes.subarray(0, 5)).toString('latin1')).toBe('%PDF-')
+    const output = await PDFDocument.load(bytes)
+    expect(output.getPageCount()).toBe(2)
+    expect(output.getPage(0)?.getWidth()).toBeCloseTo(300, 1)
+    expect(output.getPage(0)?.getHeight()).toBeCloseTo(400, 1)
+    expect(output.getPage(1)?.getWidth()).toBeCloseTo(400, 1)
+    expect(output.getPage(1)?.getHeight()).toBeCloseTo(600, 1)
+  })
+
+  it('ranges 仅压缩指定页', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '样本.pdf')
+    await makePdf(input, 2, sizes)
+    const result = await runOp(
+      { op: 'compress', payload: { inputPath: input, ranges: '2', level: 'low' } },
+      noEmit
+    )
+    const output = await PDFDocument.load(await readBytes(result.outputPaths[0] as string))
+    expect(output.getPageCount()).toBe(1)
+    expect(output.getPage(0)?.getWidth()).toBeCloseTo(400, 1)
+    expect(output.getPage(0)?.getHeight()).toBeCloseTo(600, 1)
   })
 })
 

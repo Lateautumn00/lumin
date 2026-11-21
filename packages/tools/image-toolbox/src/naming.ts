@@ -16,6 +16,9 @@ export { uniqueFileName as uniqueName } from '@lumin/shared'
 /** 压缩「原格式」可直出的扩展名（jpg/jpeg 归一 jpg；gif/webp 动画路径归 webp） */
 export type OutputFormat = TargetFormat | 'bmp' | 'tiff'
 
+/** 调整效果（M40：灰度/反色/黑白二值，spec §2.4） */
+export type EffectKind = 'grayscale' | 'invert' | 'binary'
+
 /**
  * 压缩模式的输出扩展名（spec §2.1/§6）：gif「原格式」自动走 webp 动画路径；
  * jpeg 归一为 jpg；其余保持原扩展名
@@ -41,13 +44,15 @@ export type SizeTag =
  * 输出文件名模板（spec §6）：
  * - 压缩 `{原名}.q{质量}.{ext}` · 转换 `{原名}.{ext}`
  * - 缩放 百分比 `{原名}.{p}%.{ext}` / 宽 `.w{W}.` / 高 `.h{H}.` / 适配框 `.fit{W}x{H}.`
- * @param args 输入文件名（含扩展名，取最后一个点前为主名）、模式、质量、尺寸段、输出扩展名
+ * - 调整（M40）灰度 `.gray.` / 反色 `.invert.` / 黑白 `.bw{阈值}.`
+ * @param args 输入文件名（含扩展名，取最后一个点前为主名）、模式、质量、尺寸段/效果、输出扩展名
  */
 export function buildOutputName(args: {
   inputName: string
-  mode: 'compress' | 'convert' | 'resize'
+  mode: 'compress' | 'convert' | 'resize' | 'effect'
   quality?: number
   size?: SizeTag
+  effect?: { kind: EffectKind; threshold?: number }
   ext: string
 }): string {
   const dot = args.inputName.lastIndexOf('.')
@@ -57,6 +62,17 @@ export function buildOutputName(args: {
   }
   if (args.mode === 'convert') {
     return `${stem}.${args.ext}`
+  }
+  if (args.mode === 'effect') {
+    const effect = args.effect
+    if (effect === undefined) return `${stem}.${args.ext}`
+    const tag =
+      effect.kind === 'grayscale'
+        ? 'gray'
+        : effect.kind === 'invert'
+          ? 'invert'
+          : `bw${effect.threshold ?? 128}`
+    return `${stem}.${tag}.${args.ext}`
   }
   const size = args.size
   if (size === undefined) return `${stem}.${args.ext}`

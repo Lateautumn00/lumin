@@ -2,13 +2,14 @@
  * @file node.ts image-stitch 主进程通道注册
  * @author cuilanchao
  * @date 2026-11-20
- * @description 三通道：config / set-output-dir 同步；stitch 走 worker 长任务。
+ * @description 四通道：config / set-output-dir 同步；stitch / split（M40）走 worker 长任务。
  *              预检（存在/占用/体积）→ 输出目录解析 → runTask；deps 可注入（vitest 假件）。
  */
 import { constants } from 'node:fs'
 import { access, mkdir, open, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import stitchWorkerPath from './stitch.worker.ts?modulePath'
+import splitWorkerPath from './split.worker.ts?modulePath'
 import {
   classifyPrecheckError,
   runTask,
@@ -26,7 +27,10 @@ import {
   MAX_IMAGE_BYTES,
   setOutputDirPayloadSchema,
   stitchPayloadSchema,
+  splitPayloadSchema,
   type ConfigResult,
+  type SplitRequest,
+  type SplitResult,
   type StitchRequest,
   type StitchResult
 } from './schema'
@@ -38,6 +42,8 @@ export const OP_TIMEOUT_MS = 600_000
 export interface ImageStitchDeps {
   /** worker 绝对路径（生产 = electron-vite `?modulePath` 构建产物；vitest 下由测试注入） */
   workerPath: string
+  /** 长图分割 worker 绝对路径（M40，同裁剪产物机制） */
+  splitWorkerPath: string
   run<P, R>(options: RunTaskOptions<P>): Promise<R>
   checkReadable(path: string): Promise<void>
   checkExclusive(path: string): Promise<void>
@@ -148,6 +154,32 @@ export function registerWith(ctx: MainPluginContext, deps: ImageStitchDeps): voi
     }
   })
 
+  // —— 长图分割（M40，spec §5.1–§5.4）：单张预检 → 输出目录解析 → worker 切段 ——
+  ctx.registerTask('split', async (taskCtx): Promise<SplitResult> => {
+    const parsed = parseOrThrow(splitPayloadSchema, taskCtx.payload)
+    await precheckImage(parsed.inputPath)
+    const outputDir = await resolveOutputDir(parsed.outputDir)
+    const request: SplitRequest = {
+      inputPath: parsed.inputPath,
+      mode: parsed.mode,
+      height: parsed.height,
+      parts: parsed.parts,
+      quality: parsed.quality,
+      outputDir
+    }
+    try {
+      return await deps.run<SplitRequest, SplitResult>({
+        workerPath: deps.splitWorkerPath,
+        payload: request,
+        timeoutMs: OP_TIMEOUT_MS,
+        signal: taskCtx.signal,
+        onUpdate: taskCtx.emit
+      })
+    } catch (err) {
+      throw mapWorkerError(err)
+    }
+  })
+
   ctx.log.info('image-stitch registered', { defaultOutputDir })
 }
 
@@ -155,6 +187,7 @@ export function registerWith(ctx: MainPluginContext, deps: ImageStitchDeps): voi
 export function createNodeDeps(): ImageStitchDeps {
   return {
     workerPath: stitchWorkerPath,
+    splitWorkerPath,
     run: runTask,
     checkReadable: (path) => access(path, constants.R_OK),
     // 读方式打开探测共享冲突（'r' 不误判只读文件）

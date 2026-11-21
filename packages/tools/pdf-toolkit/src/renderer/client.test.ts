@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   cancelTask,
+  compress,
   deletePages,
+  extractImages,
+  extractText,
   info,
   merge,
   pageNumbers,
@@ -80,5 +83,21 @@ describe('pdf-toolkit client（通道名与壳一致）', () => {
     expect(invoke).toHaveBeenCalledWith('lumin:task:cancel', { taskId: 't1' })
     await revealPath('C:/out/a.pdf')
     expect(reveal).toHaveBeenCalledWith('C:/out/a.pdf')
+  })
+
+  it('提取/压缩通道（M38）', async () => {
+    stubLumin()
+    await extractText({ inputPath: 'C:/a.pdf' })
+    expect(invoke).toHaveBeenCalledWith('pdf-toolkit:extract-text', { inputPath: 'C:/a.pdf' })
+    await extractImages({ inputPath: 'C:/a.pdf', ranges: '1-2' })
+    expect(invoke).toHaveBeenCalledWith('pdf-toolkit:extract-images', {
+      inputPath: 'C:/a.pdf',
+      ranges: '1-2'
+    })
+    await compress({ inputPath: 'C:/a.pdf', level: 'high' })
+    expect(invoke).toHaveBeenCalledWith('pdf-toolkit:compress', {
+      inputPath: 'C:/a.pdf',
+      level: 'high'
+    })
   })
 })

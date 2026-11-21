@@ -14,11 +14,13 @@ import {
   FileDiff,
   FileOutput,
   FilePen,
+  FileCode,
   FileImage,
   FileScan,
   Files,
   Film,
   FlaskConical,
+  FolderCog,
   GitCompare,
   HardDrive,
   Hash,
@@ -35,6 +37,8 @@ import {
   Scissors,
   Settings,
   Stamp,
+  Terminal,
+  Timer,
   Wrench,
   type LucideIcon
 } from '@lucide/vue'
@@ -55,6 +59,7 @@ const iconMap: Record<string, LucideIcon> = {
   download: Download,
   image: Image,
   'file-pen': FilePen,
+  'file-code': FileCode,
   'file-diff': FileDiff,
   'file-image': FileImage,
   stamp: Stamp,
@@ -71,11 +76,14 @@ const iconMap: Record<string, LucideIcon> = {
   crop: Crop,
   'hard-drive': HardDrive,
   'git-compare': GitCompare,
+  'folder-cog': FolderCog,
   archive: Archive,
   clock: Clock,
   'key-round': KeyRound,
   palette: Palette,
   'piggy-bank': PiggyBank,
+  terminal: Terminal,
+  timer: Timer,
   wrench: Wrench
 }
 

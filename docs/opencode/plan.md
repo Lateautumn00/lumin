@@ -7,7 +7,7 @@
 
 ---
 
-## 1. 决策总表（Q1–Q37 锁定）
+## 1. 决策总表（Q1–Q40 锁定）
 
 | #   | 决策项        | 结论                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | --- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -49,6 +49,13 @@
 | Q36 | PDF 图片增强  | **在 `pdf-images` 扩展「图片转 PDF」页签（2026-11-21 用户选定，不新建工具包）**：新增 Letter 纸型、页面方向（自动/竖版/横版）、页边距预设（无/小/中/大）与自定义输出文件名（冲突递增）；复用 pdf-lib 与既有 worker/错误码，零新增依赖；详见 §4.34                                                                                                                                                                                                                   |
 | Q37 | 图片裁剪      | **新增 `image-crop` 工具（2026-11-21 用户选定）**：多选静态图片（PNG/JPG/WebP/BMP/TIFF，1–500 张、单张 ≤200MB）批量裁剪——比例模式（1:1/4:3/3:4/16:9/9:16/自定义 + 九宫格锚点）取原图内最大同比例矩形；自由模式按百分比区域（左/上/宽/高）；输出目录记忆、`{原名}_裁剪{标签}.{ext}`、冲突递增、原图只读；主进程 ffmpeg 串行 + 进度 + 取消，单张失败不中断整批；公共编码/失败归类上提 `node-kit/ffmpeg`、扩展名提取上提 `shared/naming`，零新增第三方依赖；详见 §4.35 |
 | Q38 | 生活计算器    | **新增 `life-calculator` 工具（2026-11-21 用户选定，M37）**：房贷（等额本息/等额本金 + 还款计划摘要）、工资个税（月度口径 + 五险一金 + 专项附加扣除）、百分比与折扣（增减/变化率/折后价/反推原价）；纯 renderer、零 IPC、零新增依赖；详见 §4.37                                                                                                                                                                                                                     |
+| Q39 | Markdown 工具 | **新增 `markdown-tool` 工具（2026-11-21 用户选定，M39）**：Markdown 预览 + MD→HTML（引入 `marked` 18.2.1）、JSON→TypeScript 类型生成（零依赖自写）、YAML→JSON / JSON→YAML / 格式化（引入 `js-yaml` 5.5.0）；解析全在 renderer，主进程仅 `config`/`set-output-dir`/`save` 同步短通道做目录记忆与原子写盘；预览用 sandbox iframe + CSP 双重防脚本；详见 §4.39 |
+| Q40 | 图片增强      | **在既有 `image-toolbox` 与 `image-stitch` 扩展页签（2026-11-21 用户选定，M40，不新建工具包）**：`image-toolbox` 新增「调整」页签（灰度/反色/黑白二值可调阈值，复用 `process` 通道 `mode:'effect'`）与「GIF」页签（1–100 张串行探尺寸 → 单进程 `filter_complex` 出片，新通道 `make-gif`）；`image-stitch` 新增「长图分割」页签（固定高度/按份数，新通道 `split` + `split.worker.ts`）；复用 `binaries/download/ffmpeg.exe` 与 `@napi-rs/canvas`，零新增依赖；详见 §4.40 |
+| Q41 | 文件清理      | **新增 `fs-cleaner` 工具（2026-11-21 用户选定，M41）**：单一包四页签——D3 目录树导出（深度 1–10 + `*` 通配排除 + 复制）、D4 空文件夹递归判定与回收、D5 批量改时间（**只改 mtime/atime；Windows 创建时间 Node 无原生 API，不引依赖故明确不支持**）、D6 临时文件按扩展名扫描与回收；扫描类任务 `tree/empty-dirs/touch/temp-clean` 只产候选，删除一律走壳 `window.lumin.trashPaths`（单批 ≤200）；零新增第三方依赖；详见 §4.41 |
+| Q42 | 开发工具      | **新增 `dev-toolbox` 工具（2026-11-21 用户选定，M42）**：三页签——端口占用查询/结束进程（`netstat`+`tasklist`+`taskkill`，`execFile` 数组传参、拒绝杀自身 PID）、CURL 转代码（fetch/axios/python，纯 renderer）、本地静态服务器（`node:http` 仅绑 `127.0.0.1`、GET/HEAD、路径穿越 403、访问日志 200 条）；**不扩展 plugin-api 与壳通道**，主进程能力全在工具 `node.ts`；零新增依赖；详见 §4.42 |
+| Q43 | 实用工具      | **新增 `misc-toolbox` 工具（2026-11-21 用户选定，M43）**：两页签——IPv4 CIDR 子网计算（/0–/32 全边界、私有/回环判定）、计时器（秒表/倒计时/番茄钟，4 轮专注后长休）；**纯 renderer、零 IPC、无 `node.ts`**、零新增依赖；详见 §4.43 |
+| Q44 | 文本工具箱扩展 | **在既有 `text-toolbox` 增「摩尔斯」页签（2026-11-21 用户选定，M44，不新建工具包）**：ITU 标准码表（A–Z、0–9、常用标点）编解码，字母单空格、单词「 / 」分隔，错误码 `TT_MORSE_INVALID`；**纯 renderer、零 IPC、零新增依赖**；Hex/Unicode 与批量文本处理、字数统计已于 M36 交付，本次仅补摩尔斯；详见 §4.44 |
+| Q45 | 开发工具扩展 | **在既有 `dev-toolbox` 增「JWT 解码」与「UUID 生成」两页签（2026-11-21 用户选定，M45，不新建工具包）**：JWT 仅 Base64URL 解码 header/payload 并解析 exp/iat 时效（**不做签名校验、不联网**），结构非法报 `DT_JWT_INVALID`；UUID 生成 RFC 4122 v4（批量 1–100）与时间戳 ID（`yyyyMMdd-HHmmss-xxxx`）；**纯 renderer、零 IPC、零新增依赖**；详见 §4.45 |
 | —   | 硬约束        | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -72,7 +79,7 @@
 | 校验/测试      | zod 4.6.7 · vitest 5.1.0 + @vitest/coverage-v8 5.1.0 · @vue/test-utils 2.5.1 · vue-tsc 3.3.14                                                                                                                                                                                                                                                                                            | vue-tsc peer 无上限（TS7 兼容待实测）                                                                                                                                                                                                                                                                                                  |
 | Lint/格式      | eslint 10.14.0 · @typescript-eslint/* 8.72.2 · eslint-plugin-vue 10.12.1 · vue-eslint-parser 10.4.2 · @vue/eslint-config-typescript 14.9.0 · @vue/eslint-config-prettier 10.2.0 · eslint-config-prettier 10.1.8 · prettier 3.10.1                                                                                                                                                        |                                                                                                                                                                                                                                                                                                                                        |
 | 工程化         | turbo 2.11.11 · dependency-cruiser 18.7.2 · electron-log 5.4.4                                                                                                                                                                                                                                                                                                                           | pnpm 12 为 Rust 重写，配置格式与 11 兼容；`--frozen-lockfile false` 语法已移除                                                                                                                                                                                                                                                         |
-| 后续里程碑     | mathjs 15.2.0（M1）· pdf-lib 1.17.1 + pdfjs-dist 6.5.438（M3）· **onnxruntime-web 1.31.1（M3b P0 钉版）→ onnxruntime-node 1.31.1（M3b P4 R1 复评切换，2026-11-18 `npm view` 复核 latest=1.31.1，`pnpm-workspace.yaml` `allowBuilds` 放行 postinstall）** · @playwright/test（M0 IPC 冒烟）· **fflate 0.8.3（M25，2026-11-20 `npm view` 复核 latest=0.8.3；纯 JS ZIP，MIT，无原生依赖）** | M3b P0 实测：worker_threads 内 import 23ms / session 创建 327ms / 320² 推理 62–90ms；模型与字典经 `scripts/fetch-binaries.mjs` 固定 URL+SHA256 拉取（det 4.7MB + rec 10.9MB + cls 0.6MB + 字典 6623 字符，合计 ≈16.2MB）；P4 真实样卷 wasm 3.3–4.7s/页超 R1 ≤3s 基线 → 切 onnxruntime-node 后 1.10–1.56s/页达标（提速 2.6–3.8×）       |
+| 后续里程碑     | mathjs 15.2.0（M1）· pdf-lib 1.17.1 + pdfjs-dist 6.5.438（M3）· **onnxruntime-web 1.31.1（M3b P0 钉版）→ onnxruntime-node 1.31.1（M3b P4 R1 复评切换，2026-11-18 `npm view` 复核 latest=1.31.1，`pnpm-workspace.yaml` `allowBuilds` 放行 postinstall）** · @playwright/test（M0 IPC 冒烟）· **fflate 0.8.3（M25，2026-11-20 `npm view` 复核 latest=0.8.3；纯 JS ZIP，MIT，无原生依赖）** | M3b P0 实测：worker_threads 内 import 23ms / session 创建 327ms / 320² 推理 62–90ms；模型与字典经 `scripts/fetch-binaries.mjs` 固定 URL+SHA256 拉取（det 4.7MB + rec 10.9MB + cls 0.6MB + 字典 6623 字符，合计 ≈16.2MB）；P4 真实样卷 wasm 3.3–4.7s/页超 R1 ≤3s 基线 → 切 onnxruntime-node 后 1.10–1.56s/页达标（提速 2.6–3.8×）· **marked 18.2.1 + js-yaml 5.5.0（M39，2026-11-21 `npm view` 复核；纯 JS、MIT、无原生依赖，均自带类型；marked 输出经 sandbox iframe + CSP 隔离）**       |
 
 ---
 
@@ -566,6 +573,85 @@ lumin/
 - **三态**：三页签默认参数即出结果（空态无白屏）、全同步纯函数加载态豁免、各页签/小节独立 `role="alert"` 报错态
 - **验收**：单测 37 用例（本包 lines/functions/branches 均 ≥80%）；e2e 4/4（三页签、还款方式切换与报错恢复、个税 290/9710、百分比联动）；chunk 39,696 B raw / 8,415 B gzip；gate 全绿
 
+### 4.38 PDF 能力补全（M38，2026-11-21 R8 登记）
+
+- **决策**：按 `Lumin 功能清单差距审计与后续路线图.md` 的 M38，只扩展 `pdf-toolkit` 与 `@lumin/node-kit/pdf`，**零新包、零新增依赖**；加密/解密仍按 Q19 不做
+- **文本提取**：`pdfjs getTextContent` 按 items 顺序重建行（`hasEOL` 换行、裁行尾空白、去页首尾空行），页前插入 `===== 第 N 页 =====`；全文档无文本 → `PT_NO_TEXT_LAYER`；输出 `{基名}_文本.txt`（UTF-8，冲突递增）
+- **图片提取**：遍历 `OPS.paintImageXObject` / `paintInlineImageXObject`，支持 `GRAYSCALE_1BPP`（1bpp 解包）、`RGB_24BPP`（补 α）、`RGBA_32BPP`（直用）与 `bitmap`；宽或高 `<16px` 跳过、`sha256` 内容去重、上限 2000 → `PT_TOO_MANY_IMAGES`、全无 → `PT_NO_IMAGES`、单张失败不中断；输出目录 `{基名}_图片/`（递增 `(n)`），文件 `p{页}-{序号}.png`
+- **压缩**：`pdfjs` 按档位渲染（低 96 DPI / JPEG 60、中 150 / 75、高 200 / 85）→ `pdf-lib` 新建文档按原页 pt 尺寸嵌入 JPEG → 写后校验 `%PDF-`；输出 `{基名}_压缩.pdf`；有损且丢文本层/书签/表单（页内提示 + 文档注明），体积不变小属正常
+- **错误码增量**：`PT_NO_TEXT_LAYER` / `PT_NO_IMAGES` / `PT_TOO_MANY_IMAGES`（均不可重试）
+- **通道增量**：`pdf-toolkit:extract-text` / `extract-images` / `compress`（均三段式任务，载荷 `{ inputPath, ranges? }`，压缩加 `level: low|medium|high`）
+- **验收**：单测（node-kit extract + pdf-toolkit 三 op，包覆盖率 ≥80%）；e2e 12/12（原 8 + 文本含页码 / 图片 ≥1 PNG / 压缩页数不变 / 空文本层报错）；R2 八类映射；`pnpm gate` 全绿
+
+### 4.39 Markdown 工具（M39，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：新增 `markdown-tool`（category `document`，icon `file-code`，order 80）；三项能力——B5 Markdown 预览 + MD→HTML、B8 JSON→TypeScript、B8 YAML 互转/格式化；**引入 `marked` 18.2.1 与 `js-yaml` 5.5.0**（R8 特批，纯 JS/MIT/无原生，精确钉版登记 §1.1）
+- **形态**：解析与生成全在 renderer（同步纯函数，无三段式任务）；主进程仅 `config` / `set-output-dir` / `save` 三个同步短通道，默认输出目录 `userData/markdown`，冲突 `resolveConflictPath` 递增、`writeAtomic` 写 UTF-8
+- **Markdown 口径**：`marked`（`gfm: true`、`breaks: false`）；预览 `<iframe sandbox="">` + srcdoc，文档内注入 CSP（预览 `default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:`，导出 `default-src 'none'; img-src data: https: http:`），脚本无法执行、预览不加载外链图片；支持复制片段 HTML 与导出完整 HTML
+- **JSON→TS 口径**：对象/数组/联合推断；数组元素对象合并（全出现必选、部分出现 `?`、类型不同取联合）；嵌套命名 `根名 + PascalCase(键路径)` 且冲突递增；非法字段名单引号包裹；空对象 `Record<string, never>`、空数组 `unknown[]`、深度 >64 报错；根名须合法 TS 标识符且非保留字
+- **YAML 口径**：YAML→JSON（2 空格美化）/ JSON→YAML / 格式化 YAML（`indent: 2`、`lineWidth: 120`、`noRefs: true`）；多文档与语法错误统一 `MD_YAML_INVALID`（带行/列）；格式化会移除注释、展开锚点，页内明示
+- **错误码**：`MD_INPUT_TOO_LONG` / `MD_JSON_INVALID` / `MD_TS_NAME_INVALID` / `MD_YAML_INVALID` / `MD_CLIPBOARD_FAILED` / `MD_SAVE_FAILED`
+- **三态**：空态（三页签引导 + 主操作）、加载态豁免（同步纯函数，导出按钮 loading）、报错态（各页签独立 `role="alert"`）
+- **验收**：单测（markdown / json-to-ts / yaml / save / schema / node / errors / manifest，本包 ≥80%）；e2e 4/4（预览、JSON→TS 报错恢复、YAML 三模式、导出冲突 `(1)`）；R2 八类映射；chunk（`marked` + `js-yaml` 独占依赖）<200KB gzip；`pnpm gate` 全绿
+
+### 4.40 图片增强（M40，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：不新建工具包——`image-toolbox` 增「调整」「GIF」两页签，`image-stitch` 增「长图分割」页签；零新增第三方依赖（复用 `ffmpeg.exe`、`@napi-rs/canvas`）
+- **调整口径（spec image-toolbox §2.4）**：`process` 增 `mode:'effect'`，`options = { effect:'grayscale'|'invert'|'binary', threshold:0–255, quality:1–100 }`；灰度 `hue=s=0`、反色 `negate`、黑白 `format=gray,lut=y='if(gt(val,T),255,0)'`；输出沿用原格式映射，命名 `{原名}.gray|.invert|.bw{T}.{ext}`
+- **GIF 口径（§2.5）**：新通道 `image-toolbox:make-gif`（task）`{files 1–100, outputDir, options:{durationMs 50–5000, loop:-1|0|2..10, width:0|64–4096}}` → done `{outputPath,width,height,frames,sizeBytes}`；画布上限 4096px / 16,777,216 像素（超限 `IT_GIF_TOO_LARGE`），高度按目标宽等比自动取最大；`filter_complex` = 逐帧 scale+pad → concat → split → palettegen → paletteuse；命名 `动图_{yyyyMMdd-HHmmss}.gif`、冲突递增
+- **长图分割口径（spec image-stitch §3.6/§5）**：新通道 `image-stitch:split`（task，`split.worker.ts`）`{inputPath, mode:'height'|'parts', height 50–30000, parts 2–50, quality 60–100, outputDir?}` → done `{outputs[{path,width,height}], sourceWidth, sourceHeight}`；`planSplit` 固定高度取 ceil 段数、按份数余数摊到前几段，段数 >100 或份数 > 图高 → `IS_SPLIT_INVALID`；命名 `{原名}_part{补零 max(2,段数位数)}.{ext}`、沿用输入扩展名、冲突 `(1)`
+- **三态**：两工具空态引导不变；GIF/分割为长任务（进度可取消）；报错态结构化错误码 + 重试（可重试码）
+- **验收**：单测（encode/gif/naming/schema/node/client + contract/schema/node/split.worker/client，两包各 ≥80%）；e2e 新增 3 用例（调整像素断言、GIF89a+NETSCAPE2.0、固定高度/按份数切片与冲突递增）；chunk 记录见 `docs/smoke/image-toolbox.md` §8 与 `docs/smoke/image-stitch.md` §7
+
+### 4.41 文件清理（M41，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：新增 `fs-cleaner`（category `file`，icon `folder-cog`，order 66），单一工具包四页签；零新增第三方依赖
+- **形态**：`node.ts` 直用 `node:fs/promises`（无外部进程、无 worker）；通道 `config` / `set-config`（同步，记忆 lastRoot / treeDepth / treeExclude / tempExtensions）+ `tree` / `empty-dirs` / `touch` / `temp-clean`（三段式任务，进度节流 200 条、可取消）；递归一律迭代栈，条目上限 20 万（超限 `FC_TOO_MANY_FILES`）；不跟随符号链接
+- **安全口径**：扫描类任务只产候选列表，**用户在页面勾选 + 二次确认后**由 renderer 分批（≤200）调壳 `window.lumin.trashPaths` 移入回收站；主进程无任何删除调用，`fs.rm`/`unlink` 零使用
+- **D3 目录树**：`maxDepth 1–10`（默认 3）、排除规则支持精确与 `*` 通配（大小写不敏感）、目录优先 + 名称排序，输出 Box-drawing 文本，`truncated` 标记深度截断；复制走 `navigator.clipboard`
+- **D4 空文件夹**：自底向上判定（子目录全空则父目录也空；符号链接等非目录条目计入「非空」），结果按深度降序（深层在前），便于先子后父回收
+- **D5 批量改时间**：`fs.utimes` 同时设置 mtime/atime；**Windows CreationTime 无 Node 原生 API，按「零新增依赖」原则明确不支持**（页内常驻说明 + spec 明示）；`dryRun` 预演只统计与返回前 20 条样例，应用逐条失败不中断
+- **D6 临时文件**：默认规则 `tmp,temp,log,bak,old,cache`，可改；列表含大小/修改时间，支持「仅选 7 天前」
+- **错误码**：`FC_INVALID_PAYLOAD` / `FC_ROOT_INVALID` / `FC_TOO_MANY_FILES` / `FC_TASK_FAILED` / `FC_TOUCH_FAILED`（取消由壳统一 `CANCELLED`）
+- **三态**：四页签均有空态引导、进度 + 取消、结构化错误码中文 + 重试
+- **验收**：单测 60 例（tree/schema/client/use-task/node），本包纯函数覆盖率 ≥80%；e2e 6/6（页面四页签空态、目录树深度/排除、空文件夹列表、改时间预演不改盘 + 应用生效、临时文件匹配、`FC_ROOT_INVALID` 错误态 + 重试）；chunk 实测 **474,988 B raw / 83,078 B gzip**（<200KB gzip）；R2 八类映射见 `docs/smoke/fs-cleaner.md`；`pnpm gate` 全绿
+
+### 4.42 开发工具（M42，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：新增 `dev-toolbox`（category `misc`，icon `terminal`，order 70），单一包三页签：端口占用、CURL 转代码、本地静态服务器；零新增第三方依赖
+- **形态**：主进程能力全部落在工具 `node.ts`（`node:child_process.execFile` 与 `node:http`），**不扩展 `plugin-api`、不新增壳能力通道**；7 通道 `config` / `set-config` / `ports-query` / `port-kill` / `server-start` / `server-stop` / `server-status`，全部同步短通道 + zod 校验
+- **端口占用**：`netstat -ano -p tcp|udp` 解析 + `tasklist /FO CSV /NH` 一次性取进程名；行数上限 5000（`truncated`）；`taskkill /PID <pid> /T /F` 走 `execFile` 数组传参，拒绝 PID ≤0 与自身 PID（`DT_KILL_SELF_FORBIDDEN`）
+- **CURL 转代码**：纯 renderer 解析（`-X/-H/-d/-b/-A/-u/-I` 等 + `\` 续行 + 三种引号），输出 fetch/axios/python；不支持参数明确报 `DT_CURL_PARSE_FAILED`
+- **静态服务器**：仅绑定 `127.0.0.1`；GET/HEAD，其余 405；`path.resolve` 后必须落在根目录内否则 403；目录优先 `index.html`、否则生成 HTML 列表（转义）；内置 MIME 表；访问日志环形 200 条，`server-status` 返回最近 50 条，renderer 运行中 1s 轮询
+- **错误码**：`DT_INVALID_PAYLOAD` / `DT_INVALID_PORT` / `DT_NETSTAT_FAILED` / `DT_KILL_FAILED` / `DT_KILL_SELF_FORBIDDEN` / `DT_CURL_PARSE_FAILED` / `DT_ROOT_INVALID` / `DT_PORT_IN_USE` / `DT_SERVER_FAILED`
+- **三态**：端口页与服务器页有空态引导、加载态（按钮禁用）、结构化错误 + 重试；CURL 页无长任务但有常驻错误说明
+- **验收**：单测 114 例（curl/netstat/mime/path-guard/server/schema/errors/node），本包覆盖率 92.56 / 81.76 / 91.13 / 94.41；e2e 5/5（三页签空态、CURL 默认与切换 python、真实 netstat 查询 + `DT_INVALID_PORT`、服务器启动后真实 HTTP 可访问并停止、`DT_ROOT_INVALID` + 重试）；chunk 实测 **46,220 B raw / 11,413 B gzip**；R2 八类映射见 `docs/smoke/dev-toolbox.md`
+
+### 4.43 实用工具（M43，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：新增 `misc-toolbox`（category `misc`，icon `timer`，order 71），两页签：子网/IP 计算、计时器；**纯 renderer、零 IPC、无 `node.ts`**、零新增依赖
+- **IP 计算**：IPv4 CIDR（点分掩码亦可），输出网络/广播/掩码/反掩码/前缀/可用主机范围与数量/类别/私有/回环/掩码二进制；`/31` 记 2、`/32` 记 1，`/0` 用无符号运算避免溢出；主机位非 0 时按掩码归一化并提示；IPv6 与越界报 `MT_CIDR_INVALID`
+- **计时器**：秒表（计次 ≤20，`performance.now()` 差值）、倒计时（时/分/秒，结束 `NAlert` + `AudioContext` 短蜂鸣 + 标题标记）、番茄钟（25/5/15 可改，4 轮专注后长休，进度环）；所有 interval 与 AudioContext 在暂停/重置/`onUnmounted` 统一清理
+- **三态**：IP 页空态引导 + 预设、错误码中文 + 段号 detail；计时器无长任务与错误分支
+- **验收**：单测 47 例（ip 23 / clock 16 / schema 4 / errors 3 / manifest 1），本包覆盖率 98.55 / 92.39 / 100 / 100；e2e 5/5（两页签可见、/24 结果、/33 错误文案、秒表递增与重置、番茄钟 25:00 递减）；chunk 实测 **42,584 B raw / 10,451 B gzip**；R2 映射见 `docs/smoke/misc-toolbox.md`
+
+### 4.44 文本工具箱摩尔斯（M44，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：在既有 `text-toolbox` 增「摩尔斯」页签（第 5 个），**纯 renderer、零 IPC、零新增依赖**，不新建工具包
+- **编解码**：ITU 标准码表 `A–Z`、`0–9` 与 `. , ? ' ! / ( ) & : ; = + - _ " $ @`；编码大小写不敏感、字母单空格、单词「 / 」分隔、连续空白归一；解码按「 / 」分单词、空白分字母，输出大写
+- **错误码**：编码遇不支持字符 / 解码遇未知码 → `TT_MORSE_INVALID`（detail 带字符或码）；与既有入口一致先做 5MB 字节校验（`TT_TEXT_TOO_LARGE`）
+- **三态**：输入/输出 placeholder + 「填入示例」空态；>200KB 复用分帧 busy；结构化错误 → 中文文案 + detail 折叠
+- **验收**：morse 单测 12 例（编码大小写/单词/数字/空白归一/空文本/不支持字符/超限、解码往返/容错/空文本/未知码/超限）；e2e 新增摩尔斯编码→交换→解码往返用例；本包覆盖率 ≥80%；chunk <200KB gzip；R2 映射见 `docs/smoke/text-toolbox.md`
+
+### 4.45 开发工具 JWT 解码与 UUID 生成（M45，2026-11-21 R8 登记）
+
+- **决策（用户拍板 2026-11-21）**：在既有 `dev-toolbox` 增两个页签（共 5 个），**纯 renderer、零 IPC、零新增依赖**，不新建工具包
+- **JWT 解码**：接受 `Bearer ` 前缀与首尾空白；Base64URL 解码（`-`/`_` 映射、忽略 `=` 填充）header/payload，输出格式化 JSON；解析 `exp`/`iat` 秒级时间并标注「未过期/已过期/无 exp」；**明确不校验签名**，页内常驻提示
+- **错误码**：空输入 / 分段数≠3 / Base64URL 非法字符 / 非 UTF-8 / 段非 JSON 对象 → `DT_JWT_INVALID`（不可重试，detail 指明原因）
+- **UUID 生成**：`crypto.getRandomValues` 优先（缺失回退 `Math.random`），RFC 4122 v4 版本位/变体位强制；批量 1–100（越界 `DT_INVALID_PAYLOAD`）+ 复制全部；时间戳 ID `yyyyMMdd-HHmmss-xxxx`（本地时间 + 4 位随机后缀）
+- **三态**：两页签均有空态引导文案；JWT 无长任务，UUID 同步生成；结构化错误码 → 中文文案 + detail + 重试
+- **验收**：jwt 单测 19 例 + uuid 单测 11 例 + errors 增补 2 断言；e2e 新增 JWT 解码/非法 token 与 UUID 批量生成两用例；本包覆盖率 ≥80%；chunk <200KB gzip；R2 映射见 `docs/smoke/dev-toolbox.md`
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -645,6 +731,14 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M35 v3.4**  | 图片裁剪（§4.35，2026-11-21）：`image-crop` —— 比例裁剪（预设/自定义 + 九宫格锚点）+ 自由区域百分比；输出目录记忆、命名模板 + 冲突递增、原图只读；ffmpeg 串行 + 进度 + 取消；编码/失败归类上提 `node-kit`、扩展名提取上提 `shared`，零新增依赖                                                                                                  | §4.35 验收；e2e 5 用例；R2 八类映射；chunk 7,495 B gzip；gate 全绿                      | 0.5 天   |
 | **M36 v3.5**  | 第一梯队缺口补齐（§4.36，2026-11-21）：计算器阶乘 + 进制页签；时间工具箱日期差 + 倒计时；单位换算流量/角度/像素（DPI）；文本工具箱 Hex/Unicode、批量文本处理与字数统计；只扩展现有 4 包，零新包零新增依赖                                                                                                                                       | §4.36 验收；四包单测 ≥80%；R2 八类映射；chunk <200KB gzip；gate 全绿                    | 0.5–1 天 |
 | **M37 v3.6**  | 生活计算器（§4.37，2026-11-21）：`life-calculator` —— 房贷（等额本息/等额本金 + 还款计划）、工资个税（月度口径 + 五险一金 + 专项附加扣除）、百分比与折扣；纯 renderer、零 IPC、零新增依赖                                                                                                                                                       | §4.37 验收；e2e 4 用例；R2 八类映射；chunk 8,415 B gzip；gate 全绿                      | 0.5 天   |
+| **M38 v3.7**  | PDF 能力补全（§4.38，2026-11-21）：`pdf-toolkit` 扩展三 Tab —— 文本层提取导出 TXT、内嵌图片提取（sha256 去重）、按档位重采样压缩；抽取原语上提 `node-kit/pdf`，零新增依赖                                                                                                                                                                       | §4.38 验收；e2e 12/12；R2 八类映射；包覆盖率 ≥80%；gate 全绿                            | 0.5–1 天 |
+| **M39 v3.8**  | Markdown 工具（§4.39，2026-11-21）：新增 `markdown-tool` —— Markdown 预览 + MD→HTML（`marked` 18.2.1，sandbox iframe + CSP 防脚本）、JSON→TypeScript 类型生成（零依赖自写）、YAML 互转/格式化（`js-yaml` 5.5.0）；解析全在 renderer，主进程仅目录记忆 + 原子写盘                                                                                                                                     | §4.39 验收；e2e 4 用例；R2 八类映射；chunk <200KB gzip；gate 全绿                       | 0.5–1 天 |
+| **M40 v3.9**  | 图片增强（§4.40，2026-11-21）：`image-toolbox` 增「调整」（灰度/反色/黑白二值阈值）与「GIF」（1–100 帧、`filter_complex` 调色板）页签；`image-stitch` 增「长图分割」（固定高度/按份数）页签；复用 ffmpeg 与 @napi-rs/canvas，零新增依赖                                                                                                                                                     | §4.40 验收；e2e 新增 3 用例；R2 八类映射；两包覆盖率 ≥80%；gate 全绿                     | 0.5–1 天 |
+| **M41 v4.0**  | 文件清理（§4.41，2026-11-21）：新增 `fs-cleaner` —— 目录树导出（深度/通配排除/复制）、空文件夹递归判定与回收、批量改时间（mtime/atime，创建时间不支持）、临时文件按扩展名扫描与回收；只读扫描 + 用户确认后走系统回收站；零新增依赖                                                                                                                     | §4.41 验收；e2e 6/6；R2 八类映射；chunk 83,078 B gzip；包覆盖率 ≥80%；gate 全绿          | 0.5–1 天 |
+| **M42 v4.1**  | 开发工具（§4.42，2026-11-21）：新增 `dev-toolbox` —— 端口占用查询与结束进程、CURL 转 fetch/axios/python、本地静态服务器（仅 127.0.0.1、路径穿越防护）；主进程能力全在工具 `node.ts`，不扩 plugin-api；零新增依赖                                                                                        | §4.42 验收；e2e 5/5；R2 八类映射；chunk 11,413 B gzip；包覆盖率 ≥80%                     | 0.5–1 天 |
+| **M43 v4.2**  | 实用工具（§4.43，2026-11-21）：新增 `misc-toolbox` —— IPv4 CIDR 子网计算（/0–/32 全边界）、秒表/倒计时/番茄钟；纯 renderer、零 IPC、无 `node.ts`、零新增依赖                                                                                                                                           | §4.43 验收；e2e 5/5；R2 映射；chunk 10,451 B gzip；包覆盖率 ≥80%                          | 0.5 天    |
+| **M44 v4.3**  | 文本工具箱摩尔斯（§4.44，2026-11-21）：`text-toolbox` 增「摩尔斯」页签 —— ITU 标准码表编解码（A–Z/0–9/常用标点）、字母单空格与单词「 / 」分隔、`TT_MORSE_INVALID`；纯 renderer、零 IPC、零新增依赖，不新建工具包（Hex/Unicode/批量处理/字数统计已于 M36 交付）                                                  | §4.44 验收；e2e 新增往返用例；R2 映射；chunk <200KB gzip；包覆盖率 ≥80%；gate 全绿       | 0.5 天    |
+| **M45 v4.4**  | 开发工具扩展（§4.45，2026-11-21）：`dev-toolbox` 增「JWT 解码」（Base64URL 解 header/payload + exp/iat 时效，不验签）与「UUID 生成」（RFC 4122 v4 批量 1–100 + 时间戳 ID）两页签；纯 renderer、零 IPC、零新增依赖                                                                                                                        | §4.45 验收；e2e 新增 2 用例；R2 映射；chunk <200KB gzip；包覆盖率 ≥80%；gate 全绿        | 0.5 天    |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

@@ -2,6 +2,7 @@ import type { ToolManifest } from '@lumin/plugin-api'
 import { manifest as batchOcrManifest } from '@lumin/tool-batch-ocr/manifest'
 import { manifest as calculatorManifest } from '@lumin/tool-calculator/manifest'
 import { manifest as colorToolboxManifest } from '@lumin/tool-color-toolbox/manifest'
+import { manifest as devToolboxManifest } from '@lumin/tool-dev-toolbox/manifest'
 import { manifest as diskAnalyzerManifest } from '@lumin/tool-disk-analyzer/manifest'
 import { manifest as docx2pdfManifest } from '@lumin/tool-docx2pdf/manifest'
 import { manifest as duplicateFinderManifest } from '@lumin/tool-duplicate-finder/manifest'
@@ -10,13 +11,16 @@ import { manifest as examSplitManifest } from '@lumin/tool-exam-split/manifest'
 import { manifest as fileHasherManifest } from '@lumin/tool-file-hasher/manifest'
 import { manifest as fileRenamerManifest } from '@lumin/tool-file-renamer/manifest'
 import { manifest as folderCompareManifest } from '@lumin/tool-folder-compare/manifest'
+import { manifest as fsCleanerManifest } from '@lumin/tool-fs-cleaner/manifest'
 import { manifest as imageCropManifest } from '@lumin/tool-image-crop/manifest'
 import { manifest as imageToolboxManifest } from '@lumin/tool-image-toolbox/manifest'
 import { manifest as imageRotateManifest } from '@lumin/tool-image-rotate/manifest'
 import { manifest as imageStitchManifest } from '@lumin/tool-image-stitch/manifest'
 import { manifest as imageWatermarkManifest } from '@lumin/tool-image-watermark/manifest'
 import { manifest as lifeCalculatorManifest } from '@lumin/tool-life-calculator/manifest'
+import { manifest as markdownToolManifest } from '@lumin/tool-markdown-tool/manifest'
 import { manifest as mediaConvertManifest } from '@lumin/tool-media-convert/manifest'
+import { manifest as miscToolboxManifest } from '@lumin/tool-misc-toolbox/manifest'
 import { manifest as ocrTextManifest } from '@lumin/tool-ocr-text/manifest'
 import { manifest as passwordGeneratorManifest } from '@lumin/tool-password-generator/manifest'
 import { manifest as pdfImagesManifest } from '@lumin/tool-pdf-images/manifest'
@@ -45,6 +49,7 @@ export const toolManifests: readonly ToolManifest[] = [
   pdfToolkitManifest,
   fileRenamerManifest,
   textToolboxManifest,
+  markdownToolManifest,
   textDiffManifest,
   videoDownloadManifest,
   fileHasherManifest,
@@ -55,9 +60,12 @@ export const toolManifests: readonly ToolManifest[] = [
   duplicateFinderManifest,
   diskAnalyzerManifest,
   folderCompareManifest,
+  fsCleanerManifest,
   zipToolManifest,
   colorToolboxManifest,
   timeToolboxManifest,
   passwordGeneratorManifest,
+  devToolboxManifest,
+  miscToolboxManifest,
   exampleManifest
 ]

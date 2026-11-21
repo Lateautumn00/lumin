@@ -10,15 +10,21 @@ import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
 import { isRetryable } from '../errors'
 import {
+  COMPRESS_LEVELS,
+  COMPRESS_PRESETS,
   MAX_MERGE_FILES,
   MAX_WATERMARK_TEXT,
+  type CompressLevel,
   type MetadataPatch,
   type PageNumberPosition,
   type WatermarkPayload
 } from '../schema'
 import {
   cancelTask as requestCancel,
+  compress,
   deletePages,
+  extractImages,
+  extractText,
   info,
   merge,
   pageNumbers,
@@ -41,6 +47,9 @@ type TabId =
   | 'metadata'
   | 'watermark'
   | 'page-numbers'
+  | 'extract-text'
+  | 'extract-images'
+  | 'compress'
 
 /** 任务种类（重试入口据此复放上一次提交） */
 type Action = TabId
@@ -63,6 +72,24 @@ const PN_PRESETS = {
 } as const
 
 type PageNumberPreset = keyof typeof PN_PRESETS | 'custom'
+
+/** 压缩档位中文名 */
+const COMPRESS_NAMES: Record<CompressLevel, string> = { low: '低', medium: '中', high: '高' }
+
+/** 提交按钮文案 */
+const BUTTON_TEXT: Record<Action, string> = {
+  merge: '开始合并',
+  split: '开始拆分',
+  delete: '开始删页',
+  rotate: '开始旋转',
+  reorder: '开始重排',
+  metadata: '保存元数据',
+  watermark: '添加水印',
+  'page-numbers': '添加页码',
+  'extract-text': '提取文本',
+  'extract-images': '提取图片',
+  compress: '开始压缩'
+}
 
 const activeTab = ref<TabId>('merge')
 
@@ -105,6 +132,10 @@ const pn = reactive({
   margin: 24,
   ranges: ''
 })
+
+// —— 文本提取 / 图片提取 / 压缩 ——
+const exRanges = ref('')
+const level = ref<CompressLevel>('medium')
 
 // —— 任务与结果 ——
 const phase = ref<'idle' | 'running'>('idle')
@@ -349,6 +380,22 @@ async function submitTask(action: Action): Promise<{ taskId: string }> {
         margin: pn.margin,
         ...(pn.ranges.trim() === '' ? {} : { ranges: pn.ranges.trim() })
       })
+    case 'extract-text': {
+      const text = exRanges.value.trim()
+      return extractText({ inputPath: path, ...(text === '' ? {} : { ranges: text }) })
+    }
+    case 'extract-images': {
+      const text = exRanges.value.trim()
+      return extractImages({ inputPath: path, ...(text === '' ? {} : { ranges: text }) })
+    }
+    case 'compress': {
+      const text = exRanges.value.trim()
+      return compress({
+        inputPath: path,
+        level: level.value,
+        ...(text === '' ? {} : { ranges: text })
+      })
+    }
   }
 }
 
@@ -406,7 +453,7 @@ onUnmounted(detach)
     <div>
       <h1 class="text-base font-semibold">PDF 工具集</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        合并、拆分、删页、旋转、重排、元数据、水印与页码，产物写到源文件同目录
+        合并、拆分、删页、旋转、重排、元数据、水印、页码、文本/图片提取与压缩，产物写到源文件同目录
       </p>
     </div>
 
@@ -435,6 +482,15 @@ onUnmounted(detach)
       </NTabPane>
       <NTabPane name="page-numbers">
         <template #tab>页码</template>
+      </NTabPane>
+      <NTabPane name="extract-text">
+        <template #tab>文本提取</template>
+      </NTabPane>
+      <NTabPane name="extract-images">
+        <template #tab>图片提取</template>
+      </NTabPane>
+      <NTabPane name="compress">
+        <template #tab>压缩</template>
       </NTabPane>
     </NTabs>
 
@@ -861,28 +917,67 @@ onUnmounted(detach)
             />
           </div>
         </template>
+        <template v-if="activeTab === 'extract-text'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">页码范围</NText>
+            <NInput
+              v-model:value="exRanges"
+              :disabled="phase === 'running'"
+              placeholder="留空 = 全部页（如 1-3,5）"
+              class="flex-1"
+            />
+          </div>
+          <NText depth="3" class="text-xs">
+            输出为 TXT 文件，写到源文件同目录（仅含文本层的 PDF 可提取）
+          </NText>
+        </template>
+        <template v-if="activeTab === 'extract-images'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">页码范围</NText>
+            <NInput
+              v-model:value="exRanges"
+              :disabled="phase === 'running'"
+              placeholder="留空 = 全部页（如 1-3,5）"
+              class="flex-1"
+            />
+          </div>
+          <NText depth="3" class="text-xs">
+            输出为「{基名}_图片」文件夹中的 PNG，写到源文件同目录
+          </NText>
+        </template>
+        <template v-if="activeTab === 'compress'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">压缩档位</NText>
+            <select
+              v-model="level"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option v-for="item in COMPRESS_LEVELS" :key="item" :value="item">
+                {{ COMPRESS_NAMES[item] }}（{{ COMPRESS_PRESETS[item].dpi }} DPI · 质量
+                {{ COMPRESS_PRESETS[item].quality }}）
+              </option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">页码范围</NText>
+            <NInput
+              v-model:value="exRanges"
+              :disabled="phase === 'running'"
+              placeholder="留空 = 全部页（如 1-3,5）"
+              class="flex-1"
+            />
+          </div>
+          <p class="text-xs text-[var(--lumin-color-warning, #f0a020)]">
+            压缩为有损处理（逐页栅格化），文字选择、链接与表单将丢失，建议保留原件
+          </p>
+        </template>
       </NSpace>
     </template>
 
     <NSpace>
       <NButton type="primary" :disabled="!canSubmit" @click="run(activeTab)">
-        {{
-          activeTab === 'merge'
-            ? '开始合并'
-            : activeTab === 'split'
-              ? '开始拆分'
-              : activeTab === 'delete'
-                ? '开始删页'
-                : activeTab === 'rotate'
-                  ? '开始旋转'
-                  : activeTab === 'reorder'
-                    ? '开始重排'
-                    : activeTab === 'watermark'
-                      ? '添加水印'
-                      : activeTab === 'page-numbers'
-                        ? '添加页码'
-                        : '保存元数据'
-        }}
+        {{ BUTTON_TEXT[activeTab] }}
       </NButton>
     </NSpace>
 

@@ -50,3 +50,35 @@
 ## 6. 已知壳级变更
 
 - `apps/desktop/src/main/csp.ts`：`img-src` 追加 `blob:`（DEV/PROD），修复 renderer 用 ObjectURL 生成的预览/缩略图在 CSP 下不显示；其余安全基线未变。
+
+## 7. M40 长图分割（2026-11-21）
+
+### 7.1 功能与验收
+
+- **入口**：`image-stitch` 新增「长图分割」页签（单图），页签「拼接」行为不变。
+- **通道**：`image-stitch:split`（task，`split.worker.ts`）；`{inputPath, mode:'height'|'parts', height 50–30000, parts 2–50, quality 60–100, outputDir?}` → done `{outputs[{path,width,height}], sourceWidth, sourceHeight}`。
+- **切分口径**：固定高度按 `ceil(高/高度)` 等分、末段保留实际高；按份数 `base=floor(高/份数)`，余数摊到前几段；份数 > 图高、段数 >100、源图 >30000px → `IS_SPLIT_INVALID`。
+- **命名**：`{原名}_part{补零 max(2,段数位数)}.{ext}`（沿用输入扩展名，jpeg 保留 `.jpeg`），冲突 `(1)` 递增；`.tmp` + rename 原子写。
+- **e2e**：200×900 固定高度 300 → 3 段；按份数 2 → 2 段且与首轮同名文件冲突递增为 `(1)`；中文+空格路径；页签可见。
+
+### 7.2 R2 八类映射（增量）
+
+| 类别         | 验证                                                                                     |
+| ------------ | ---------------------------------------------------------------------------------------- |
+| 中文/空格路径 | e2e `长图 素材.png` / `输出 目录`，命名与落盘正常                                        |
+| 文件被占用   | `checkReadable` 失败 → `IS_INPUT_INVALID`                                                |
+| 加密文件     | `loadImage` 解码失败 → `IS_IMAGE_CORRUPT`                                                |
+| 超大文件     | 单图 >40MB → `IS_IMAGE_TOO_LARGE`；源图 >30000px → `IS_SPLIT_INVALID`                      |
+| 任务取消     | 三段式 `cancel` 杀树；worker 侧当前段 `.tmp` 失败即删，已完成段保留                       |
+| 并发溢出     | 壳队列并发上限不变（worker 串行单任务）                                                   |
+| 磁盘满       | 建目录/写盘 errno → `IS_WRITE_FAILED`                                                     |
+| 断电恢复     | 已完成段保留、`.tmp` 残留可安全删除；重跑冲突命名 `(1)`，不覆盖既有产物                   |
+
+### 7.3 R5 体积记录（增量）
+
+| 项               | 数值                                                         | 结论                                   |
+| ---------------- | ------------------------------------------------------------ | -------------------------------------- |
+| 工具 chunk       | 49,107 B raw / **11,467 B gzip**                             | 远低于 200KB gzip 基线                 |
+| 独占依赖 chunk   | 0                                                            | 零新增依赖（复用 `@napi-rs/canvas`）   |
+| 主进程 worker    | `out/main/chunks/split.worker-*.js` 185,810 B raw / 43,850 B gzip | 随主进程包，不计入 renderer chunk 口径 |
+| `NTabs` / `NSlider` | 与 image-toolbox 共享，属共享 vendor                      | 不计入工具专属增量                     |

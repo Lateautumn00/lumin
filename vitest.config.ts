@@ -160,6 +160,24 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
+        'packages/tools/fs-cleaner/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
+        'packages/tools/dev-toolbox/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
+        'packages/tools/misc-toolbox/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
         'packages/tools/zip-tool/src/**/*.ts': {
           lines: 80,
           functions: 80,
@@ -233,6 +251,12 @@ export default defineConfig({
           branches: 80
         },
         'packages/tools/life-calculator/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
+        'packages/tools/markdown-tool/src/**/*.ts': {
           lines: 80,
           functions: 80,
           statements: 80,

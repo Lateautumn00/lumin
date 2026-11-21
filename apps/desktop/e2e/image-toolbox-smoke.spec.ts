@@ -69,6 +69,76 @@ function makeImage(args: string[]): Promise<void> {
   })
 }
 
+/** 读取图片指定像素 RGB（ffmpeg rawvideo，免额外解码依赖） */
+function readRgb(file: string, x = 0, y = 0): Promise<number[]> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      ffmpeg,
+      [
+        '-v',
+        'error',
+        '-i',
+        file,
+        '-vf',
+        `crop=1:1:${x}:${y}`,
+        '-frames:v',
+        '1',
+        '-f',
+        'rawvideo',
+        '-pix_fmt',
+        'rgb24',
+        '-'
+      ],
+      { windowsHide: true }
+    )
+    const chunks: Buffer[] = []
+    let stderr = ''
+    child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk))
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString()
+    })
+    child.on('close', (code) => {
+      const bytes = Buffer.concat(chunks)
+      if (code === 0 && bytes.length >= 3) resolve(Array.from(bytes.subarray(0, 3)))
+      else reject(new Error(stderr))
+    })
+  })
+}
+
+/** 提交任务并等待 done/error（e2e 直接走 IPC，覆盖主进程三段式） */
+async function runTask(
+  page: Awaited<ReturnType<ElectronApplication['firstWindow']>>,
+  channel: string,
+  payload: unknown
+): Promise<unknown> {
+  return page.evaluate(
+    ({ channel, payload }) =>
+      new Promise<unknown>((resolve, reject) => {
+        let taskId = ''
+        const off = window.lumin.onTaskEvent((event) => {
+          if (event.taskId !== taskId) return
+          if (event.kind === 'done') {
+            off()
+            resolve(event.result)
+          } else if (event.kind === 'error') {
+            off()
+            reject(new Error(`${event.error.code}: ${event.error.message}`))
+          }
+        })
+        window.lumin
+          .invoke<{ taskId: string }>(channel, payload)
+          .then((result) => {
+            taskId = result.taskId
+          })
+          .catch((err: unknown) => {
+            off()
+            reject(err instanceof Error ? err : new Error(String(err)))
+          })
+      }),
+    { channel, payload }
+  )
+}
+
 test.describe('image-toolbox（图片工具箱）冒烟', () => {
   test.beforeAll(async () => {
     test.skip(!fs.existsSync(ffmpeg), '缺少 ffmpeg（先跑 node scripts/fetch-binaries.mjs）')
@@ -339,6 +409,103 @@ test.describe('image-toolbox（图片工具箱）冒烟', () => {
       await app.close()
     }
   })
+
+  test('M40 调整：灰度三通道近似 / 反色取反 / 黑白仅 0 或 255', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const inDir = path.join(os.tmpdir(), 'lumin-it-e2e-effect')
+    const outDir = path.join(inDir, 'out')
+    fs.rmSync(inDir, { recursive: true, force: true })
+    fs.mkdirSync(inDir, { recursive: true })
+    try {
+      const input = path.join(inDir, '红 色.png')
+      await makeImage(['-f', 'lavfi', '-i', 'color=c=red:s=32x32', '-frames:v', '1', input])
+
+      const effect = async (
+        kind: 'grayscale' | 'invert' | 'binary',
+        threshold: number
+      ): Promise<string> => {
+        const result = (await runTask(page, 'image-toolbox:process', {
+          mode: 'effect',
+          files: [input],
+          outputDir: outDir,
+          options: { effect: kind, threshold, quality: 75 }
+        })) as { outputs: { output: string }[] }
+        return firstOf(result.outputs).output
+      }
+
+      const gray = await effect('grayscale', 128)
+      expect(gray).toBe(path.join(outDir, '红 色.gray.png'))
+      const grayRgb = await readRgb(gray)
+      expect(Math.max(...grayRgb) - Math.min(...grayRgb)).toBeLessThanOrEqual(2)
+
+      const inverted = await effect('invert', 128)
+      expect(inverted).toBe(path.join(outDir, '红 色.invert.png'))
+      const invertRgb = await readRgb(inverted)
+      expect(invertRgb[0]).toBeLessThan(8)
+      expect(invertRgb[1]).toBeGreaterThan(247)
+      expect(invertRgb[2]).toBeGreaterThan(247)
+
+      // 红色 BT.601 亮度约 76：阈值 100 → 全黑；阈值 50 → 全白
+      const dark = await effect('binary', 100)
+      expect(dark).toBe(path.join(outDir, '红 色.bw100.png'))
+      expect(await readRgb(dark)).toEqual([0, 0, 0])
+      const light = await effect('binary', 50)
+      expect(light).toBe(path.join(outDir, '红 色.bw50.png'))
+      expect(await readRgb(light)).toEqual([255, 255, 255])
+    } finally {
+      fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('M40 GIF：3 帧 → GIF89a + NETSCAPE2.0 + 尺寸/帧数', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const inDir = path.join(os.tmpdir(), 'lumin-it-e2e-gif')
+    const outDir = path.join(inDir, 'out')
+    fs.rmSync(inDir, { recursive: true, force: true })
+    fs.mkdirSync(inDir, { recursive: true })
+    try {
+      const frames = ['red', 'green', 'blue'].map((color, index) => ({
+        color,
+        file: path.join(inDir, `帧 ${index + 1}.png`)
+      }))
+      for (const frame of frames) {
+        await makeImage([
+          '-f',
+          'lavfi',
+          '-i',
+          `color=c=${frame.color}:s=64x64`,
+          '-frames:v',
+          '1',
+          frame.file
+        ])
+      }
+      const result = (await runTask(page, 'image-toolbox:make-gif', {
+        files: frames.map((frame) => frame.file),
+        outputDir: outDir,
+        options: { durationMs: 500, loop: 0, width: 0 }
+      })) as {
+        outputPath: string
+        width: number
+        height: number
+        frames: number
+        sizeBytes: number
+      }
+      expect(result.width).toBe(64)
+      expect(result.height).toBe(64)
+      expect(result.frames).toBe(3)
+      expect(result.sizeBytes).toBe(fs.statSync(result.outputPath).size)
+      const bytes = fs.readFileSync(result.outputPath)
+      expect(bytes.subarray(0, 6).toString('latin1')).toBe('GIF89a')
+      // Netscape 循环扩展位于全局色板之后（实测偏移 ~784），须全文检索
+      expect(bytes.includes(Buffer.from('NETSCAPE2.0'))).toBe(true)
+    } finally {
+      fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
 })
 
 test('页签标签可见（naive-ui 自闭合 pane 渲染回归）', async () => {
@@ -349,7 +516,9 @@ test('页签标签可见（naive-ui 自闭合 pane 渲染回归）', async () =>
     for (const [name, label] of [
       ['compress', '压缩'],
       ['convert', '转换'],
-      ['resize', '缩放']
+      ['resize', '缩放'],
+      ['effect', '调整'],
+      ['gif', 'GIF']
     ] as const) {
       const tab = page.locator(`.n-tabs-tab[data-name="${name}"]`)
       await expect(tab).toBeVisible()

@@ -17,6 +17,7 @@ export default withVueTs(
   {
     ignores: [
       '**/node_modules/**',
+      '**/.worktrees/**',
       '**/dist/**',
       '**/out/**',
       '**/coverage/**',

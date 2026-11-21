@@ -18,6 +18,7 @@ import {
   encodeUnicode,
   encodeUrl
 } from '../encoding'
+import { decodeMorse, encodeMorse } from '../morse'
 import { collectMatches, replacePreview, type RegexMatchInfo } from '../regex'
 import { applyLineOps, replaceText, type CaseMode, type SortMode } from '../text-ops'
 import { countText } from '../stats'
@@ -57,6 +58,10 @@ const jsonIndent = ref<2 | 4>(2)
 const codecMode = ref<CodecMode>('base64')
 const codecInput = ref('')
 const codecOutput = ref('')
+
+// —— 摩尔斯 Tab ——
+const morseInput = ref('')
+const morseOutput = ref('')
 
 // —— 正则 Tab ——
 const regexPattern = ref('')
@@ -231,6 +236,39 @@ function fillCodecSample(): void {
   codecOutput.value = ''
 }
 
+/* ---------- 摩尔斯 Tab ---------- */
+
+function runMorse(kind: 'encode' | 'decode'): void {
+  clearFeedback()
+  if (morseInput.value === '') {
+    notice.value = '请先输入要处理的文本'
+    return
+  }
+  runMaybeHeavy(morseInput.value, () => {
+    const result = kind === 'encode' ? encodeMorse(morseInput.value) : decodeMorse(morseInput.value)
+    if (!result.ok) {
+      morseOutput.value = ''
+      showError(result.error)
+      return
+    }
+    morseOutput.value = result.value
+    notice.value = `${kind === 'encode' ? '编码' : '解码'}完成 · ${byteLength(result.value)} 字节`
+  })
+}
+
+function swapMorse(): void {
+  if (morseOutput.value === '') return
+  clearFeedback()
+  morseInput.value = morseOutput.value
+  morseOutput.value = ''
+}
+
+function fillMorseSample(): void {
+  clearFeedback()
+  morseInput.value = 'Lumin 2026'
+  morseOutput.value = ''
+}
+
 /* ---------- 文本处理 Tab ---------- */
 
 /** 统计对象：已处理则统计输出，否则统计输入 */
@@ -387,7 +425,7 @@ function messageOf(code: string): string {
       <h1 class="text-base font-semibold">文本工具箱</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
         JSON 格式化压缩、Base64/URL/Hex/Unicode
-        编解码、正则测试、批量文本处理与字数统计（本地处理，不联网）
+        编解码、正则测试、批量文本处理与字数统计、摩尔斯电码（本地处理，不联网）
       </p>
     </div>
 
@@ -405,6 +443,9 @@ function messageOf(code: string): string {
       </NTabPane>
       <NTabPane name="text-ops">
         <template #tab>文本处理</template>
+      </NTabPane>
+      <NTabPane name="morse">
+        <template #tab>摩尔斯</template>
       </NTabPane>
     </NTabs>
 
@@ -682,6 +723,49 @@ function messageOf(code: string): string {
       <NText depth="3" class="text-xs">
         统计对象：{{ textOpsProcessed ? '处理结果' : '输入文本' }}；行处理顺序为去空行 → 大小写 →
         去重 → 排序。
+      </NText>
+    </div>
+
+    <!-- 摩尔斯：字母单空格、单词用「 / 」分隔 -->
+    <div v-if="activeTab === 'morse'" class="flex flex-col gap-3">
+      <div class="grid gap-3 md:grid-cols-2">
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <NText depth="2" class="text-sm">输入</NText>
+            <NButton size="tiny" quaternary @click="fillMorseSample">填入示例</NButton>
+          </div>
+          <NInput
+            v-model:value="morseInput"
+            type="textarea"
+            placeholder="输入文本或摩尔斯码（字母空格分隔，单词用 / 分隔）"
+            :autosize="{ minRows: 8, maxRows: 16 }"
+          />
+        </div>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <NText depth="2" class="text-sm">输出</NText>
+            <NButton size="tiny" quaternary @click="copyText(morseOutput, 'morse')">
+              <Copy class="mr-1 h-3 w-3" />{{ copiedLabel === 'morse' ? '已复制' : '复制' }}
+            </NButton>
+          </div>
+          <NInput
+            :value="morseOutput"
+            type="textarea"
+            readonly
+            placeholder="处理结果"
+            :autosize="{ minRows: 8, maxRows: 16 }"
+          />
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <NButton type="primary" :disabled="busy" @click="runMorse('encode')">编码</NButton>
+        <NButton :disabled="busy" @click="runMorse('decode')">解码</NButton>
+        <NButton quaternary :disabled="busy || morseOutput === ''" @click="swapMorse">
+          交换
+        </NButton>
+      </div>
+      <NText depth="3" class="text-xs">
+        支持 A–Z、0–9 与常用标点；编码不区分大小写，解码结果统一为大写。
       </NText>
     </div>
 

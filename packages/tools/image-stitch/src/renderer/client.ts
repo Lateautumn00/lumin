@@ -4,11 +4,23 @@
  * @date 2026-11-20
  * @description stitch 三段式任务 + config/set-output-dir 同步通道；类型来自 schema.ts
  */
-import type { ConfigResult, SetOutputDirPayload, StitchPayload, StitchResult } from '../schema'
+import type {
+  ConfigResult,
+  SetOutputDirPayload,
+  SplitPayload,
+  SplitResult,
+  StitchPayload,
+  StitchResult
+} from '../schema'
 
 /** 提交拼接任务（返回 taskId，进度经 onTaskEvent 推送） */
 export function submitStitch(payload: StitchPayload): Promise<{ taskId: string }> {
   return window.lumin.invoke('image-stitch:stitch', payload)
+}
+
+/** 提交长图分割任务（M40，done 返回 `{outputs,sourceWidth,sourceHeight}`） */
+export function split(payload: SplitPayload): Promise<{ taskId: string }> {
+  return window.lumin.invoke('image-stitch:split', payload)
 }
 
 /** 读取记忆的输出目录（settings `outputDir`，缺省 userData/image-stitch） */
@@ -41,4 +53,4 @@ export function getPathForFile(file: File): string {
   return window.lumin.getPathForFile(file)
 }
 
-export type { StitchResult }
+export type { SplitResult, StitchResult }

@@ -2,10 +2,11 @@
  * @file IPC 入参/出参 zod schema 与扩展名归一（AGENTS §6：入参全部 zod 校验）
  * @author cuilanchao
  * @date 2026-11-18
- * @description probe/process/config 三通道的 payload 与结果形状（spec §4）；
- *              process 按 mode discriminated union（compress/convert/resize）
+ * @description probe/process/make-gif/config 通道的 payload 与结果形状（spec §4）；
+ *              process 按 mode discriminated union（compress/convert/resize/effect）
  */
 import { z } from 'zod'
+import { GIF_MAX_EDGE, GIF_MAX_FRAME_MS, GIF_MIN_FRAME_MS, MAX_GIF_FRAMES } from './gif'
 
 /** 支持的输入扩展名白名单（小写；大小写不敏感匹配，spec §1） */
 export const SUPPORTED_EXTENSIONS = [
@@ -142,6 +143,48 @@ export type CompressOptions = z.infer<typeof compressOptionsSchema>
 export type ConvertOptions = z.infer<typeof convertOptionsSchema>
 export type ResizeOptions = z.infer<typeof resizeOptionsSchema>
 
+// —— 调整 options（M40，spec §2.4） ——
+
+export const EFFECT_KINDS = ['grayscale', 'invert', 'binary'] as const
+
+/** 调整效果（灰度/反色/黑白二值） */
+export const effectKindSchema = z.enum(EFFECT_KINDS)
+
+/** 黑白二值阈值（0–255，仅 binary 生效） */
+export const thresholdSchema = z.number().int().min(0).max(255)
+
+export const effectOptionsSchema = z.object({
+  effect: effectKindSchema,
+  threshold: thresholdSchema,
+  quality: qualitySchema
+})
+
+export type EffectOptions = z.infer<typeof effectOptionsSchema>
+
+// —— GIF options（M40，spec §2.5） ——
+
+/** 循环次数：-1 不循环 / 0 无限 / 2–10 次（1 次无意义，排除） */
+export const gifLoopSchema = z
+  .number()
+  .int()
+  .refine((value) => value === -1 || value === 0 || (value >= 2 && value <= 10), {
+    message: '循环次数仅支持 -1（不循环）/ 0（无限）/ 2–10'
+  })
+
+/** 目标宽：0 = 按首张图片宽；否则 64–4096 */
+export const gifWidthSchema = z.union([
+  z.literal(0),
+  z.number().int().min(64).max(GIF_MAX_EDGE)
+])
+
+export const gifOptionsSchema = z.object({
+  durationMs: z.number().int().min(GIF_MIN_FRAME_MS).max(GIF_MAX_FRAME_MS),
+  loop: gifLoopSchema,
+  width: gifWidthSchema
+})
+
+export type GifOptions = z.infer<typeof gifOptionsSchema>
+
 // —— process（task） ——
 
 export const processPayloadSchema = z.discriminatedUnion('mode', [
@@ -162,10 +205,37 @@ export const processPayloadSchema = z.discriminatedUnion('mode', [
     files: filesSchema,
     outputDir: z.string().min(1),
     options: resizeOptionsSchema
+  }),
+  z.object({
+    mode: z.literal('effect'),
+    files: filesSchema,
+    outputDir: z.string().min(1),
+    options: effectOptionsSchema
   })
 ])
 
 export type ProcessPayload = z.infer<typeof processPayloadSchema>
+
+// —— make-gif（task，M40，spec §2.5/§4） ——
+
+export const makeGifPayloadSchema = z.object({
+  files: z.array(z.string().min(1)).min(1).max(MAX_GIF_FRAMES),
+  outputDir: z.string().min(1),
+  options: gifOptionsSchema
+})
+
+export type MakeGifPayload = z.infer<typeof makeGifPayloadSchema>
+
+/** GIF 生成结果（done 事件） */
+export const gifResultSchema = z.object({
+  outputPath: z.string().min(1),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  frames: z.number().int().min(1),
+  sizeBytes: z.number().int().nonnegative()
+})
+
+export type MakeGifResult = z.infer<typeof gifResultSchema>
 
 /** 单张成功输出（前后体积供压缩率展示，spec §4） */
 export const outputItemSchema = z.object({

@@ -57,3 +57,18 @@ export function watermarkDesiredPath(inputPath: string): string {
 export function pageNumbersDesiredPath(inputPath: string): string {
   return `${baseName(inputPath)}_页码.pdf`
 }
+
+/** 文本提取：`{基名}_文本.txt`（M38） */
+export function extractTextDesiredPath(inputPath: string): string {
+  return `${baseName(inputPath)}_文本.txt`
+}
+
+/** 图片提取：`{基名}_图片` 目录（M38） */
+export function extractImagesDesiredDir(inputPath: string): string {
+  return `${baseName(inputPath)}_图片`
+}
+
+/** 压缩：`{基名}_压缩.pdf`（M38） */
+export function compressDesiredPath(inputPath: string): string {
+  return `${baseName(inputPath)}_压缩.pdf`
+}

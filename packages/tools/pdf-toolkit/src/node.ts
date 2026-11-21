@@ -2,7 +2,7 @@
  * @file node.ts
  * @author cuilanchao
  * @date 2026-11-19
- * @description 主进程通道注册：info 同步（页数/元数据）+ 六个 worker 三段式任务。
+ * @description 主进程通道注册：info 同步（页数/元数据）+ 十一个 worker 三段式任务。
  *              deps 可注入（vitest 传假 worker 路径与假 inspector）。
  */
 import { access, constants, open } from 'node:fs/promises'
@@ -28,7 +28,10 @@ import type { ZodType } from 'zod'
 import { toolError } from './errors'
 import { inspectPdf, type OpResult, type WorkerRequest } from './pdf-ops'
 import {
+  compressPayloadSchema,
   deletePayloadSchema,
+  extractImagesPayloadSchema,
+  extractTextPayloadSchema,
   infoPayloadSchema,
   mergePayloadSchema,
   metadataPayloadSchema,
@@ -189,6 +192,24 @@ export function registerWith(ctx: MainPluginContext, deps: PdfToolkitDeps): void
     const parsed = parseOrThrow(pageNumberPayloadSchema, payload)
     await precheckInputs([parsed.inputPath])
     return runWorker({ op: 'page-numbers', payload: parsed }, { signal, emit })
+  })
+
+  ctx.registerTask('extract-text', async ({ payload, signal, emit }) => {
+    const parsed = parseOrThrow(extractTextPayloadSchema, payload)
+    await precheckInputs([parsed.inputPath])
+    return runWorker({ op: 'extract-text', payload: parsed }, { signal, emit })
+  })
+
+  ctx.registerTask('extract-images', async ({ payload, signal, emit }) => {
+    const parsed = parseOrThrow(extractImagesPayloadSchema, payload)
+    await precheckInputs([parsed.inputPath])
+    return runWorker({ op: 'extract-images', payload: parsed }, { signal, emit })
+  })
+
+  ctx.registerTask('compress', async ({ payload, signal, emit }) => {
+    const parsed = parseOrThrow(compressPayloadSchema, payload)
+    await precheckInputs([parsed.inputPath])
+    return runWorker({ op: 'compress', payload: parsed }, { signal, emit })
   })
 }
 

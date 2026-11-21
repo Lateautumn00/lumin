@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  buildEffectFilter,
   buildEncodeArgs,
   buildScaleArgs,
   classifyFfmpegFailure,
@@ -14,6 +15,29 @@ import {
   qualityToQscale,
   resolveTargetSize
 } from './encode'
+
+describe('buildEffectFilter（M40 调整，spec §5）', () => {
+  it('灰度 → hue=s=0', () => {
+    expect(buildEffectFilter('grayscale', 128)).toBe('hue=s=0')
+  })
+
+  it('反色 → negate', () => {
+    expect(buildEffectFilter('invert', 128)).toBe('negate')
+  })
+
+  it('黑白二值 → format=gray + lut 阈值', () => {
+    expect(buildEffectFilter('binary', 128)).toBe(
+      "format=gray,lut=y='if(gt(val,128),255,0)'"
+    )
+  })
+
+  it('阈值钳制 0–255 并取整', () => {
+    expect(buildEffectFilter('binary', -20)).toContain('gt(val,0)')
+    expect(buildEffectFilter('binary', 300)).toContain('gt(val,255)')
+    expect(buildEffectFilter('binary', 127.6)).toContain('gt(val,128)')
+    expect(buildEffectFilter('binary', Number.NaN)).toContain('gt(val,128)')
+  })
+})
 
 describe('qualityToQscale（jpg mjpeg）', () => {
   it('质量 100 → qscale 2（最好）', () => {

@@ -1,6 +1,7 @@
 import type { RegisterMain } from '@lumin/plugin-api'
 import { registerMain as batchOcrRegisterMain } from '@lumin/tool-batch-ocr/node'
 import { registerMain as colorToolboxRegisterMain } from '@lumin/tool-color-toolbox/node'
+import { registerMain as devToolboxRegisterMain } from '@lumin/tool-dev-toolbox/node'
 import { registerMain as diskAnalyzerRegisterMain } from '@lumin/tool-disk-analyzer/node'
 import { registerMain as docx2pdfRegisterMain } from '@lumin/tool-docx2pdf/node'
 import { registerMain as duplicateFinderRegisterMain } from '@lumin/tool-duplicate-finder/node'
@@ -9,11 +10,13 @@ import { registerMain as examSplitRegisterMain } from '@lumin/tool-exam-split/no
 import { registerMain as fileHasherRegisterMain } from '@lumin/tool-file-hasher/node'
 import { registerMain as fileRenamerRegisterMain } from '@lumin/tool-file-renamer/node'
 import { registerMain as folderCompareRegisterMain } from '@lumin/tool-folder-compare/node'
+import { registerMain as fsCleanerRegisterMain } from '@lumin/tool-fs-cleaner/node'
 import { registerMain as imageCropRegisterMain } from '@lumin/tool-image-crop/node'
 import { registerMain as imageToolboxRegisterMain } from '@lumin/tool-image-toolbox/node'
 import { registerMain as imageRotateRegisterMain } from '@lumin/tool-image-rotate/node'
 import { registerMain as imageStitchRegisterMain } from '@lumin/tool-image-stitch/node'
 import { registerMain as imageWatermarkRegisterMain } from '@lumin/tool-image-watermark/node'
+import { registerMain as markdownToolRegisterMain } from '@lumin/tool-markdown-tool/node'
 import { registerMain as mediaConvertRegisterMain } from '@lumin/tool-media-convert/node'
 import { registerMain as ocrTextRegisterMain } from '@lumin/tool-ocr-text/node'
 import { registerMain as pdfImagesRegisterMain } from '@lumin/tool-pdf-images/node'
@@ -25,6 +28,7 @@ import { registerMain as zipToolRegisterMain } from '@lumin/tool-zip-tool/node'
 export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'batch-ocr': batchOcrRegisterMain,
   'color-toolbox': colorToolboxRegisterMain,
+  'dev-toolbox': devToolboxRegisterMain,
   'disk-analyzer': diskAnalyzerRegisterMain,
   docx2pdf: docx2pdfRegisterMain,
   'duplicate-finder': duplicateFinderRegisterMain,
@@ -33,11 +37,13 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'file-hasher': fileHasherRegisterMain,
   'file-renamer': fileRenamerRegisterMain,
   'folder-compare': folderCompareRegisterMain,
+  'fs-cleaner': fsCleanerRegisterMain,
   'image-toolbox': imageToolboxRegisterMain,
   'image-crop': imageCropRegisterMain,
   'image-rotate': imageRotateRegisterMain,
   'image-stitch': imageStitchRegisterMain,
   'image-watermark': imageWatermarkRegisterMain,
+  'markdown-tool': markdownToolRegisterMain,
   'media-convert': mediaConvertRegisterMain,
   'ocr-text': ocrTextRegisterMain,
   'pdf-images': pdfImagesRegisterMain,

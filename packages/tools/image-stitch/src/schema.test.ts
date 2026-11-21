@@ -4,7 +4,7 @@
  * @date 2026-11-20
  */
 import { describe, expect, it } from 'vitest'
-import { layoutSchema, MAX_IMAGES, stitchPayloadSchema } from './schema'
+import { layoutSchema, MAX_IMAGES, splitPayloadSchema, stitchPayloadSchema } from './schema'
 
 function layout(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -53,6 +53,45 @@ describe('layoutSchema', () => {
   it('mode/sizeMode 仅白名单值', () => {
     expect(layoutSchema.safeParse(layout({ mode: 'free' })).success).toBe(false)
     expect(layoutSchema.safeParse(layout({ sizeMode: 'min' })).success).toBe(false)
+  })
+})
+
+describe('splitPayloadSchema（M40，spec §5.1）', () => {
+  function split(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      inputPath: 'C:\\imgs\\long.png',
+      mode: 'height',
+      height: 1000,
+      parts: 3,
+      quality: 90,
+      ...overrides
+    }
+  }
+
+  it('合法载荷（outputDir 可省）', () => {
+    expect(splitPayloadSchema.safeParse(split()).success).toBe(true)
+    expect(splitPayloadSchema.safeParse(split({ outputDir: 'D:\\out' })).success).toBe(true)
+    expect(splitPayloadSchema.safeParse(split({ mode: 'parts', parts: 8 })).success).toBe(true)
+  })
+
+  it('仅 PNG/JPG/WebP 输入', () => {
+    expect(splitPayloadSchema.safeParse(split({ inputPath: 'C:\\a.gif' })).success).toBe(false)
+    expect(splitPayloadSchema.safeParse(split({ inputPath: 'C:\\a.txt' })).success).toBe(false)
+    expect(splitPayloadSchema.safeParse(split({ inputPath: 'C:\\a.jpeg' })).success).toBe(true)
+    expect(splitPayloadSchema.safeParse(split({ inputPath: 'C:\\a.webp' })).success).toBe(true)
+  })
+
+  it('高度 50–30000、份数 2–50、质量 60–100', () => {
+    expect(splitPayloadSchema.safeParse(split({ height: 49 })).success).toBe(false)
+    expect(splitPayloadSchema.safeParse(split({ height: 30_001 })).success).toBe(false)
+    expect(splitPayloadSchema.safeParse(split({ parts: 1 })).success).toBe(false)
+    expect(splitPayloadSchema.safeParse(split({ parts: 51 })).success).toBe(false)
+    expect(splitPayloadSchema.safeParse(split({ quality: 59 })).success).toBe(false)
+    expect(splitPayloadSchema.safeParse(split({ quality: 101 })).success).toBe(false)
+  })
+
+  it('mode 仅 height/parts', () => {
+    expect(splitPayloadSchema.safeParse(split({ mode: 'auto' })).success).toBe(false)
   })
 })
 

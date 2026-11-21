@@ -38,3 +38,17 @@ describe('pdf-toolkit errors（spec §7）', () => {
     )
   })
 })
+
+describe('M38 错误码', () => {
+  it('提取/压缩错误码文案', () => {
+    expect(toolError('PT_NO_TEXT_LAYER').message).toBe('未检测到文本层（可能为扫描件）')
+    expect(toolError('PT_NO_IMAGES').message).toBe('未找到可提取的图片')
+    expect(toolError('PT_TOO_MANY_IMAGES').message).toBe('图片数量超过 2000 张上限，请缩小页码范围')
+  })
+
+  it('提取/压缩错误码均不可重试', () => {
+    expect(isRetryable('PT_NO_TEXT_LAYER')).toBe(false)
+    expect(isRetryable('PT_NO_IMAGES')).toBe(false)
+    expect(isRetryable('PT_TOO_MANY_IMAGES')).toBe(false)
+  })
+})
