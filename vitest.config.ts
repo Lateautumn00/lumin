@@ -160,6 +160,12 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
+        'packages/tools/fs-cleaner/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
         'packages/tools/zip-tool/src/**/*.ts': {
           lines: 80,
           functions: 80,
