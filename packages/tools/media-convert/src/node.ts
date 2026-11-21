@@ -2,7 +2,7 @@
  * @file media-convert 主进程逻辑（node-kit.runProcess + 壳任务队列三段式）
  * @author cuilanchao
  * @date 2026-11-19
- * @description probe（sync，ffmpeg 元信息）/ process（task，四模式批量串行 + 可取消）/
+ * @description probe（sync，ffmpeg 元信息）/ process（task，五模式批量串行 + 可取消）/
  *              config 与 set-output-dir（sync，输出目录记忆）；引擎复用 binaries/download/ffmpeg.exe，
  *              零新增依赖。批量语义：单文件失败不中断批次；取消 = AbortSignal 杀树，已完成文件保留。
  *              进度经 `-progress pipe:1` 解析并节流。deps 可注入便于单测
@@ -16,6 +16,7 @@ import {
   MAX_FILE_BYTES,
   configResultSchema,
   extensionOf,
+  isAudioExtension,
   isVideoExtension,
   probePayloadSchema,
   probeResultSchema,
@@ -31,6 +32,7 @@ import {
 } from './schema'
 import { errnoCode, toolError } from './errors'
 import {
+  buildAudioConvertArgs,
   buildCompressArgs,
   buildExtractAudioArgs,
   buildTranscodeArgs,
@@ -46,6 +48,7 @@ import {
   type ParsedMediaInfo
 } from './media'
 import {
+  buildAudioConvertName,
   buildCompressName,
   buildExtractAudioName,
   buildTranscodeName,
@@ -230,6 +233,8 @@ function outputNameOf(
       return buildTrimName(inputName, startSec, endSec)
     case 'extract-audio':
       return buildExtractAudioName(inputName, payload.options.format)
+    case 'audio-convert':
+      return buildAudioConvertName(inputName, payload.options.format)
     case 'compress':
       return buildCompressName(inputName, payload.options.level)
   }
@@ -249,6 +254,8 @@ function buildArgsOf(payload: ProcessPayload, input: string, output: string): st
       return buildTrimArgs(payload.options, input, output)
     case 'extract-audio':
       return buildExtractAudioArgs(payload.options, input, output)
+    case 'audio-convert':
+      return buildAudioConvertArgs(payload.options, input, output)
     case 'compress':
       return buildCompressArgs(payload.options, input, output)
   }
@@ -364,9 +371,12 @@ async function processOne(
 
   const info = await probeMedia(file, env.ffmpegPath, env.deps)
 
-  // 流校验（spec §5）：视频目标要求视频轨 + 视频扩展名；提取音频要求音频轨
-  const isExtract = payload.mode === 'extract-audio'
-  if (isExtract) {
+  // 流校验（spec §5）：视频目标要求视频轨 + 视频扩展名；提取音频要求音频轨；
+  // 音频互转要求音频扩展名 + 音频轨（视频请走提取音频）
+  if (payload.mode === 'extract-audio') {
+    if (info.audio === null) throw toolError('MC_NO_STREAM')
+  } else if (payload.mode === 'audio-convert') {
+    if (!isAudioExtension(inputExt)) throw toolError('MC_FILE_UNSUPPORTED')
     if (info.audio === null) throw toolError('MC_NO_STREAM')
   } else {
     if (!isVideoExtension(inputExt)) throw toolError('MC_NO_STREAM')

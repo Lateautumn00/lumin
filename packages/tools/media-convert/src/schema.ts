@@ -3,7 +3,7 @@
  * @author cuilanchao
  * @date 2026-11-19
  * @description probe/process/config 三通道的 payload 与结果形状（spec §4）；
- *              process 按 mode discriminated union（transcode/trim/extract-audio/compress）
+ *              process 按 mode discriminated union（transcode/trim/extract-audio/audio-convert/compress）
  */
 import { z } from 'zod'
 
@@ -81,6 +81,14 @@ export function isVideoExtension(ext: SupportedExtension): ext is VideoExtension
   return (VIDEO_EXTENSIONS as readonly string[]).includes(ext)
 }
 
+/**
+ * 是否音频扩展名（音频互转 Tab 的输入口径）
+ * @param ext 归一扩展名
+ */
+export function isAudioExtension(ext: SupportedExtension): ext is AudioExtension {
+  return (AUDIO_EXTENSIONS as readonly string[]).includes(ext)
+}
+
 /** 输入文件列表（zod：非空字符串，去重由调用方负责，上限 MAX_BATCH_FILES） */
 export const filesSchema = z.array(z.string().min(1)).min(1).max(MAX_BATCH_FILES)
 
@@ -156,6 +164,9 @@ export const extractAudioOptionsSchema = z.object({
   bitrate: z.union([z.literal(128), z.literal(192), z.literal(320)])
 })
 
+/** 音频互转参数：与提取音频同形（目标格式 + 码率），语义差异仅在输入口径 */
+export const audioConvertOptionsSchema = extractAudioOptionsSchema
+
 /** 压缩参数：质量档 + 分辨率上限（0 = 原尺寸） */
 export const compressOptionsSchema = z.object({
   level: qualityLevelSchema,
@@ -165,6 +176,7 @@ export const compressOptionsSchema = z.object({
 export type TranscodeOptions = z.infer<typeof transcodeOptionsSchema>
 export type TrimOptions = z.infer<typeof trimOptionsSchema>
 export type ExtractAudioOptions = z.infer<typeof extractAudioOptionsSchema>
+export type AudioConvertOptions = z.infer<typeof audioConvertOptionsSchema>
 export type CompressOptions = z.infer<typeof compressOptionsSchema>
 
 /**
@@ -197,6 +209,12 @@ export const processPayloadSchema = z.discriminatedUnion('mode', [
     files: filesSchema,
     outputDir: z.string().min(1),
     options: extractAudioOptionsSchema
+  }),
+  z.object({
+    mode: z.literal('audio-convert'),
+    files: filesSchema,
+    outputDir: z.string().min(1),
+    options: audioConvertOptionsSchema
   }),
   z.object({
     mode: z.literal('compress'),

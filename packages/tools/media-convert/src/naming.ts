@@ -50,6 +50,15 @@ export function buildExtractAudioName(inputName: string, ext: string): string {
 }
 
 /**
+ * 音频互转命名：`{stem}.{ext}`（目标格式即扩展名）
+ * @param inputName 输入文件名
+ * @param ext 目标扩展名
+ */
+export function buildAudioConvertName(inputName: string, ext: string): string {
+  return `${stemOf(inputName)}.${ext}`
+}
+
+/**
  * 压缩命名：`{stem}.c{high|medium|low}.mp4`
  * @param inputName 输入文件名
  * @param level 质量档

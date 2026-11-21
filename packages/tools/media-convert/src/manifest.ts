@@ -10,9 +10,9 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'media-convert',
   name: '音视频处理',
-  description: '音视频转码、片段截取、提取音频与压缩（基于 ffmpeg）',
+  description: '音视频转码、音频互转、片段截取、提取音频与压缩（基于 ffmpeg）',
   icon: 'film',
   category: 'media',
   order: 70,
-  version: '0.1.0'
+  version: '0.2.0'
 })

@@ -5,7 +5,13 @@
  * @description 四模式参数映射 + 失败分类；统一前置 `-y -v error -progress pipe:1 -nostats`
  */
 import { CORRUPT_HINTS } from './media'
-import type { CompressOptions, ExtractAudioOptions, QualityLevel, TrimOptions } from './schema'
+import type {
+  AudioConvertOptions,
+  CompressOptions,
+  ExtractAudioOptions,
+  QualityLevel,
+  TrimOptions
+} from './schema'
 import type { MediaConvertErrorCode } from './errors'
 
 /** 统一前置（每模式共用） */
@@ -132,6 +138,23 @@ export function buildTrimArgs(options: TrimOptions, input: string, output: strin
 }
 
 /**
+ * 目标音频格式 → 编码参数（提取音频与音频互转共用）
+ * @param options 目标格式 + 码率
+ */
+function audioEncodeArgs(options: ExtractAudioOptions | AudioConvertOptions): string[] {
+  const codec: Record<ExtractAudioOptions['format'], string> = {
+    mp3: 'libmp3lame',
+    m4a: 'aac',
+    wav: 'pcm_s16le',
+    flac: 'flac',
+    ogg: 'libvorbis'
+  }
+  const lossless = options.format === 'wav' || options.format === 'flac'
+  const bitrate = lossless ? [] : ['-b:a', `${options.bitrate}k`]
+  return ['-c:a', codec[options.format], ...bitrate]
+}
+
+/**
  * 提取音频参数（wav/flac 无损，忽略码率）
  * @param options 格式 + 码率
  * @param input 输入路径
@@ -142,16 +165,21 @@ export function buildExtractAudioArgs(
   input: string,
   output: string
 ): string[] {
-  const codec: Record<ExtractAudioOptions['format'], string> = {
-    mp3: 'libmp3lame',
-    m4a: 'aac',
-    wav: 'pcm_s16le',
-    flac: 'flac',
-    ogg: 'libvorbis'
-  }
-  const lossless = options.format === 'wav' || options.format === 'flac'
-  const bitrate = lossless ? [] : ['-b:a', `${options.bitrate}k`]
-  return [...COMMON_PREFIX, '-i', input, '-vn', '-c:a', codec[options.format], ...bitrate, output]
+  return [...COMMON_PREFIX, '-i', input, '-vn', ...audioEncodeArgs(options), output]
+}
+
+/**
+ * 音频互转参数（仅音频输入；丢弃封面等附加视频轨）
+ * @param options 目标格式 + 码率
+ * @param input 输入路径
+ * @param output 输出路径
+ */
+export function buildAudioConvertArgs(
+  options: AudioConvertOptions,
+  input: string,
+  output: string
+): string[] {
+  return [...COMMON_PREFIX, '-i', input, '-vn', ...audioEncodeArgs(options), output]
 }
 
 /**
