@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MAX_BATCH_FILES,
   extensionOf,
+  isAudioExtension,
   isVideoExtension,
   normalizeExtension,
   probePayloadSchema,
@@ -32,6 +33,12 @@ describe('扩展名归一', () => {
     expect(isVideoExtension('mp4')).toBe(true)
     expect(isVideoExtension('mp3')).toBe(false)
   })
+
+  it('音频扩展名判定', () => {
+    expect(isAudioExtension('mp3')).toBe(true)
+    expect(isAudioExtension('flac')).toBe(true)
+    expect(isAudioExtension('mp4')).toBe(false)
+  })
 })
 
 describe('probe schema', () => {
@@ -44,7 +51,7 @@ describe('probe schema', () => {
 })
 
 describe('process discriminated union', () => {
-  it('四模式合法入参均通过', () => {
+  it('五模式合法入参均通过', () => {
     const base = { files: ['a.mp4'], outputDir: 'C:\\out' }
     expect(
       processPayloadSchema.safeParse({
@@ -65,6 +72,13 @@ describe('process discriminated union', () => {
         ...base,
         mode: 'extract-audio',
         options: { format: 'flac', bitrate: 320 }
+      }).success
+    ).toBe(true)
+    expect(
+      processPayloadSchema.safeParse({
+        ...base,
+        mode: 'audio-convert',
+        options: { format: 'mp3', bitrate: 192 }
       }).success
     ).toBe(true)
     expect(

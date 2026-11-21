@@ -3,7 +3,8 @@
  * @author cuilanchao
  * @date 2026-11-19
  * @description 覆盖 spec §8：probe（中文+空格路径/音频-only/损坏）、转码 webm、截取（精确/快速）、
- *              提取音频（无视频流断言）、压缩 720p（只缩不放）、批量部分失败、任务取消。
+ *              提取音频（无视频流断言）、音频互转（wav → mp3/flac）、压缩 720p（只缩不放）、
+ *              批量部分失败、任务取消。
  *              注意：临时目录名必须 ASCII（本机 Node fs 非 ASCII 目录名会硬崩/静默不删），
  *              文件名保留中文验证路径。前置：node scripts/fetch-binaries.mjs（ffmpeg.exe）
  */
@@ -170,11 +171,12 @@ test.describe('media-convert（音视频处理）冒烟', () => {
     try {
       await clickSidebarTool(page, '音视频处理')
       await expect(page.getByRole('heading', { name: '音视频处理' })).toBeVisible()
-      // 四 Tab 标签可见（naive-ui 自闭合 pane 渲染回归）
+      // 五 Tab 标签可见（naive-ui 自闭合 pane 渲染回归）
       for (const [name, label] of [
         ['transcode', '转码'],
         ['trim', '截取'],
         ['extract-audio', '提取音频'],
+        ['audio-convert', '音频互转'],
         ['compress', '压缩']
       ] as const) {
         const tab = page.locator(`.n-tabs-tab[data-name="${name}"]`)
@@ -190,8 +192,7 @@ test.describe('media-convert（音视频处理）冒烟', () => {
       fs.writeFileSync(corrupt, Buffer.from('not a media file'))
 
       const outcome = await page.evaluate(
-        (files: string[]) =>
-          window.lumin.invoke<ProbeOutcome>('media-convert:probe', { files }),
+        (files: string[]) => window.lumin.invoke<ProbeOutcome>('media-convert:probe', { files }),
         [video, audio, corrupt]
       )
       expect(outcome.items).toHaveLength(2)
@@ -313,6 +314,47 @@ test.describe('media-convert（音视频处理）冒烟', () => {
       const mp3Out = firstOf(mp3.outputs).output
       expect(mp3Out).toBe(path.join(outDir, '提取 样例.audio.mp3'))
       expect(await readMedia(mp3Out)).not.toContain(': Video:')
+    } finally {
+      fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('音频互转 wav → mp3 / flac：产物存在且无视频流（spec §8.3）', async () => {
+    test.setTimeout(180_000)
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const inDir = path.join(os.tmpdir(), 'lumin-mc-e2e-audioconv')
+    const outDir = path.join(inDir, 'out')
+    fs.rmSync(inDir, { recursive: true, force: true })
+    fs.mkdirSync(inDir, { recursive: true })
+    try {
+      const input = path.join(inDir, '转换 样例.wav')
+      await makeMedia(['-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', input])
+
+      const mp3 = await runProcess(page, {
+        mode: 'audio-convert',
+        files: [input],
+        outputDir: outDir,
+        options: { format: 'mp3', bitrate: 192 }
+      })
+      expect(mp3.failures).toEqual([])
+      const mp3Out = firstOf(mp3.outputs).output
+      expect(mp3Out).toBe(path.join(outDir, '转换 样例.mp3'))
+      const stderr = await readMedia(mp3Out)
+      expect(stderr).toContain(': Audio:')
+      expect(stderr).not.toContain(': Video:')
+
+      const flac = await runProcess(page, {
+        mode: 'audio-convert',
+        files: [input],
+        outputDir: outDir,
+        options: { format: 'flac', bitrate: 320 }
+      })
+      expect(flac.failures).toEqual([])
+      const flacOut = firstOf(flac.outputs).output
+      expect(flacOut).toBe(path.join(outDir, '转换 样例.flac'))
+      expect(fs.existsSync(flacOut)).toBe(true)
     } finally {
       fs.rmSync(inDir, { recursive: true, force: true })
       await app.close()

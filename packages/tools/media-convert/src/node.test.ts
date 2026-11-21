@@ -546,6 +546,37 @@ describe('process', () => {
     expect(findEncodeCall(harness)?.args?.join(' ')).toContain('libmp3lame')
   })
 
+  it('音频互转成功（wav → flac，无损忽略码率）', async () => {
+    const harness = createHarness()
+    const input = makeInput(join(harness.root, 'in'), 'voice wav.wav')
+    const outputDir = join(harness.root, 'out')
+    const { result } = await runTask(harness, {
+      mode: 'audio-convert',
+      files: [input],
+      outputDir,
+      options: { format: 'flac', bitrate: 320 }
+    })
+    const done = result as { outputs: Array<{ output: string }>; failures: [] }
+    expect(done.failures).toEqual([])
+    expect(done.outputs[0]?.output).toBe(join(outputDir, 'voice wav.flac'))
+    const args = findEncodeCall(harness)?.args?.join(' ') ?? ''
+    expect(args).toContain('-c:a flac')
+    expect(args).not.toContain('-b:a')
+  })
+
+  it('音频互转提交视频输入 → MC_FILE_UNSUPPORTED', async () => {
+    const harness = createHarness()
+    const input = makeInput(join(harness.root, 'in'), 'demo.mp4')
+    const { result } = await runTask(harness, {
+      mode: 'audio-convert',
+      files: [input],
+      outputDir: join(harness.root, 'out'),
+      options: { format: 'mp3', bitrate: 192 }
+    })
+    const done = result as { failures: Array<{ code: string }> }
+    expect(done.failures[0]?.code).toBe('MC_FILE_UNSUPPORTED')
+  })
+
   it('视频模式遇仅音频流 → MC_NO_STREAM', async () => {
     const harness = createHarness({
       probeResponses: [

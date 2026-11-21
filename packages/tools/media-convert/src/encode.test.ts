@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildAudioConvertArgs,
   buildCompressArgs,
   buildExtractAudioArgs,
   buildTranscodeArgs,
@@ -63,6 +64,21 @@ describe('buildExtractAudioArgs', () => {
     const flac = buildExtractAudioArgs({ format: 'flac', bitrate: 192 }, 'in.mp4', 'o.flac')
     expect(flac.join(' ')).toContain('-c:a flac')
     expect(flac.join(' ')).not.toContain('-b:a')
+  })
+})
+
+describe('buildAudioConvertArgs', () => {
+  it('有损格式带码率并丢弃附加视频轨', () => {
+    const args = buildAudioConvertArgs({ format: 'mp3', bitrate: 192 }, 'in.wav', 'out.mp3')
+    expect(args.join(' ')).toContain('-c:a libmp3lame -b:a 192k')
+    expect(args).toContain('-vn')
+    expect(args.at(-1)).toBe('out.mp3')
+  })
+
+  it('无损格式不含码率', () => {
+    const args = buildAudioConvertArgs({ format: 'flac', bitrate: 320 }, 'in.mp3', 'out.flac')
+    expect(args.join(' ')).toContain('-c:a flac')
+    expect(args.join(' ')).not.toContain('-b:a')
   })
 })
 
