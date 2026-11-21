@@ -544,7 +544,7 @@ lumin/
 - **公共上提（AGENTS §2.3）**：`node-kit/ffmpeg` 新增 `buildImageEncodeArgs` / `classifyFfmpegFailure`（image-rotate 改为委托，既有单测零改动）；`shared/naming` 新增通用 `extensionOf`（image-rotate/image-crop 共用）
 - **契约**：`config` / `set-output-dir`（sync）+ `process`（task，批量串行、进度/取消、单张失败不中断）；错误码 `IC_ENGINE_MISSING` / `IC_FILE_UNSUPPORTED` / `IC_FILE_CORRUPT` / `IC_OUTPUT_WRITE_FAILED` / `IC_CANCELLED`
 - **三态**：空态拖拽引导、加载态进度可取消、报错态错误码 + 中文文案 + 详情折叠；运行中参数统一禁用
-- **验收**：单测 52 用例（本包 lines 96.3% / functions 100% / branches 87.7%）；e2e 5 用例（无 ffmpeg 时 4 例 skip，页面空态必过）；chunk 28,473 B raw / 7,495 B gzip；gate 全绿
+- **验收**：单测 52 用例（本包 lines 96.3% / functions 100% / branches 87.7%）；e2e 5/5 通过；chunk 28,473 B raw / 7,495 B gzip；gate 全绿
 
 ---
 
