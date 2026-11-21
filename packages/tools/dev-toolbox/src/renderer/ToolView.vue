@@ -185,7 +185,7 @@ onUnmounted(() => {
 
     <PortsPanel v-if="activeTab === 'ports'" />
     <CurlPanel v-else-if="activeTab === 'curl'" />
-    <JwtPanel v-if="activeTab === 'jwt'" />
+    <JwtPanel v-else-if="activeTab === 'jwt'" />
 
     <div v-else class="flex flex-col gap-3">
       <ServerPanel
