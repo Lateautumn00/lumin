@@ -28,8 +28,14 @@ export interface PdfPageHandle {
   getTextContent?(): Promise<{ items: readonly unknown[] }>
   /** 操作符列表（可选：仅图片抽取传入的页面句柄实现） */
   getOperatorList?(): Promise<{ fnArray: readonly number[]; argsArray: readonly unknown[][] }>
-  /** pdfjs 内部对象仓库（可选：图片抽取按 objId 取原始图像） */
-  objs?: { get(id: string): unknown }
+  /** pdfjs 内部对象仓库（可选：图片抽取按 objId 取原始图像；带回调时等待解码完成） */
+  objs?: {
+    get(
+      id: string,
+      callback?: (data: unknown) => void,
+      errorCallback?: (reason: unknown) => void
+    ): unknown
+  }
 }
 
 /** pdfjs 文档代理的最小结构 */

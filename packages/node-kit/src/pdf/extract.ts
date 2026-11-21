@@ -258,7 +258,7 @@ export async function extractPdfImages(
     let rawImages: PdfRawImage[] = []
     try {
       const list = await page.getOperatorList()
-      rawImages = collectFromOperatorList(list, page.objs, constants)
+      rawImages = await collectFromOperatorList(list, page.objs, constants)
     } catch {
       skipped += 1
     }
@@ -291,24 +291,56 @@ export async function extractPdfImages(
   return { images, skipped }
 }
 
+/** 等待 pdfjs 解码图片的上限（超时跳过该图，避免任务悬挂） */
+const IMAGE_RESOLVE_TIMEOUT_MS = 5000
+
+/**
+ * 取 objId 对应的原始图像：已解码直接返回；未解码时 pdfjs 会抛错，
+ * 改用回调形式等待解码完成（超时或失败返回 null）。
+ */
+async function readRawImage(
+  objs: NonNullable<PdfPageHandle['objs']>,
+  objId: string
+): Promise<unknown> {
+  try {
+    return objs.get(objId)
+  } catch {
+    // 尚未解码：走回调等待
+  }
+  return new Promise((resolve) => {
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      resolve(null)
+    }, IMAGE_RESOLVE_TIMEOUT_MS)
+    const finish = (value: unknown): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(value ?? null)
+    }
+    try {
+      objs.get(objId, (data) => finish(data), () => finish(null))
+    } catch {
+      finish(null)
+    }
+  })
+}
+
 /** 从操作符列表提取 paintImage* 的原始图像（objId 走 page.objs） */
-function collectFromOperatorList(
+async function collectFromOperatorList(
   list: { fnArray: readonly number[]; argsArray: readonly unknown[][] },
-  objs: { get(id: string): unknown } | undefined,
+  objs: PdfPageHandle['objs'],
   constants: PdfjsConstants
-): PdfRawImage[] {
+): Promise<PdfRawImage[]> {
   const result: PdfRawImage[] = []
   for (const [offset, fn] of list.fnArray.entries()) {
     const args = list.argsArray[offset] ?? []
     if (fn === constants.paintXObject) {
       const objId = args[0]
       if (typeof objId !== 'string' || objs === undefined) continue
-      let raw: unknown
-      try {
-        raw = objs.get(objId)
-      } catch {
-        continue
-      }
+      const raw = await readRawImage(objs, objId)
       if (isRawImage(raw)) result.push(raw)
       continue
     }

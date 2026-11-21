@@ -177,6 +177,28 @@ describe('extractPdfImages（假句柄）', () => {
     expect(result.skipped).toBe(1)
   })
 
+  it('objId 尚未解码时等待回调完成（不直接跳过）', async () => {
+    const raw = solidRaw(10)
+    const doc = fakeDoc({
+      rotate: 0,
+      getViewport: viewport,
+      render: () => ({ promise: Promise.resolve() }),
+      cleanup: () => undefined,
+      getOperatorList: async () => ({ fnArray: [85], argsArray: [['img-late']] }),
+      objs: {
+        get: (id: string, callback?: (data: unknown) => void) => {
+          if (callback === undefined) throw new Error(`Requesting object that isn't resolved yet ${id}.`)
+          setTimeout(() => callback(raw), 0)
+          return null
+        }
+      }
+    })
+    const result = await extractPdfImages(doc, [1])
+    expect(result.images).toHaveLength(1)
+    expect(result.images[0]?.width).toBe(32)
+    expect(result.skipped).toBe(0)
+  })
+
   it('超过 maxImages → ExtractedImageLimitError', async () => {
     const doc = fakeDoc({
       rotate: 0,
