@@ -18,8 +18,8 @@ function expectConvertError(fn: () => unknown, code: ConvertErrorCode): ConvertE
 }
 
 describe('换算表数据完整性', () => {
-  it('13 类齐全、类别 id 唯一', () => {
-    expect(CATEGORIES).toHaveLength(13)
+  it('17 类齐全、类别 id 唯一', () => {
+    expect(CATEGORIES).toHaveLength(17)
     const ids = CATEGORIES.map((category) => category.id)
     expect(new Set(ids).size).toBe(ids.length)
     const expected: CategoryId[] = [
@@ -31,10 +31,14 @@ describe('换算表数据完整性', () => {
       'speed',
       'time',
       'data',
+      'data-rate',
       'pressure',
       'power',
+      'energy',
       'flow',
+      'fuel',
       'angle',
+      'frequency',
       'resolution'
     ]
     expect([...ids].sort()).toEqual([...expected].sort())
@@ -52,13 +56,18 @@ describe('换算表数据完整性', () => {
     }
   })
 
-  it('units[0] 为基准单位（线性 factor=1、温度为 K）', () => {
+  it('units[0] 为基准单位（线性 factor=1、温度为 K、油耗为 L/100km）', () => {
     for (const category of CATEGORIES) {
       if (category.id === 'temperature') {
         const first = category.units[0]
         expect(first.id).toBe('K')
         expect(first.scale).toBe(1)
         expect(first.offset).toBe(0)
+      } else if (category.id === 'fuel') {
+        const first = category.units[0]
+        expect(first.id).toBe('l100km')
+        expect(first.kind).toBe('vpd')
+        expect(first.factor).toBe(100)
       } else {
         expect(category.units[0].factor).toBe(1)
       }
@@ -92,7 +101,12 @@ describe('换算表数据完整性', () => {
 describe('全表断言（spec §5：换算表全量断言 ≥80%）', () => {
   it('每个线性类别：各单位→基准 = factor，基准→各单位 = 1/factor', () => {
     for (const category of CATEGORIES) {
-      if (category.id === 'temperature' || category.id === 'resolution') continue
+      if (
+        category.id === 'temperature' ||
+        category.id === 'resolution' ||
+        category.id === 'fuel'
+      )
+        continue
       const base = category.units[0]
       for (const unit of category.units) {
         expect(convert(category.id, unit.id, base.id, 1)).toBeCloseTo(unit.factor, 10)
@@ -116,7 +130,7 @@ describe('全表断言（spec §5：换算表全量断言 ≥80%）', () => {
 
   it('线性类别零值与负值各对换算仍为 0 / 反号', () => {
     for (const category of CATEGORIES) {
-      if (category.id === 'temperature') continue
+      if (category.id === 'temperature' || category.id === 'fuel') continue
       const [first, second] = category.units
       expect(convert(category.id, first.id, second.id, 0)).toBeCloseTo(0, 12)
       const pos = convert(category.id, first.id, second.id, 5)
@@ -182,6 +196,50 @@ describe('像素/分辨率（按 DPI）', () => {
     expectConvertError(() => convert('resolution', 'px', 'in', 1, 0), 'INVALID_DPI')
     expectConvertError(() => convert('resolution', 'px', 'in', 1, -96), 'INVALID_DPI')
     expectConvertError(() => convert('resolution', 'px', 'in', 1, Number.NaN), 'INVALID_DPI')
+  })
+})
+
+describe('M52 新增类别（能量/频率/数据速率/油耗）', () => {
+  it('能量锚点：1 kcal = 4184 J、1 kWh = 3.6e6 J、1 BTU ≈ 1055.06 J', () => {
+    expect(convert('energy', 'kcal', 'J', 1)).toBeCloseTo(4184, 9)
+    expect(convert('energy', 'kWh', 'J', 1)).toBeCloseTo(3.6e6, 6)
+    expect(convert('energy', 'BTU', 'J', 1)).toBeCloseTo(1055.05585262, 6)
+    expect(convert('energy', 'Wh', 'J', 1)).toBeCloseTo(3600, 9)
+  })
+
+  it('频率锚点：1 GHz = 1000 MHz = 1e9 Hz', () => {
+    expect(convert('frequency', 'GHz', 'MHz', 1)).toBeCloseTo(1000, 9)
+    expect(convert('frequency', 'MHz', 'Hz', 1)).toBeCloseTo(1e6, 3)
+    expect(convert('frequency', 'kHz', 'Hz', 1)).toBeCloseTo(1000, 9)
+  })
+
+  it('数据速率锚点（十进制）：1 Mbps = 1000 Kbps、1 MB/s = 8000 Kbps', () => {
+    expect(convert('data-rate', 'Mbps', 'Kbps', 1)).toBeCloseTo(1000, 9)
+    expect(convert('data-rate', 'MBps', 'Kbps', 1)).toBeCloseTo(8000, 6)
+    expect(convert('data-rate', 'GBps', 'Mbps', 1)).toBeCloseTo(8000, 6)
+    expect(convert('data-rate', 'bps', 'KBps', 8000)).toBeCloseTo(1, 9)
+  })
+
+  it('油耗（倒数模型）：5 L/100km = 20 km/L；8 L/100km ≈ 29.4 mpg(US)', () => {
+    expect(convert('fuel', 'l100km', 'kmpl', 5)).toBeCloseTo(20, 9)
+    expect(convert('fuel', 'l100km', 'mpgus', 8)).toBeCloseTo(
+      100 / 8 / (1.609344 / 3.785411784),
+      9
+    )
+    expect(convert('fuel', 'mpgus', 'l100km', 30)).toBeCloseTo(
+      100 / (30 * (1.609344 / 3.785411784)),
+      9
+    )
+    expect(convert('fuel', 'mpguk', 'l100km', 30)).toBeCloseTo(
+      100 / (30 * (1.609344 / 4.54609)),
+      9
+    )
+  })
+
+  it('油耗数值 ≤0 或非有限 → INVALID_VALUE', () => {
+    expectConvertError(() => convert('fuel', 'l100km', 'kmpl', 0), 'INVALID_VALUE')
+    expectConvertError(() => convert('fuel', 'l100km', 'kmpl', -5), 'INVALID_VALUE')
+    expectConvertError(() => convert('fuel', 'kmpl', 'l100km', Number.NaN), 'INVALID_VALUE')
   })
 })
 

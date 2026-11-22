@@ -1,6 +1,10 @@
 import { CATEGORIES, type CategoryId } from './data'
 
-export type ConvertErrorCode = 'UNKNOWN_CATEGORY' | 'UNKNOWN_UNIT' | 'INVALID_DPI'
+export type ConvertErrorCode =
+  | 'UNKNOWN_CATEGORY'
+  | 'UNKNOWN_UNIT'
+  | 'INVALID_DPI'
+  | 'INVALID_VALUE'
 
 export class ConvertError extends Error {
   readonly code: ConvertErrorCode
@@ -50,6 +54,15 @@ export function convert(
     const to = findUnit(category.units, toId)
     const inches = from.id === 'px' ? value / dpi : value * from.factor
     return to.id === 'px' ? inches * dpi : inches / to.factor
+  }
+  if (category.id === 'fuel') {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new ConvertError('INVALID_VALUE', '油耗数值必须大于 0')
+    }
+    const from = findUnit(category.units, fromId)
+    const to = findUnit(category.units, toId)
+    const kmPerLiter = from.kind === 'dpm' ? value * from.factor : from.factor / value
+    return to.kind === 'dpm' ? kmPerLiter / to.factor : to.factor / kmPerLiter
   }
   const from = findUnit(category.units, fromId)
   const to = findUnit(category.units, toId)

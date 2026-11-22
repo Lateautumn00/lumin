@@ -70,6 +70,30 @@ test.describe('IPC 冒烟（R3）', () => {
     await expect(page.getByRole('button', { name: '取消收藏目标单位' })).toBeVisible()
   })
 
+  test('单位换算：能量/油耗新类别（倒数换算与错误态）', async () => {
+    const page = await app.firstWindow()
+    await clickSidebarTool(page, '单位换算')
+    await expect(page.getByRole('heading', { name: '单位换算' })).toBeVisible()
+    const value = page.getByPlaceholder('输入数值')
+    const categorySelect = page.getByLabel('换算类别')
+
+    // 类别列表 17 项且 NSelect 虚拟滚动，用键盘导航到「油耗」（index 13）
+    await categorySelect.click()
+    for (let i = 0; i < 13; i += 1) await categorySelect.press('ArrowDown')
+    await categorySelect.press('Enter')
+    await value.fill('5')
+    await expect(page.getByText('= 20').first()).toBeVisible()
+    await value.fill('0')
+    await expect(page.getByText('油耗数值必须大于 0')).toBeVisible()
+
+    // 从「油耗」(13) 上移 2 项到「能量」(11)
+    await categorySelect.click()
+    for (let i = 0; i < 2; i += 1) await categorySelect.press('ArrowUp')
+    await categorySelect.press('Enter')
+    await value.fill('1')
+    await expect(page.getByText('= 0.001').first()).toBeVisible()
+  })
+
   test('计算器求值（白名单 + DEG 角度 + 历史）', async () => {
     const page = await app.firstWindow()
     await clickSidebarTool(page, '计算器')
