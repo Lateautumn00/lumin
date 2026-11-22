@@ -14,17 +14,19 @@ import {
 } from './schema'
 
 describe('hashPayloadSchema', () => {
-  it('接受 1–200 个路径与 1–3 种算法', () => {
+  it('接受 1–200 个路径与 1–4 种算法', () => {
     expect(hashPayloadSchema.safeParse({ paths: ['C:\\a'], algorithms: ['sha256'] }).success).toBe(
       true
     )
     expect(
-      hashPayloadSchema.safeParse({ paths: ['a', 'b'], algorithms: ['md5', 'sha1', 'sha256'] })
-        .success
+      hashPayloadSchema.safeParse({
+        paths: ['a', 'b'],
+        algorithms: ['md5', 'sha1', 'sha256', 'sha512']
+      }).success
     ).toBe(true)
   })
 
-  it('空路径 / 超上限 / 空算法 / 未知算法均拒绝', () => {
+  it('空路径 / 超上限 / 空算法 / 未知算法拒绝，SHA-512 合法', () => {
     expect(hashPayloadSchema.safeParse({ paths: [], algorithms: ['sha256'] }).success).toBe(false)
     expect(
       hashPayloadSchema.safeParse({
@@ -34,6 +36,9 @@ describe('hashPayloadSchema', () => {
     ).toBe(false)
     expect(hashPayloadSchema.safeParse({ paths: ['a'], algorithms: [] }).success).toBe(false)
     expect(hashPayloadSchema.safeParse({ paths: ['a'], algorithms: ['sha512'] }).success).toBe(
+      true
+    )
+    expect(hashPayloadSchema.safeParse({ paths: ['a'], algorithms: ['sha384'] }).success).toBe(
       false
     )
     expect(hashPayloadSchema.safeParse({}).success).toBe(false)
@@ -97,7 +102,8 @@ describe('config / set-config', () => {
     expect(configResultSchema.safeParse({ algorithms: ['sha256'] }).success).toBe(true)
     expect(configResultSchema.safeParse({ algorithms: [] }).success).toBe(false)
     expect(setConfigPayloadSchema.safeParse({ algorithms: ['md5'] }).success).toBe(true)
-    expect(setConfigPayloadSchema.safeParse({ algorithms: ['sha512'] }).success).toBe(false)
+    expect(setConfigPayloadSchema.safeParse({ algorithms: ['sha512'] }).success).toBe(true)
+    expect(setConfigPayloadSchema.safeParse({ algorithms: ['sha384'] }).success).toBe(false)
     expect(setConfigPayloadSchema.safeParse({}).success).toBe(false)
   })
 })

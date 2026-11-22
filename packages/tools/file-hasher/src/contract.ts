@@ -2,7 +2,7 @@
  * @file contract.ts 纯函数契约（算法归一 / 期望哈希解析 / 比对 / TSV 导出）
  * @author cuilanchao
  * @date 2026-11-19
- * @description 算法列表归一与标签、期望哈希规范化（前缀优先，否则按 32/40/64 长度识别）、
+ * @description 算法列表归一与标签、期望哈希规范化（前缀优先，否则按 32/40/64/128 长度识别）、
  *              单行比对、结果表复制文本。全部无副作用，供 worker/renderer 共用。
  */
 import { formatBytes, fileNameOf, formatTime } from '@lumin/shared'
@@ -14,14 +14,16 @@ export { fileNameOf, formatTime }
 const LABELS: Record<Algorithm, string> = {
   md5: 'MD5',
   sha1: 'SHA-1',
-  sha256: 'SHA-256'
+  sha256: 'SHA-256',
+  sha512: 'SHA-512'
 }
 
 /** 算法 → 十六进制摘要长度 */
 const HEX_LENGTHS: Record<Algorithm, number> = {
   md5: 32,
   sha1: 40,
-  sha256: 64
+  sha256: 64,
+  sha512: 128
 }
 
 /** 期望哈希可接受的前缀（小写比较，`sha-1`/`sha1` 等价） */
@@ -30,7 +32,9 @@ const PREFIXES: readonly (readonly [string, Algorithm])[] = [
   ['sha1', 'sha1'],
   ['sha-1', 'sha1'],
   ['sha256', 'sha256'],
-  ['sha-256', 'sha256']
+  ['sha-256', 'sha256'],
+  ['sha512', 'sha512'],
+  ['sha-512', 'sha512']
 ]
 
 /**
@@ -42,7 +46,7 @@ export function algorithmLabel(algorithm: Algorithm): string {
 }
 
 /**
- * 勾选列表归一：丢弃未知值、去重、按固定顺序（md5 → sha1 → sha256）返回
+ * 勾选列表归一：丢弃未知值、去重、按固定顺序（md5 → sha1 → sha256 → sha512）返回
  * @param input 任意字符串列表（来自设置或 UI）
  */
 export function normalizeAlgorithms(input: readonly string[]): Algorithm[] {
@@ -63,8 +67,8 @@ function stripHexPrefix(value: string): string {
 }
 
 /**
- * 解析用户粘贴的期望哈希：trim、去空白、小写、去 `0x`、拆 `md5:`/`sha1:`/`sha256:` 前缀；
- * 无前缀时按长度（32/40/64）识别算法。
+ * 解析用户粘贴的期望哈希：trim、去空白、小写、去 `0x`、拆 `md5:`/`sha1:`/`sha256:`/`sha512:` 前缀；
+ * 无前缀时按长度（32/40/64/128）识别算法。
  * @param raw 原始输入
  * @returns 合法时返回摘要与算法；空串、未知前缀、长度或字符非法时返回 null
  */

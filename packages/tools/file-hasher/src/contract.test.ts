@@ -28,9 +28,15 @@ function okResult(path: string, sha256: string): HashFileResult {
 
 describe('normalizeAlgorithms', () => {
   it('过滤未知值、去重、按固定顺序', () => {
-    expect(normalizeAlgorithms(['sha256', 'md5', 'md5', 'sha512'])).toEqual(['md5', 'sha256'])
+    expect(normalizeAlgorithms(['sha256', 'md5', 'md5', 'sha512'])).toEqual([
+      'md5',
+      'sha256',
+      'sha512'
+    ])
+    expect(normalizeAlgorithms(['sha512', 'sha1'])).toEqual(['sha1', 'sha512'])
     expect(normalizeAlgorithms([])).toEqual([])
     expect(normalizeAlgorithms(['sha1'])).toEqual(['sha1'])
+    expect(normalizeAlgorithms(['sha384'])).toEqual([])
   })
 })
 
@@ -39,11 +45,12 @@ describe('algorithmLabel', () => {
     expect(algorithmLabel('md5')).toBe('MD5')
     expect(algorithmLabel('sha1')).toBe('SHA-1')
     expect(algorithmLabel('sha256')).toBe('SHA-256')
+    expect(algorithmLabel('sha512')).toBe('SHA-512')
   })
 })
 
 describe('normalizeExpected', () => {
-  it('按长度识别算法（32/40/64）', () => {
+  it('按长度识别算法（32/40/64/128）', () => {
     expect(normalizeExpected('9dd4e461268c8034f5c8564e155c67a6')).toMatchObject({
       algorithm: 'md5'
     })
@@ -55,9 +62,10 @@ describe('normalizeExpected', () => {
         'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
       )
     ).toMatchObject({ algorithm: 'sha256' })
+    expect(normalizeExpected('a'.repeat(128))).toMatchObject({ algorithm: 'sha512' })
   })
 
-  it('前缀优先（md5:/sha1:/sha256:/sha-256:）并去 0x', () => {
+  it('前缀优先（md5:/sha1:/sha256:/sha512:/sha-512:）并去 0x', () => {
     expect(normalizeExpected('MD5:0X9DD4E461268C8034F5C8564E155C67A6')).toEqual({
       value: '9dd4e461268c8034f5c8564e155c67a6',
       algorithm: 'md5'
@@ -65,6 +73,10 @@ describe('normalizeExpected', () => {
     expect(
       normalizeExpected('sha-256: ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
     ).toMatchObject({ algorithm: 'sha256' })
+    expect(normalizeExpected('SHA-512:' + 'b'.repeat(128))).toEqual({
+      value: 'b'.repeat(128),
+      algorithm: 'sha512'
+    })
   })
 
   it('去空白并小写', () => {
@@ -137,5 +149,17 @@ describe('toTsv', () => {
     expect(rows[1]?.[4]).toBe('a'.repeat(64))
     expect(rows[1]?.[5]).toBe('成功')
     expect(rows[2]?.[5]).toBe('失败（FH_FILE_INVALID）')
+  })
+
+  it('SHA-512 列按已选算法序追加', () => {
+    const full = 'c'.repeat(128)
+    const tsv = toTsv([{ ...okResult('C:\\a.txt', 'a'.repeat(64)), hashes: { sha512: full } }], [
+      'sha256',
+      'sha512'
+    ])
+    const rows = tsv.split('\n').map((line) => line.split('\t'))
+    expect(rows[0]).toEqual(['文件路径', '大小', '修改时间', 'SHA-256', 'SHA-512', '状态'])
+    expect(rows[1]?.[3]).toBe('')
+    expect(rows[1]?.[4]).toBe(full)
   })
 })

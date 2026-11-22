@@ -10,9 +10,9 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'file-hasher',
   name: '文件哈希校验',
-  description: '批量计算 MD5 / SHA-1 / SHA-256，粘贴期望哈希即可比对文件完整性',
+  description: '批量计算 MD5 / SHA-1 / SHA-256 / SHA-512，粘贴期望哈希即可比对文件完整性',
   icon: 'hash',
   category: 'file',
   order: 60,
-  version: '0.1.0'
+  version: '0.2.0'
 })
