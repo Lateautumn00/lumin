@@ -140,12 +140,13 @@ test.describe('text-toolbox（文本工具箱）冒烟', () => {
       const input = page.getByPlaceholder('粘贴 JSON 对象数组，如 [{"name":"张三"}]')
       await input.fill('[{"name":"张三","age":42},{"name":"李四"}]')
       await page.getByRole('button', { name: '转换', exact: true }).click()
-      await expect(page.getByPlaceholder('转换结果')).toHaveValue(
-        'name,age\r\n张三,42\r\n李四,'
-      )
+      // textarea 的 value 按 HTML 规范把 CRLF 归一为 LF，故这里断言 LF
+      await expect(page.getByPlaceholder('转换结果')).toHaveValue('name,age\n张三,42\n李四,')
 
       await page.locator('select[aria-label="转换方向"]').selectOption('csv2json')
-      await input.fill('a,b\n1')
+      // 方向切换后 placeholder 随之变化，需重新定位输入框
+      const csvInput = page.getByPlaceholder('粘贴 CSV 文本（支持引号包裹与字段内换行）')
+      await csvInput.fill('a,b\n1')
       await page.getByRole('button', { name: '转换', exact: true }).click()
       await expect(page.getByText('CSV/JSON 数据格式不正确', { exact: false })).toBeVisible()
       await expect(page.getByText(/第 2 行：列数 1 与表头 2 不一致/).first()).toBeVisible()
@@ -154,21 +155,21 @@ test.describe('text-toolbox（文本工具箱）冒烟', () => {
     }
   })
 
-  test('摩尔斯编码 → 交换 → 解码往返', async () => {
+  test('拼音转换（带声调与首字母）', async () => {
     const { app, page } = await launch()
     await ensureReady(page)
     try {
       await clickSidebarTool(page, '文本工具箱')
-      await page.locator('.n-tabs-tab[data-name="morse"]').click()
-      const input = page.getByPlaceholder('输入文本或摩尔斯码（字母空格分隔，单词用 / 分隔）')
-      await input.fill('SOS')
-      await page.getByRole('button', { name: '编码', exact: true }).click()
-      await expect(page.locator('textarea[readonly]').last()).toHaveValue('... --- ...')
+      await page.locator('.n-tabs-tab[data-name="pinyin"]').click()
+      const input = page.getByPlaceholder('粘贴要注音的汉字文本，如：重庆 你好')
+      const output = page.getByPlaceholder('注音结果')
+      await input.fill('重庆 你好 Lumin 2026')
+      await page.getByRole('button', { name: '转换', exact: true }).click()
+      await expect(output).toHaveValue('chóng qìng nǐ hǎo Lumin 2026')
 
-      await page.getByRole('button', { name: '交换', exact: true }).click()
-      await expect(input).toHaveValue('... --- ...')
-      await page.getByRole('button', { name: '解码', exact: true }).click()
-      await expect(page.locator('textarea[readonly]').last()).toHaveValue('SOS')
+      await page.locator('select[aria-label="拼音模式"]').selectOption('initial')
+      await page.getByRole('button', { name: '转换', exact: true }).click()
+      await expect(output).toHaveValue('cq nh Lumin 2026')
     } finally {
       await app.close()
     }
