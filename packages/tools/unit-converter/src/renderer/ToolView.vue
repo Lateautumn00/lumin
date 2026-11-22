@@ -11,6 +11,7 @@ import {
   isCategoryId,
   type Category,
   type CategoryId,
+  type ConsumptionUnit,
   type LinearUnit,
   type ResolutionUnit,
   type TempUnit
@@ -35,9 +36,9 @@ const currentCategory = computed<Category>(() => findCategory(category.value) ??
 
 const favoriteIds = computed<string[]>(() => favorites.list(category.value))
 
-const currentUnits = computed<readonly (LinearUnit | TempUnit | ResolutionUnit)[]>(
-  () => currentCategory.value.units
-)
+const currentUnits = computed<
+  readonly (LinearUnit | TempUnit | ResolutionUnit | ConsumptionUnit)[]
+>(() => currentCategory.value.units)
 
 const unitOptions = computed(() =>
   sortWithFavorites(currentUnits.value, favoriteIds.value).map((unit) => ({

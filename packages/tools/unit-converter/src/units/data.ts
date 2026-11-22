@@ -20,6 +20,14 @@ export interface ResolutionUnit {
   readonly factor: number
 }
 
+/** 油耗单位：`dpm` 距离/容积（km/L、mpg），`vpd` 容积/距离（L/100km）；换算是倒数关系 */
+export interface ConsumptionUnit {
+  readonly id: string
+  readonly name: string
+  readonly kind: 'dpm' | 'vpd'
+  readonly factor: number
+}
+
 export type CategoryId =
   | 'length'
   | 'weight'
@@ -29,17 +37,21 @@ export type CategoryId =
   | 'speed'
   | 'time'
   | 'data'
+  | 'data-rate'
   | 'pressure'
   | 'power'
+  | 'energy'
   | 'flow'
+  | 'fuel'
   | 'angle'
+  | 'frequency'
   | 'resolution'
 
 /** 至少两个单位（spec §2：units[0] 基准默认源单位，units[1] 默认目标单位） */
 type UnitPair<U> = readonly [U, U, ...U[]]
 
 export interface LinearCategory {
-  readonly id: Exclude<CategoryId, 'temperature' | 'resolution'>
+  readonly id: Exclude<CategoryId, 'temperature' | 'resolution' | 'fuel'>
   readonly name: string
   readonly base: string
   readonly units: UnitPair<LinearUnit>
@@ -61,7 +73,15 @@ export interface ResolutionCategory {
   readonly dpiDefault: number
 }
 
-export type Category = LinearCategory | TempCategory | ResolutionCategory
+/** 油耗：`kmPerLiter` 为统一中间量；`dpm` 取 `value × factor`，`vpd` 取 `factor / value` */
+export interface ConsumptionCategory {
+  readonly id: 'fuel'
+  readonly name: string
+  readonly base: 'L/100km'
+  readonly units: UnitPair<ConsumptionUnit>
+}
+
+export type Category = LinearCategory | TempCategory | ResolutionCategory | ConsumptionCategory
 
 export const CATEGORIES: readonly [Category, ...Category[]] = [
   {
@@ -169,6 +189,20 @@ export const CATEGORIES: readonly [Category, ...Category[]] = [
     ]
   },
   {
+    id: 'data-rate',
+    name: '数据速率',
+    base: 'bps',
+    units: [
+      { id: 'bps', name: '比特/秒 (bps)', factor: 1 },
+      { id: 'Kbps', name: '千比特/秒 (Kbps)', factor: 1e3 },
+      { id: 'Mbps', name: '兆比特/秒 (Mbps)', factor: 1e6 },
+      { id: 'Gbps', name: '吉比特/秒 (Gbps)', factor: 1e9 },
+      { id: 'KBps', name: '千字节/秒 (KB/s)', factor: 8e3 },
+      { id: 'MBps', name: '兆字节/秒 (MB/s)', factor: 8e6 },
+      { id: 'GBps', name: '吉字节/秒 (GB/s)', factor: 8e9 }
+    ]
+  },
+  {
     id: 'pressure',
     name: '压强',
     base: 'Pa',
@@ -195,6 +229,20 @@ export const CATEGORIES: readonly [Category, ...Category[]] = [
     ]
   },
   {
+    id: 'energy',
+    name: '能量',
+    base: 'J',
+    units: [
+      { id: 'J', name: '焦耳 (J)', factor: 1 },
+      { id: 'kJ', name: '千焦 (kJ)', factor: 1000 },
+      { id: 'cal', name: '卡 (cal)', factor: 4.184 },
+      { id: 'kcal', name: '千卡 (kcal)', factor: 4184 },
+      { id: 'Wh', name: '瓦时 (Wh)', factor: 3600 },
+      { id: 'kWh', name: '千瓦时 (kWh)', factor: 3.6e6 },
+      { id: 'BTU', name: '英热单位 (BTU)', factor: 1055.05585262 }
+    ]
+  },
+  {
     id: 'flow',
     name: '流量',
     base: 'L/min',
@@ -208,6 +256,17 @@ export const CATEGORIES: readonly [Category, ...Category[]] = [
     ]
   },
   {
+    id: 'fuel',
+    name: '油耗',
+    base: 'L/100km',
+    units: [
+      { id: 'l100km', name: '升/百公里 (L/100km)', kind: 'vpd', factor: 100 },
+      { id: 'kmpl', name: '公里/升 (km/L)', kind: 'dpm', factor: 1 },
+      { id: 'mpgus', name: '英里/加仑 美制 (mpg)', kind: 'dpm', factor: 1.609344 / 3.785411784 },
+      { id: 'mpguk', name: '英里/加仑 英制 (mpg)', kind: 'dpm', factor: 1.609344 / 4.54609 }
+    ]
+  },
+  {
     id: 'angle',
     name: '角度',
     base: 'deg',
@@ -218,6 +277,17 @@ export const CATEGORIES: readonly [Category, ...Category[]] = [
       { id: 'turn', name: '转 (turn)', factor: 360 },
       { id: 'arcmin', name: '角分 (′)', factor: 1 / 60 },
       { id: 'arcsec', name: '角秒 (″)', factor: 1 / 3600 }
+    ]
+  },
+  {
+    id: 'frequency',
+    name: '频率',
+    base: 'Hz',
+    units: [
+      { id: 'Hz', name: '赫兹 (Hz)', factor: 1 },
+      { id: 'kHz', name: '千赫兹 (kHz)', factor: 1e3 },
+      { id: 'MHz', name: '兆赫兹 (MHz)', factor: 1e6 },
+      { id: 'GHz', name: '吉赫兹 (GHz)', factor: 1e9 }
     ]
   },
   {
