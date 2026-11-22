@@ -62,6 +62,7 @@
 | Q49 | PDF 收敛与 OCR 双模式合并 | **M49（2026-11-21 用户确认）**：① `exam-split` PDF 页签只保留 OCR 前置所需的「拆分 + 裁剪」，合并/删页/旋转下线并引导到 `pdf-toolkit`（plan Q19 已明确裁剪归 exam-split）；② `ocr-text`（单张）与 `batch-ocr`（批量）合并为单一工具，保留 `ocr-text` 身份与入口，迁入 `batch-ocr` 架构实现「单张识别 / 批量识别」双模式，删除 `batch-ocr` 包与全部壳接线；详见 §4.49                                                                                                    |
 | Q50 | 音频互转扩展              | **在既有 `media-convert` 增第五 Tab「音频互转」（2026-11-21 用户选定，M50，不新建工具包）**：仅音频扩展名（mp3/wav/flac/aac/m4a/ogg/opus/wma/aiff）→ 目标格式（mp3/m4a/wav/flac/ogg）+ 码率（128/192/320，wav/flac 无损忽略），复用提取音频编码参数与串行批次语义，`-vn` 丢弃封面轨；视频输入 → `MC_FILE_UNSUPPORTED`；**零新增依赖**（复用 `binaries/download/ffmpeg.exe`）；详见 §4.50                                                                                |
 | Q51 | 屏幕标尺                  | **在既有 `misc-toolbox` 增第三 Tab「屏幕标尺」（2026-11-21 用户选定，M51，不新建工具包）**：desktopCapturer 整屏截图 → 应用内预览拖拽框选，实时显示物理像素/对角线/逻辑像素与 DPI 名义换算 cm/inch；DPI 48–600（默认 96）、多显示器切换、复制结果、Esc 关闭；截屏能力与坐标映射公共上提（`node-kit/src/screen.ts`、`shared/src/geometry.ts`），color-toolbox 改为委托且零回归；**零新增依赖**；详见 §4.51                                                                                |
+| Q52 | 单位补齐（能量/频率/数据速率/油耗） | **在既有 `unit-converter` 扩展 4 类单位至 17 类（2026-11-22 用户选定，M52，不新建工具包）**：能量（J/kJ/cal/kcal/Wh/kWh/BTU，J 基准）、频率（Hz/kHz/MHz/GHz，Hz 基准）、数据速率（bps/Kbps/Mbps/Gbps/KB/s/MB/s/GB/s，SI 十进制）、油耗（L/100km / km/L / mpg 美制 / mpg 英制，倒数模型 + `INVALID_VALUE`）；`convert` 增油耗分支；零新增依赖；详见 §4.52 |
 | —   | 硬约束                    | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -713,6 +714,14 @@ lumin/
 - **错误码**：`MT_CAPTURE_FAILED`（截屏失败/参数非法）、`MT_RULER_INVALID`（DPI 越界）、`MT_CLIPBOARD_FAILED`（复制失败）
 - **验收**：三页签可见；截屏后拖拽出现宽/高/对角线/逻辑尺寸；Esc 关闭；单测/类型检查/gate 全绿；chunk <200KB gzip；spec/smoke/README/CHANGELOG 同步
 
+### 4.52 单位换算补能量/频率/数据速率/油耗（M52，2026-11-22 R8 登记）
+
+- **决策背景**：差距审计仍标记单位换算缺少能量等类别；M36 已补流量/角度/像素，本次补真实剩余缺口，避免重复交付
+- **实现方式**：`data.ts` 新增 4 个类别（13→17）——能量/频率/数据速率为线性 factor；油耗新增 `ConsumptionUnit{kind:'dpm'|'vpd'}` 与 `ConsumptionCategory`，`convert` 增倒数分支，统一中间量 `kmPerLiter`
+- **口径**：数据速率采用 SI 十进制（1 Kbps=1000 bps、1 KB/s=8000 bps），与网络带宽一致；油耗值必须 > 0，否则 `INVALID_VALUE`
+- **UI**：沿用既有类别下拉/收藏/互换，不新增输入控件
+- **验收**：17 类齐全；能量/频率/数据速率/油耗锚点与 `INVALID_VALUE` 单测；e2e 新增油耗倒数与错误态；chunk <200KB gzip；spec/smoke/README/CHANGELOG 同步
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -806,6 +815,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M49 v4.8**  | PDF 能力收敛与 OCR 双模式合并（§4.49，2026-11-21）：`exam-split` PDF 页签仅保留拆分/裁剪（合并/删页/旋转下线并引导 pdf-toolkit）；`ocr-text` 并入 `batch-ocr` 架构提供「单张识别 / 批量识别」双模式，删除 `batch-ocr` 包与全部壳接线；错误码统一 `OCR_*`                                                                                        | §4.49 验收；两包 typecheck/单测/e2e 同步；限包覆盖率 ≥80%；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步      | 0.5 天   |
 | **M50 v4.9**  | 音视频处理扩展：音频互转（§4.50，2026-11-21）：`media-convert` 增第五 Tab「音频互转」，`process` union 增 `audio-convert`；仅音频输入、目标格式 + 码率，编码参数与提取音频共用；零新增依赖                                                                                                                                                      | §4.50 验收；typecheck/单测/e2e 同步（8 用例）；限包覆盖率 ≥80%；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天   |
 | **M51 v5.0**  | 屏幕标尺（§4.51，2026-11-21）：`misc-toolbox` 增第三 Tab「屏幕标尺」—— desktopCapturer 截屏 + 拖拽框选，物理/逻辑像素、对角线、DPI 名义 cm/inch；截屏与坐标映射公共上提 node-kit/shared（color-toolbox 零回归）；零新增依赖                                                                                                                    | §4.51 验收；e2e 新增 1 用例；限包覆盖率 ≥80%；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步                  | 0.5 天   |
+| **M52 v5.1**  | 单位补齐（§4.52，2026-11-22）：`unit-converter` 类别 13→17——能量、频率、数据速率（SI 十进制）、油耗（倒数模型）；`convert` 增油耗分支与 `INVALID_VALUE`；零新增依赖，不新建工具包                                                                                                                                                              | §4.52 验收；包单测；e2e 新增 1 用例；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步                            | 0.5 天   |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
