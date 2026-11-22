@@ -10,9 +10,9 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'qr-code',
   name: '二维码工具',
-  description: '二维码生成与图片识别（PNG/SVG 导出）',
+  description: '二维码生成与图片识别（PNG/SVG 导出、最多 50 张批量识别）',
   icon: 'qr-code',
   category: 'image',
   order: 80,
-  version: '0.1.0'
+  version: '0.2.0'
 })

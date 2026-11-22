@@ -12,7 +12,7 @@ describe('qr-code manifest', () => {
     expect(manifest.name).toBe('二维码工具')
     expect(manifest.icon).toBe('qr-code')
     expect(manifest.order).toBe(80)
-    expect(manifest.version).toBe('0.1.0')
+    expect(manifest.version).toBe('0.2.0')
     expect(manifest.description.length).toBeGreaterThan(0)
   })
 })

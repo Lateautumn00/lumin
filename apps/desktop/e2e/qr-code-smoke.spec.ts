@@ -3,7 +3,7 @@
  * @author cuilanchao
  * @date 2026-11-19
  * @description 覆盖：页面加载/空态/两 Tab（R2.1 中文+空格路径）、生成预览与 PNG/SVG 保存、
- *              重名递增与目录记忆、识别闭环（含损坏图 R2.3、空白图）、尺寸/颜色边界、
+ *              重名递增与目录记忆、识别闭环（含损坏图 R2.3、空白图）、批量识别（上限 50）、尺寸/颜色边界、
  *              超大图（R2.4）、输出目录不可写（R2.7）、并发保存（R2.6）。
  *              前置：pnpm -F @lumin/desktop build（playwright 启动 out/main/index.js）
  */
@@ -152,15 +152,43 @@ test.describe('qr-code（二维码工具）冒烟', () => {
       await expect(page.getByText('拖拽或选择一张包含二维码的图片')).toBeVisible()
 
       await page.setInputFiles('input[type="file"]', qrPng)
-      await expect(page.locator('textarea[readonly]')).toHaveValue(
-        'https://example.com/你好 世界'
-      )
+      await expect(page.locator('textarea[readonly]')).toHaveValue('https://example.com/你好 世界')
 
       await page.setInputFiles('input[type="file"]', broken)
       await expect(page.getByText('图片无法读取，可能已损坏或格式不支持')).toBeVisible()
 
       await page.setInputFiles('input[type="file"]', blank)
       await expect(page.getByText('未识别到二维码，请换更清晰、完整的图片')).toBeVisible()
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('批量识别：3 张（2 有效 + 1 无码）→ 逐张状态与汇总', async () => {
+    const { app, page } = await launch()
+    const workDir = freshDir('lumin-qr-e2e-batch')
+    try {
+      const first = path.join(workDir, 'one.png')
+      const second = path.join(workDir, 'two.png')
+      const blank = path.join(workDir, 'blank.png')
+      await QRCode.toFile(first, 'batch-one', { width: 400, margin: 4 })
+      await QRCode.toFile(second, 'batch-two', { width: 400, margin: 4 })
+      writeBlankPng(blank)
+
+      await clickSidebarTool(page, '二维码工具')
+      await page.getByText('识别', { exact: true }).click()
+      await page.getByText('批量', { exact: true }).click()
+      await expect(page.getByText('拖拽或选择最多 50 张图片批量识别')).toBeVisible()
+
+      await page.setInputFiles('input[type="file"]', [first, second, blank])
+
+      const areas = page.locator('textarea[readonly]')
+      await expect(areas).toHaveCount(2, { timeout: 30_000 })
+      await expect(areas.nth(0)).toHaveValue('batch-one')
+      await expect(areas.nth(1)).toHaveValue('batch-two')
+      await expect(page.getByText('未识别到二维码', { exact: false })).toBeVisible()
+      await expect(page.getByText(/已识别 2/)).toBeVisible()
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true })
       await app.close()
