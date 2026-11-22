@@ -527,9 +527,19 @@ async function processOne(
   const output = join(env.outputDir, name)
 
   // 效果滤镜与缩放互斥（spec §5）：调整只替换像素，不改变尺寸
+  // M55 §4.55：effect 透传调色参数（schema default(0) 后字段必在）
   const filterArgs =
     payload.mode === 'effect'
-      ? ['-vf', buildEffectFilter(payload.options.effect, payload.options.threshold)]
+      ? [
+          '-vf',
+          buildEffectFilter(payload.options.effect, payload.options.threshold, {
+            brightness: payload.options.brightness,
+            contrast: payload.options.contrast,
+            saturation: payload.options.saturation,
+            sharpen: payload.options.sharpen,
+            blur: payload.options.blur
+          })
+        ]
       : scaleArgs
 
   const result = await env.deps.runProcess({

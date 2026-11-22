@@ -3,7 +3,7 @@
  * @author cuilanchao
  * @date 2026-11-18
  * @description 质量 → 各编码器参数（mjpeg/libwebp/libaom-av1/png）、缩放四模式目标尺寸
- *              与「不放大」边界判定、ffmpeg 单张失败原因归类
+ *              与「不放大」边界判定、调整效果与调色滤镜链（M55）、ffmpeg 单张失败原因归类
  */
 import type { EffectKind, OutputFormat } from './naming'
 
@@ -13,20 +13,100 @@ export type { EffectKind } from './naming'
 /** 黑白二值默认阈值（spec §2.4） */
 export const DEFAULT_BINARY_THRESHOLD = 128
 
+/** 调色参数输入（M55 §4.55；0 = 不生效，值域由 schema 保证，此处仍钳制防越界直调） */
+export interface AdjustParams {
+  brightness: number
+  contrast: number
+  saturation: number
+  sharpen: number
+  blur: number
+}
+
+/** 调色全 0 基线（不产生任何滤镜段） */
+export const ZERO_ADJUST: AdjustParams = {
+  brightness: 0,
+  contrast: 0,
+  saturation: 0,
+  sharpen: 0,
+  blur: 0
+}
+
+/** 钳制为整数（非有限值回退 0） */
+function clampInt(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(max, Math.max(min, Math.round(value)))
+}
+
+/** 浮点格式化（最多 2 位小数、去尾零，避免 0.30000000000000004 类噪声） */
+function fmt(value: number): string {
+  return String(Math.round(value * 100) / 100)
+}
+
+/** 调色滤镜分组（M55 §4.55）：color 先于效果、spatial 后于效果 */
+export interface AdjustFilters {
+  /** 色彩段 `eq`（亮度/对比度/饱和度）；null = 无调色 */
+  color: string | null
+  /** 空间段 `unsharp`/`gblur`（锐化/模糊） */
+  spatial: string[]
+}
+
 /**
- * 调整效果 → ffmpeg `-vf` 滤镜（spec §5，纯函数）
- * - 灰度 `hue=s=0` · 反色 `negate`
- * - 黑白二值：先转灰再按阈值硬切（阈值钳制 0–255 取整）
+ * 调色滤镜段求解（M55 §4.55，纯函数；全 0 → 无段，输出与 M40 逐字节一致）
+ * - 亮度 `brightness`：-100..100 → eq -1..1（0 跳过）
+ * - 对比度 `contrast`：-100..100 → eq 1+c/100（0..2；0 跳过）
+ * - 饱和度 `saturation`：-100..100 → eq 1+s/100（0..2；0 跳过）
+ * - 锐化 `sharpen`：0..100 → `unsharp=5:5:{v/50}:5:5:0`（amount 0.02–2）
+ * - 模糊 `blur`：0..100 → `gblur=sigma={v/5}`（0.2–20）
+ * @param adjust 调色参数
+ */
+export function buildAdjustFilters(adjust: AdjustParams): AdjustFilters {
+  const brightness = clampInt(adjust.brightness, -100, 100)
+  const contrast = clampInt(adjust.contrast, -100, 100)
+  const saturation = clampInt(adjust.saturation, -100, 100)
+  const sharpen = clampInt(adjust.sharpen, 0, 100)
+  const blur = clampInt(adjust.blur, 0, 100)
+
+  let color: string | null = null
+  if (brightness !== 0 || contrast !== 0 || saturation !== 0) {
+    const parts: string[] = []
+    if (brightness !== 0) parts.push(`brightness=${fmt(brightness / 100)}`)
+    if (contrast !== 0) parts.push(`contrast=${fmt(1 + contrast / 100)}`)
+    if (saturation !== 0) parts.push(`saturation=${fmt(1 + saturation / 100)}`)
+    color = `eq=${parts.join(':')}`
+  }
+
+  const spatial: string[] = []
+  if (sharpen !== 0) spatial.push(`unsharp=5:5:${fmt(sharpen / 50)}:5:5:0`)
+  if (blur !== 0) spatial.push(`gblur=sigma=${fmt(blur / 5)}`)
+  return { color, spatial }
+}
+
+/**
+ * 调整效果 → ffmpeg `-vf` 滤镜（spec §5，M55 §4.55 支持调色链）
+ * - 链序：`eq`（色彩）→ 效果（灰度 `hue=s=0` / 反色 `negate` / 二值 `format=gray,lut=…`）→ `unsharp`/`gblur`（空间）
+ * - 黑白二值：先转灰再按阈值硬切（阈值钳制 0–255 取整）；调色全 0 或缺省 → 与 M40 输出逐字节一致
  * @param effect 效果类型
  * @param threshold 二值阈值（仅 binary 生效）
+ * @param adjust 调色参数（缺省全 0）
  */
-export function buildEffectFilter(effect: EffectKind, threshold: number): string {
-  if (effect === 'grayscale') return 'hue=s=0'
-  if (effect === 'invert') return 'negate'
-  const value = Number.isFinite(threshold)
-    ? Math.min(255, Math.max(0, Math.round(threshold)))
-    : DEFAULT_BINARY_THRESHOLD
-  return `format=gray,lut=y='if(gt(val,${value}),255,0)'`
+export function buildEffectFilter(
+  effect: EffectKind,
+  threshold: number,
+  adjust: AdjustParams = ZERO_ADJUST
+): string {
+  let base: string
+  if (effect === 'grayscale') {
+    base = 'hue=s=0'
+  } else if (effect === 'invert') {
+    base = 'negate'
+  } else {
+    const value = Number.isFinite(threshold)
+      ? Math.min(255, Math.max(0, Math.round(threshold)))
+      : DEFAULT_BINARY_THRESHOLD
+    base = `format=gray,lut=y='if(gt(val,${value}),255,0)'`
+  }
+  const { color, spatial } = buildAdjustFilters(adjust)
+  return [...(color !== null ? [color] : []), base, ...spatial].join(',')
 }
 
 /** 编码输入（animated = gif/webp 动图输入，走动画路径保留全部帧） */

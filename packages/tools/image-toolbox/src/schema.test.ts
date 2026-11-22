@@ -267,6 +267,45 @@ describe('processPayloadSchema（spec §4 discriminated union）', () => {
       effectOptionsSchema.parse({ effect: 'sepia', threshold: 128, quality: 75 })
     ).toThrow()
   })
+
+  it('effect 调色字段缺省补 0、越界拒绝（M55 §4.55）', () => {
+    const parsed = effectOptionsSchema.parse({
+      effect: 'grayscale',
+      threshold: 128,
+      quality: 75
+    })
+    expect(parsed).toMatchObject({
+      brightness: 0,
+      contrast: 0,
+      saturation: 0,
+      sharpen: 0,
+      blur: 0
+    })
+    expect(() =>
+      effectOptionsSchema.parse({
+        effect: 'grayscale',
+        threshold: 128,
+        quality: 75,
+        brightness: 101
+      })
+    ).toThrow()
+    expect(() =>
+      effectOptionsSchema.parse({
+        effect: 'grayscale',
+        threshold: 128,
+        quality: 75,
+        sharpen: -1
+      })
+    ).toThrow()
+    expect(() =>
+      effectOptionsSchema.parse({
+        effect: 'grayscale',
+        threshold: 128,
+        quality: 75,
+        contrast: 1.5
+      })
+    ).toThrow()
+  })
 })
 
 describe('gifOptionsSchema / makeGifPayloadSchema（M40，spec §2.5）', () => {
