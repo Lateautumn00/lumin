@@ -22,6 +22,7 @@ import { registerMain as ocrTextRegisterMain } from '@lumin/tool-ocr-text/node'
 import { registerMain as pdfImagesRegisterMain } from '@lumin/tool-pdf-images/node'
 import { registerMain as pdfToolkitRegisterMain } from '@lumin/tool-pdf-toolkit/node'
 import { registerMain as qrCodeRegisterMain } from '@lumin/tool-qr-code/node'
+import { registerMain as systemInfoRegisterMain } from '@lumin/tool-system-info/node'
 import { registerMain as videoDownloadRegisterMain } from '@lumin/tool-video-download/node'
 import { registerMain as zipToolRegisterMain } from '@lumin/tool-zip-tool/node'
 
@@ -49,6 +50,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'pdf-images': pdfImagesRegisterMain,
   'pdf-toolkit': pdfToolkitRegisterMain,
   'qr-code': qrCodeRegisterMain,
+  'system-info': systemInfoRegisterMain,
   'video-download': videoDownloadRegisterMain,
   'zip-tool': zipToolRegisterMain
 }

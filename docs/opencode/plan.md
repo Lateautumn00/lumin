@@ -63,6 +63,7 @@
 | Q50 | 音频互转扩展              | **在既有 `media-convert` 增第五 Tab「音频互转」（2026-11-21 用户选定，M50，不新建工具包）**：仅音频扩展名（mp3/wav/flac/aac/m4a/ogg/opus/wma/aiff）→ 目标格式（mp3/m4a/wav/flac/ogg）+ 码率（128/192/320，wav/flac 无损忽略），复用提取音频编码参数与串行批次语义，`-vn` 丢弃封面轨；视频输入 → `MC_FILE_UNSUPPORTED`；**零新增依赖**（复用 `binaries/download/ffmpeg.exe`）；详见 §4.50                                                                                |
 | Q51 | 屏幕标尺                  | **在既有 `misc-toolbox` 增第三 Tab「屏幕标尺」（2026-11-21 用户选定，M51，不新建工具包）**：desktopCapturer 整屏截图 → 应用内预览拖拽框选，实时显示物理像素/对角线/逻辑像素与 DPI 名义换算 cm/inch；DPI 48–600（默认 96）、多显示器切换、复制结果、Esc 关闭；截屏能力与坐标映射公共上提（`node-kit/src/screen.ts`、`shared/src/geometry.ts`），color-toolbox 改为委托且零回归；**零新增依赖**；详见 §4.51                                                                                |
 | Q52 | 单位补齐（能量/频率/数据速率/油耗） | **在既有 `unit-converter` 扩展 4 类单位至 17 类（2026-11-22 用户选定，M52，不新建工具包）**：能量（J/kJ/cal/kcal/Wh/kWh/BTU，J 基准）、频率（Hz/kHz/MHz/GHz，Hz 基准）、数据速率（bps/Kbps/Mbps/Gbps/KB/s/MB/s/GB/s，SI 十进制）、油耗（L/100km / km/L / mpg 美制 / mpg 英制，倒数模型 + `INVALID_VALUE`）；`convert` 增油耗分支；零新增依赖；详见 §4.52 |
+| Q53 | 系统信息查看器 | **新增只读工具 `system-info`（2026-11-22 用户选定，M53）**：操作系统/CPU/内存/磁盘/网络概览 + 一键复制；主进程 `node:os` + `fs.statfs` 采集，单通道 `system-info:snapshot`；零新增依赖、不写盘；详见 §4.53 |
 | —   | 硬约束                    | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -722,6 +723,15 @@ lumin/
 - **UI**：沿用既有类别下拉/收藏/互换，不新增输入控件
 - **验收**：17 类齐全；能量/频率/数据速率/油耗锚点与 `INVALID_VALUE` 单测；e2e 新增油耗倒数与错误态；chunk <200KB gzip；spec/smoke/README/CHANGELOG 同步
 
+### 4.53 系统信息查看器（M53，2026-11-22 R8 登记）
+
+- **决策背景**：工具箱缺少只读的本机概览入口——磁盘/文件夹工具已有，但 CPU/内存/网卡/操作系统无聚合视图
+- **实现方式**：新增独立包 `@lumin/tool-system-info`；主进程 `node:os` + `node:fs/promises.statfs` 采集，单同步通道 `system-info:snapshot`；renderer 五区卡片（操作系统/处理器/内存/磁盘/网络）+ 刷新 + 复制全部
+- **采集口径**：Windows 遍历 `A:`–`Z:` 探测盘符，不可访问静默跳过；网卡过滤回环，最多 32 条；CPU 主频取有效 `speed` 平均值；`used = max(0, total - free)`
+- **三态**：空态引导「采集系统信息」；加载态「正在采集系统信息…」；报错态 `SI_COLLECT_FAILED` + 重试/详情；复制失败 `SI_CLIPBOARD_FAILED`
+- **边界**：只读，不写盘、不改设置、不联网；零新增第三方依赖；工具包仅依赖 plugin-api / shared
+- **验收**：五区与采集时间可见；复制文本含五段；IPC 冒烟断言 cores/totalBytes/disks/networks；包覆盖率 ≥80%；chunk **25,377 B raw / 6,643 B gzip**；spec/smoke/README/CHANGELOG 同步
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -816,6 +826,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M50 v4.9**  | 音视频处理扩展：音频互转（§4.50，2026-11-21）：`media-convert` 增第五 Tab「音频互转」，`process` union 增 `audio-convert`；仅音频输入、目标格式 + 码率，编码参数与提取音频共用；零新增依赖                                                                                                                                                      | §4.50 验收；typecheck/单测/e2e 同步（8 用例）；限包覆盖率 ≥80%；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天   |
 | **M51 v5.0**  | 屏幕标尺（§4.51，2026-11-21）：`misc-toolbox` 增第三 Tab「屏幕标尺」—— desktopCapturer 截屏 + 拖拽框选，物理/逻辑像素、对角线、DPI 名义 cm/inch；截屏与坐标映射公共上提 node-kit/shared（color-toolbox 零回归）；零新增依赖                                                                                                                    | §4.51 验收；e2e 新增 1 用例；限包覆盖率 ≥80%；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步                  | 0.5 天   |
 | **M52 v5.1**  | 单位补齐（§4.52，2026-11-22）：`unit-converter` 类别 13→17——能量、频率、数据速率（SI 十进制）、油耗（倒数模型）；`convert` 增油耗分支与 `INVALID_VALUE`；零新增依赖，不新建工具包                                                                                                                                                              | §4.52 验收；包单测；e2e 新增 1 用例；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步                            | 0.5 天   |
+| **M53 v5.2**  | 系统信息查看器（§4.53，2026-11-22）：新增只读工具 `system-info`——`node:os` + `fs.statfs` 采集 OS/CPU/内存/磁盘/网络，单通道 `system-info:snapshot`；五区卡片 + 刷新 + 复制全部；零新增依赖、不写盘                                                                                                                                            | §4.53 验收；单测 34；e2e 新增 2 用例；限包覆盖率 ≥80%；chunk 6,643 B gzip；`pnpm gate` 全绿（2,480 测试）；文档五处同步 | 0.5 天   |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
