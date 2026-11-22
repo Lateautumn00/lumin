@@ -18,11 +18,8 @@ import { ocrModelDir, verifyOcrAssets } from './ocr-assets'
 import type { OpResult, WorkerRequest } from './pdf-ops'
 import {
   cropPayloadSchema,
-  deletePayloadSchema,
-  mergePayloadSchema,
   ocrDetectPayloadSchema,
   ocrExportPayloadSchema,
-  rotatePayloadSchema,
   splitPayloadSchema
 } from './schema'
 
@@ -99,7 +96,7 @@ function parseWith<T>(schema: ZodType<T>, payload: unknown): T {
 
 type TaskArgs = Pick<TaskHandlerContext<unknown>, 'signal' | 'emit'>
 
-/** 注册七个任务通道（split/merge/delete/rotate/crop/ocr-detect/ocr-export），可注入 deps 供测试 */
+/** 注册四个任务通道（split/crop/ocr-detect/ocr-export），可注入 deps 供测试 */
 export function registerWith(ctx: MainPluginContext, deps: ExamSplitDeps): void {
   async function runWorker(request: WorkerRequest, args: TaskArgs): Promise<OpResult> {
     try {
@@ -133,24 +130,6 @@ export function registerWith(ctx: MainPluginContext, deps: ExamSplitDeps): void 
     const parsed = parseWith(splitPayloadSchema, payload)
     await precheckInputs([parsed.inputPath], deps)
     return runWorker({ op: 'split', payload: parsed }, { signal, emit })
-  })
-
-  ctx.registerTask('merge', async ({ payload, signal, emit }) => {
-    const parsed = parseWith(mergePayloadSchema, payload)
-    await precheckInputs(parsed.inputPaths, deps)
-    return runWorker({ op: 'merge', payload: parsed }, { signal, emit })
-  })
-
-  ctx.registerTask('delete', async ({ payload, signal, emit }) => {
-    const parsed = parseWith(deletePayloadSchema, payload)
-    await precheckInputs([parsed.inputPath], deps)
-    return runWorker({ op: 'delete', payload: parsed }, { signal, emit })
-  })
-
-  ctx.registerTask('rotate', async ({ payload, signal, emit }) => {
-    const parsed = parseWith(rotatePayloadSchema, payload)
-    await precheckInputs([parsed.inputPath], deps)
-    return runWorker({ op: 'rotate', payload: parsed }, { signal, emit })
   })
 
   ctx.registerTask('crop', async ({ payload, signal, emit }) => {

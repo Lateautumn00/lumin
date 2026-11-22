@@ -2,6 +2,8 @@
 
 > 环境：Windows · Electron 45.3.1 · 分支：`feature/m0-skeleton`
 > 日期：2026-11-15（M3a）/ 2026-11-18（M3b P3）· 工具：`@lumin/tool-exam-split` v0.0.0
+>
+> **M49（2026-11-21）收敛说明**：PDF 页签已下线「合并/删页/旋转」，仅保留拆分与裁剪；下列 M3a 历史记录中涉及这三项的数据保留不改写，作为当时的验收存档。当前 R2 覆盖以拆分/裁剪为准。
 
 ## 1. 冒烟总览
 
@@ -51,7 +53,8 @@
 ## 4. R5 体积记录
 
 - 口径：gzip（2026-11-13 M1 决策：工具 chunk + 独占依赖 chunk；运行时资产单列不计入）。
-- `exam-split-*.js`：**M3b P4 复测 raw 733.5KB / gzip 184.1KB < 200KB 基线 ✅**（P4 增加旋转/跨页 UI 后较 P3 177.6KB +6.5KB；M3a 历史值 raw 843.6KB / gzip 189.5KB、P3 值 712.0KB / 177.6KB 保留不改写）。对照：计算器 214.3KB、单位换算 37.9KB（同一未压缩构建口径，未复测）。
+- `exam-split-*.js`：**M49 复测 raw 705,122 B / gzip 177,363 B（173.2KB）< 200KB 基线 ✅**（PDF 页签收敛为拆分/裁剪、OCR 能力不变；较 M3b P4 gzip 184.1KB 减少 6.8KB）。M3b P4 复测 raw 733.5KB / gzip 184.1KB、M3a 历史值 raw 843.6KB / gzip 189.5KB、P3 值 712.0KB / 177.6KB 保留不改写。对照：计算器 214.3KB、单位换算 37.9KB（同一未压缩构建口径，未复测）。
+- M49 e2e 复跑：`exam-split-smoke` 13/13 + `ocr-text-smoke` 4/4，合计 17 passed（`--workers=1`，真实模型）。
 - 运行时资产单列（按需加载，不计入上限）：
   - renderer `pdf.worker.min-*.mjs` raw 1,242.1KB / **gzip 370.4KB**
   - 主进程 `out/main/chunks/ocr.worker-*.js` raw 1,119.6KB / gzip 306.8KB（推理 + pdfjs 渲染，worker 内按需；P4 切 onnxruntime-node 后较 wasm 版 +30KB）

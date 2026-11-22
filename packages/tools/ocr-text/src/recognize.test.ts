@@ -1,141 +1,145 @@
-/**
- * @file recognize 编排单测（假渲染/引擎，不触碰真实 OCR）
+﻿/**
+ * @file 批量识别编排单测（假引擎/渲染，不触碰真实 OCR）
  * @author cuilanchao
- * @date 2026-11-19
- * @description 正常顺序、进度阶段、空结果、结构化透传、非结构化包装
+ * @date 2026-11-20
+ * @description 引擎单次创建、逐张失败不中断、结果同序、空结果/无文字/异常归一与进度阶段
  */
 import { describe, expect, it, vi } from 'vitest'
-import type { OcrEngine, RenderedPage } from '@lumin/ocr-kit'
-import type { StructuredError } from '@lumin/shared'
-import { toolError } from './errors'
-import { runRecognize, type RecognizeDeps, type RecognizeProgress } from './recognize'
-import type { OcrTextLine } from './schema'
+import type { OcrEngine, OcrLine, RenderedPage } from '@lumin/ocr-kit'
+import type { RgbaImage } from '@lumin/ocr-kit'
+import { runBatch, type BatchDeps } from './recognize'
 
-/** 1×1 透明页（仅占位，识别由假引擎返回） */
-function fakePage(): RenderedPage {
-  return {
-    pageNumber: 1,
-    width: 100,
-    height: 50,
-    image: { data: new Uint8ClampedArray(4), width: 1, height: 1 }
-  }
+const IMAGE: RgbaImage = { data: new Uint8ClampedArray(0), width: 100, height: 50 }
+
+function page(): RenderedPage {
+  return { pageNumber: 1, width: 100, height: 50, image: IMAGE }
 }
 
-function line(text: string, x: number, y: number): OcrTextLine {
-  return { text, x, y, width: 0.2, height: 0.05 }
+function ocrLine(text: string): OcrLine {
+  return { text, x: 0.1, y: 0.1, width: 0.2, height: 0.05 }
 }
 
-/** 构造依赖；render/engine 行为可按用例覆盖 */
-function createDeps(overrides: Partial<RecognizeDeps> = {}): RecognizeDeps {
+/** 可注入假件：render 按路径映射，detect 返回固定行 */
+function deps(overrides: Partial<BatchDeps> = {}): BatchDeps {
   return {
-    render: async () => [fakePage()],
-    createEngine: async (): Promise<OcrEngine> => ({
-      detectLines: async () => [line('右', 0.6, 0.1), line('左', 0.1, 0.11)]
-    }),
+    render: vi.fn(async () => [page()]),
+    createEngine: vi.fn(async (): Promise<OcrEngine> => ({
+      detectLines: async () => [ocrLine('第一行'), ocrLine('第二行')]
+    })),
     ...overrides
   }
 }
 
-async function expectCode(promise: Promise<unknown>, code: string): Promise<StructuredError> {
-  try {
-    await promise
-  } catch (err) {
-    const structured = err as StructuredError
-    expect(structured.code).toBe(code)
-    return structured
-  }
-  throw new Error(`期望抛出 ${code}，实际成功`)
-}
+describe('runBatch', () => {
+  it('多张图片只创建一个引擎，结果与输入同序并拼接文本', async () => {
+    const batchDeps = deps()
+    const result = await runBatch(
+      { inputPaths: ['C:\\a.png', 'C:\\b.png'], binariesDir: 'C:\\ocr' },
+      batchDeps,
+      () => undefined
+    )
+    expect(batchDeps.createEngine).toHaveBeenCalledTimes(1)
+    expect(batchDeps.createEngine).toHaveBeenCalledWith('C:\\ocr')
+    expect(result.items).toEqual([
+      { status: 'done', inputPath: 'C:\\a.png', width: 100, height: 50, text: '第一行\n第二行' },
+      { status: 'done', inputPath: 'C:\\b.png', width: 100, height: 50, text: '第一行\n第二行' }
+    ])
+  })
 
-describe('runRecognize', () => {
-  it('按阅读顺序返回并上抛 render/detect 进度', async () => {
-    const progress: RecognizeProgress[] = []
-    const result = await runRecognize(
-      { inputPath: 'C:\\图片 目录\\a.png', binariesDir: 'C:\\bin\\ocr' },
-      createDeps(),
+  it('单张渲染失败不中断整批，失败项带结构化错误', async () => {
+    const batchDeps = deps({
+      render: vi.fn(async (path: string) => {
+        if (path.endsWith('bad.png')) throw new Error('decode failed')
+        return [page()]
+      })
+    })
+    const result = await runBatch(
+      { inputPaths: ['C:\\bad.png', 'C:\\ok.png'], binariesDir: 'C:\\ocr' },
+      batchDeps,
+      () => undefined
+    )
+    expect(result.items[0]).toMatchObject({
+      status: 'failed',
+      error: { code: 'OCR_FAILED', detail: 'decode failed' }
+    })
+    expect(result.items[1]).toMatchObject({ status: 'done' })
+  })
+
+  it('渲染结果为空 → OCR_INPUT_INVALID；无文字 → OCR_NO_TEXT；结构化错误透传', async () => {
+    const empty = deps({ render: vi.fn(async () => []) })
+    const emptyResult = await runBatch(
+      { inputPaths: ['C:\\a.png'], binariesDir: 'C:\\ocr' },
+      empty,
+      () => undefined
+    )
+    expect(emptyResult.items[0]).toMatchObject({ error: { code: 'OCR_INPUT_INVALID' } })
+
+    const noText = deps({
+      createEngine: vi.fn(async (): Promise<OcrEngine> => ({ detectLines: async () => [] }))
+    })
+    const noTextResult = await runBatch(
+      { inputPaths: ['C:\\a.png'], binariesDir: 'C:\\ocr' },
+      noText,
+      () => undefined
+    )
+    expect(noTextResult.items[0]).toMatchObject({ error: { code: 'OCR_NO_TEXT' } })
+
+    const structured = deps({
+      createEngine: vi.fn(async (): Promise<OcrEngine> => ({
+        detectLines: async () => {
+          throw { code: 'OCR_FAILED', message: '推理失败' }
+        }
+      }))
+    })
+    const structuredResult = await runBatch(
+      { inputPaths: ['C:\\a.png'], binariesDir: 'C:\\ocr' },
+      structured,
+      () => undefined
+    )
+    expect(structuredResult.items[0]).toMatchObject({
+      error: { code: 'OCR_FAILED', message: '推理失败' }
+    })
+  })
+
+  it('引擎创建失败作为任务级错误向上抛出', async () => {
+    const batchDeps = deps({
+      createEngine: vi.fn(async (): Promise<OcrEngine> => {
+        throw { code: 'MODEL_MISSING', message: '模型缺失' }
+      })
+    })
+    await expect(
+      runBatch({ inputPaths: ['C:\\a.png'], binariesDir: 'C:\\ocr' }, batchDeps, () => undefined)
+    ).rejects.toMatchObject({ code: 'MODEL_MISSING' })
+  })
+
+  it('进度覆盖 render/detect 阶段并以完成态收尾', async () => {
+    const progress: { stage: string; current: number; total: number }[] = []
+    await runBatch(
+      { inputPaths: ['C:\\a.png', 'C:\\b.png'], binariesDir: 'C:\\ocr' },
+      deps(),
       (update) => progress.push(update)
     )
-
-    expect(result.width).toBe(100)
-    expect(result.height).toBe(50)
-    expect(result.lines.map((item) => item.text)).toEqual(['左', '右'])
-    expect(progress[0]?.stage).toBe('render')
-    expect(progress.some((item) => item.stage === 'detect')).toBe(true)
-    expect(progress[progress.length - 1]?.message).toBe('识别完成')
+    expect(progress.map((item) => item.stage)).toEqual([
+      'render',
+      'detect',
+      'render',
+      'detect',
+      'detect'
+    ])
+    expect(progress[progress.length - 1]).toMatchObject({ current: 2, total: 2 })
   })
 
-  it('render 的 onPage 回调转换为 render 进度', async () => {
-    const progress: RecognizeProgress[] = []
-    const deps = createDeps({
-      render: async (_path, options) => {
-        options?.onPage?.(1, 1)
-        return [fakePage()]
-      }
+  it('空文本行（仅空白）归 OCR_NO_TEXT', async () => {
+    const blank = deps({
+      createEngine: vi.fn(async (): Promise<OcrEngine> => ({
+        detectLines: async () => [ocrLine('   ')]
+      }))
     })
-    await runRecognize({ inputPath: 'a.png', binariesDir: 'x' }, deps, (update) =>
-      progress.push(update)
+    const result = await runBatch(
+      { inputPaths: ['C:\\a.png'], binariesDir: 'C:\\ocr' },
+      blank,
+      () => undefined
     )
-    expect(progress.some((item) => item.stage === 'render' && item.current === 1)).toBe(true)
-  })
-
-  it('零识别行归 OCR_NO_TEXT', async () => {
-    const deps = createDeps({
-      createEngine: async () => ({ detectLines: async () => [] })
-    })
-    await expectCode(runRecognize({ inputPath: 'a.png', binariesDir: 'x' }, deps, () => undefined), 'OCR_NO_TEXT')
-  })
-
-  it('渲染结果为空归 OCR_INPUT_INVALID', async () => {
-    const deps = createDeps({ render: async () => [] })
-    await expectCode(runRecognize({ inputPath: 'a.png', binariesDir: 'x' }, deps, () => undefined), 'OCR_INPUT_INVALID')
-  })
-
-  it('结构化错误原样透传', async () => {
-    const deps = createDeps({
-      createEngine: async () => {
-        throw toolError('MODEL_MISSING', 'det: ENOENT')
-      }
-    })
-    const error = await expectCode(
-      runRecognize({ inputPath: 'a.png', binariesDir: 'x' }, deps, () => undefined),
-      'MODEL_MISSING'
-    )
-    expect(error.detail).toBe('det: ENOENT')
-  })
-
-  it('非结构化异常包 OCR_FAILED 并带尾部细节', async () => {
-    const deps = createDeps({
-      createEngine: async () => {
-        throw new Error('native binding missing')
-      }
-    })
-    const error = await expectCode(
-      runRecognize({ inputPath: 'a.png', binariesDir: 'x' }, deps, () => undefined),
-      'OCR_FAILED'
-    )
-    expect(error.detail).toContain('native binding missing')
-  })
-
-  it('抛出非 Error 值同样包 OCR_FAILED（字符串化细节）', async () => {
-    const boom: unknown = 'string boom'
-    const deps = createDeps({
-      createEngine: async () => {
-        throw boom
-      }
-    })
-    const error = await expectCode(
-      runRecognize({ inputPath: 'a.png', binariesDir: 'x' }, deps, () => undefined),
-      'OCR_FAILED'
-    )
-    expect(error.detail).toContain('string boom')
-  })
-
-  it('识别引擎抛错同样归 OCR_FAILED', async () => {
-    const detectLines = vi.fn(async () => {
-      throw new Error('ort failed')
-    })
-    const deps = createDeps({ createEngine: async () => ({ detectLines }) })
-    await expectCode(runRecognize({ inputPath: 'a.png', binariesDir: 'x' }, deps, () => undefined), 'OCR_FAILED')
-    expect(detectLines).toHaveBeenCalledTimes(1)
+    expect(result.items[0]).toMatchObject({ error: { code: 'OCR_NO_TEXT' } })
   })
 })

@@ -1,10 +1,10 @@
 /**
  * @file ocr-text renderer 类型化 invoke 封装（AGENTS §6：只经 window.lumin 白名单 bridge）
  * @author cuilanchao
- * @date 2026-11-19
- * @description recognize 三段式任务 + save-txt/config 同步通道；类型来自 schema.ts
+ * @date 2026-11-20
+ * @description recognize 三段式任务 + export/config 同步通道；类型来自 schema.ts
  */
-import type { ConfigResult, RecognizePayload, SaveTxtPayload, SaveTxtResult } from '../schema'
+import type { ConfigResult, ExportPayload, ExportResult, RecognizePayload } from '../schema'
 
 /** 提交识别任务（返回 taskId，进度经 onTaskEvent 推送） */
 export function submitRecognize(payload: RecognizePayload): Promise<{ taskId: string }> {
@@ -16,9 +16,9 @@ export function config(): Promise<ConfigResult> {
   return window.lumin.invoke('ocr-text:config', {})
 }
 
-/** 导出编辑后的文本为 TXT（主进程冲突递增命名 + 原子写盘） */
-export function saveTxt(payload: SaveTxtPayload): Promise<SaveTxtResult> {
-  return window.lumin.invoke('ocr-text:save-txt', payload)
+/** 导出 TXT：mode=per-file 逐张 / merged 合并（主进程冲突递增命名 + 原子写盘） */
+export function exportTxt(payload: ExportPayload): Promise<ExportResult> {
+  return window.lumin.invoke('ocr-text:export', payload)
 }
 
 /** 取消当前识别任务 */

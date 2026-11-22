@@ -208,12 +208,6 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
-        'packages/tools/batch-ocr/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
         'packages/tools/color-toolbox/src/**/*.ts': {
           lines: 80,
           functions: 80,

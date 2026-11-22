@@ -1,7 +1,7 @@
 /**
  * @file errors 单测（文案、detail 透传、重试判定）
  * @author cuilanchao
- * @date 2026-11-19
+ * @date 2026-11-20
  */
 import { describe, expect, it } from 'vitest'
 import { errnoCode, isRetryable, isStructuredError, toolError } from './errors'
@@ -42,7 +42,7 @@ describe('isRetryable', () => {
       'OCR_INVALID_PAYLOAD',
       'OCR_FILE_NOT_FOUND',
       'OCR_IMAGE_TOO_LARGE',
-      'OCR_INPUT_INVALID',
+      'OCR_TOO_MANY_FILES',
       'CANCELLED'
     ]) {
       expect(isRetryable(code)).toBe(false)
@@ -51,8 +51,8 @@ describe('isRetryable', () => {
 })
 
 describe('shared 委托', () => {
-  it('isStructuredError / errnoCode 行为一致', () => {
-    expect(isStructuredError(toolError('OCR_FAILED'))).toBe(true)
+  it('isStructuredError / errnoCode', () => {
+    expect(isStructuredError({ code: 'OCR_NO_TEXT', message: 'x' })).toBe(true)
     expect(isStructuredError(new Error('x'))).toBe(false)
     expect(errnoCode(Object.assign(new Error('x'), { code: 'ENOENT' }))).toBe('ENOENT')
     expect(errnoCode(new Error('x'))).toBe('')

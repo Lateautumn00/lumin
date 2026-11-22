@@ -1,81 +1,87 @@
 /**
- * @file schema 单测（输入白名单/比例框/文本长度）
+ * @file schema 单测（输入白名单/数量上限/去重/导出载荷）
  * @author cuilanchao
- * @date 2026-11-19
+ * @date 2026-11-20
  */
 import { describe, expect, it } from 'vitest'
 import {
-  MAX_TEXT_LENGTH,
-  ocrTextLineSchema,
+  exportPayloadSchema,
+  MAX_BATCH_FILES,
   recognizePayloadSchema,
-  recognizeResultSchema,
-  saveTxtPayloadSchema
+  recognizeResultSchema
 } from './schema'
 
 describe('recognizePayloadSchema', () => {
-  it('接受 png/jpg/jpeg/webp（大小写不敏感）与中文/空格路径', () => {
-    for (const path of [
-      'C:\\图片 目录\\截图.PNG',
-      'a.JPG',
-      'a.jpeg',
-      'a.webp',
-      'D:/x/y.JpEg'
-    ]) {
-      expect(recognizePayloadSchema.safeParse({ inputPath: path }).success).toBe(true)
+  it('接受 1–50 张 PNG/JPG/WebP（大小写不敏感、中文/空格路径）', () => {
+    const paths = Array.from(
+      { length: MAX_BATCH_FILES },
+      (_, index) => `C:\\图片 目录\\第${index}张.PNG`
+    )
+    expect(recognizePayloadSchema.safeParse({ inputPaths: paths }).success).toBe(true)
+    for (const path of ['a.JPG', 'a.jpeg', 'D:/x/y.JpEg', 'a.webp']) {
+      expect(recognizePayloadSchema.safeParse({ inputPaths: [path] }).success).toBe(true)
     }
   })
 
-  it('拒绝 PDF 与其他扩展名', () => {
-    for (const path of ['a.pdf', 'a.gif', 'a.txt', '']) {
-      expect(recognizePayloadSchema.safeParse({ inputPath: path }).success).toBe(false)
-    }
-  })
-})
-
-describe('ocrTextLineSchema', () => {
-  it('接受图内比例框', () => {
-    expect(
-      ocrTextLineSchema.safeParse({ text: '你好', x: 0.1, y: 0.2, width: 0.3, height: 0.1 })
-        .success
-    ).toBe(true)
-  })
-
-  it('拒绝越界框与空文本', () => {
-    expect(
-      ocrTextLineSchema.safeParse({ text: 'x', x: 0.8, y: 0, width: 0.3, height: 0.1 }).success
-    ).toBe(false)
-    expect(
-      ocrTextLineSchema.safeParse({ text: '', x: 0, y: 0, width: 0.1, height: 0.1 }).success
-    ).toBe(false)
+  it('拒绝空数组、超过 50 张、PDF/其他扩展名与重复路径', () => {
+    expect(recognizePayloadSchema.safeParse({ inputPaths: [] }).success).toBe(false)
+    const tooMany = Array.from({ length: MAX_BATCH_FILES + 1 }, (_, index) => `${index}.png`)
+    expect(recognizePayloadSchema.safeParse({ inputPaths: tooMany }).success).toBe(false)
+    expect(recognizePayloadSchema.safeParse({ inputPaths: ['a.pdf'] }).success).toBe(false)
+    expect(recognizePayloadSchema.safeParse({ inputPaths: ['a.gif'] }).success).toBe(false)
+    expect(recognizePayloadSchema.safeParse({ inputPaths: ['a.png', 'a.png'] }).success).toBe(false)
   })
 })
 
 describe('recognizeResultSchema', () => {
-  it('至少一行且尺寸为正整数', () => {
-    const line = { text: 'a', x: 0, y: 0, width: 0.1, height: 0.1 }
-    expect(recognizeResultSchema.safeParse({ width: 10, height: 20, lines: [line] }).success).toBe(
-      true
-    )
-    expect(recognizeResultSchema.safeParse({ width: 10, height: 20, lines: [] }).success).toBe(false)
-    expect(recognizeResultSchema.safeParse({ width: 0, height: 20, lines: [line] }).success).toBe(
-      false
-    )
+  it('接受成功/失败混合结果', () => {
+    expect(
+      recognizeResultSchema.safeParse({
+        items: [
+          { status: 'done', inputPath: 'a.png', width: 10, height: 10, text: '文字' },
+          { status: 'failed', inputPath: 'b.png', error: { code: 'OCR_NO_TEXT', message: '无文字' } }
+        ]
+      }).success
+    ).toBe(true)
+  })
+
+  it('拒绝空结果与缺字段', () => {
+    expect(recognizeResultSchema.safeParse({ items: [] }).success).toBe(false)
+    expect(
+      recognizeResultSchema.safeParse({
+        items: [{ status: 'done', inputPath: 'a.png', width: 0, height: 10, text: 'x' }]
+      }).success
+    ).toBe(false)
+    expect(
+      recognizeResultSchema.safeParse({ items: [{ status: 'failed', inputPath: 'a.png' }] }).success
+    ).toBe(false)
   })
 })
 
-describe('saveTxtPayloadSchema', () => {
-  const valid = { outputDir: 'C:\\导出 目录', inputPath: 'C:\\a.png', text: 'hello' }
-
-  it('接受合法载荷', () => {
-    expect(saveTxtPayloadSchema.safeParse(valid).success).toBe(true)
+describe('exportPayloadSchema', () => {
+  it('接受 per-file/merged 合法载荷', () => {
+    for (const mode of ['per-file', 'merged']) {
+      expect(
+        exportPayloadSchema.safeParse({
+          outputDir: 'C:\\导出 目录',
+          mode,
+          items: [{ fileName: '中文 名称.PNG', text: '内容' }]
+        }).success
+      ).toBe(true)
+    }
   })
 
-  it('拒绝空目录/非图片/空文本/超长文本', () => {
-    expect(saveTxtPayloadSchema.safeParse({ ...valid, outputDir: '' }).success).toBe(false)
-    expect(saveTxtPayloadSchema.safeParse({ ...valid, inputPath: 'a.pdf' }).success).toBe(false)
-    expect(saveTxtPayloadSchema.safeParse({ ...valid, text: '' }).success).toBe(false)
+  it('拒绝缺目录、未知模式、路径分隔符、空文本与超长文本', () => {
+    const base = { outputDir: 'C:\\x', mode: 'merged', items: [{ fileName: 'a.png', text: 'x' }] }
+    expect(exportPayloadSchema.safeParse({ ...base, outputDir: '' }).success).toBe(false)
+    expect(exportPayloadSchema.safeParse({ ...base, mode: 'other' }).success).toBe(false)
     expect(
-      saveTxtPayloadSchema.safeParse({ ...valid, text: 'x'.repeat(MAX_TEXT_LENGTH + 1) }).success
+      exportPayloadSchema.safeParse({ ...base, items: [{ fileName: 'a/b.png', text: 'x' }] })
+        .success
     ).toBe(false)
+    expect(
+      exportPayloadSchema.safeParse({ ...base, items: [{ fileName: 'a.png', text: '' }] }).success
+    ).toBe(false)
+    expect(exportPayloadSchema.safeParse({ ...base, items: [] }).success).toBe(false)
   })
 })

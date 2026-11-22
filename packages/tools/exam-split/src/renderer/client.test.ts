@@ -3,11 +3,8 @@ import {
   cancelTask,
   revealPath,
   submitCrop,
-  submitDelete,
-  submitMerge,
   submitOcrDetect,
   submitOcrExport,
-  submitRotate,
   submitSplit
 } from './client'
 
@@ -40,17 +37,8 @@ afterEach(() => {
 })
 
 describe('renderer client（exam-split:* 通道，spec §4）', () => {
-  it('五个提交函数走对应任务通道并回传 taskId', async () => {
+  it('两个提交函数走对应任务通道并回传 taskId', async () => {
     await expect(submitSplit({ inputPath: 'a.pdf', ranges: '1-2' })).resolves.toEqual({
-      taskId: 'task-9'
-    })
-    await expect(submitMerge({ inputPaths: ['a.pdf', 'b.pdf'] })).resolves.toEqual({
-      taskId: 'task-9'
-    })
-    await expect(submitDelete({ inputPath: 'a.pdf', ranges: '3' })).resolves.toEqual({
-      taskId: 'task-9'
-    })
-    await expect(submitRotate({ inputPath: 'a.pdf', degrees: 180 })).resolves.toEqual({
       taskId: 'task-9'
     })
     await expect(
@@ -59,13 +47,13 @@ describe('renderer client（exam-split:* 通道，spec §4）', () => {
 
     expect(calls.map((call) => call.channel)).toEqual([
       'exam-split:split',
-      'exam-split:merge',
-      'exam-split:delete',
-      'exam-split:rotate',
       'exam-split:crop'
     ])
     expect(calls[0]?.payload).toEqual({ inputPath: 'a.pdf', ranges: '1-2' })
-    expect(calls[3]?.payload).toEqual({ inputPath: 'a.pdf', degrees: 180 })
+    expect(calls[1]?.payload).toEqual({
+      inputPath: 'a.pdf',
+      box: { x: 0, y: 0, width: 1, height: 1 }
+    })
   })
 
   it('cancelTask 走通用取消通道', async () => {

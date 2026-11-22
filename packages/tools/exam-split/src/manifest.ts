@@ -3,7 +3,7 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'exam-split',
   name: '试卷切割',
-  description: '试卷 OCR 自动切题，以及 PDF 拆页、合并、删页、旋转与裁剪',
+  description: '试卷 OCR 自动切题；PDF 拆页与裁剪作为 OCR 前置处理（其余 PDF 操作见「PDF 工具集」）',
   icon: 'scissors',
   category: 'document',
   order: 40,

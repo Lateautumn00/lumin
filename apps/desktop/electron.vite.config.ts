@@ -150,18 +150,6 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/ocr-text/src/renderer/$1')
   },
   {
-    find: /^@lumin\/tool-batch-ocr\/manifest$/,
-    replacement: r('../../packages/tools/batch-ocr/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-batch-ocr\/node$/,
-    replacement: r('../../packages/tools/batch-ocr/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-batch-ocr\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/batch-ocr/src/renderer/$1')
-  },
-  {
     find: /^@lumin\/tool-color-toolbox\/manifest$/,
     replacement: r('../../packages/tools/color-toolbox/src/manifest.ts')
   },
