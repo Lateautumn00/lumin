@@ -58,6 +58,7 @@
 | Q45 | 开发工具扩展 | **在既有 `dev-toolbox` 增「JWT 解码」与「UUID 生成」两页签（2026-11-21 用户选定，M45，不新建工具包）**：JWT 仅 Base64URL 解码 header/payload 并解析 exp/iat 时效（**不做签名校验、不联网**），结构非法报 `DT_JWT_INVALID`；UUID 生成 RFC 4122 v4（批量 1–100）与时间戳 ID（`yyyyMMdd-HHmmss-xxxx`）；**纯 renderer、零 IPC、零新增依赖**；详见 §4.45 |
 | Q46 | 颜色工具箱扩展 | **在既有 `color-toolbox` 增「图片调色板」区块（2026-11-21 用户选定，M46，不新建工具包）**：本地选图（≤20MB）→ renderer canvas 下采样（最长边 ≤480px）读 RGBA → 量化聚合主色 Top 8 与占比，色块点击联动主色、可复制整组；非图片/超大/解码失败报 `CT_PALETTE_FAILED`；**纯 renderer、零 IPC、零新增依赖**（`createImageBitmap` + canvas 内置能力）；详见 §4.46 |
 | Q47 | 文本工具箱扩展 | **在既有 `text-toolbox` 增「CSV/JSON」页签（2026-11-21 用户选定，M47，不新建工具包）**：CSV → JSON（RFC 4180 引号/转义、逗号/制表符/分号/竖线、首行表头开关）与 JSON 对象数组 → CSV 双向，错误码 `TT_CSV_INVALID`（detail 带行号）；**纯 renderer、零 IPC、零新增依赖**；详见 §4.47 |
+| Q48 | 工具去重与文案校正 | **M48（2026-11-21 用户确认）**：① 删除 `dev-toolbox` 的「UUID 生成」页签，UUID 统一由 `password-generator` 提供；② 删除 `time-toolbox` 的「倒计时」页签，时长倒计时与提醒统一由 `misc-toolbox` 计时器提供（保留蜂鸣能力，避免功能回退）；③ 修正 manifest 文案漏项（text-toolbox 补摩尔斯、color-toolbox 补吸管/调色板、exam-split 去掉「OCR 敬请期待」）；④ 消除 order 冲突（fs-cleaner 66→69、example 90→95）；详见 §4.48 |
 | —   | 硬约束        | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -673,6 +674,16 @@ lumin/
 - **三态**：输入/输出 placeholder + 「填入示例」空态；>200KB 复用分帧 busy；结构化错误 → 中文文案 + detail
 - **验收**：csv 单测 26 例；e2e 新增「CSV → JSON」与「JSON → CSV + 列数不一致报错」两用例；本包覆盖率 96.72 / 92.08 / 100 / 100；chunk **77,047 B raw / 16,663 B gzip**；R2 映射见 `docs/smoke/text-toolbox.md` §7
 
+### 4.48 工具去重与文案校正（M48，2026-11-21 R8 登记）
+
+- **决策背景**：M8–M47 连续扩展后审计发现重复入口与文案漂移；用户确认按「去重优先、功能不回退」处理
+- **UUID 去重**：删除 `dev-toolbox`「UUID 生成」页签及 `uuid.ts` / `uuid.test.ts` / `UuidPanel.vue`；UUID v4 批量统一由 `password-generator` 提供（其页签保留）
+- **倒计时去重**：删除 `time-toolbox`「倒计时」页签及 `countdownTo` / `Countdown` 与 3 例单测；`misc-toolbox` 计时器保留秒表/倒计时/番茄钟（唯一带蜂鸣与标题提醒的入口），时间工具箱回归纯时间换算/时区/时长/日历差/Cron
+- **文案校正**：`text-toolbox` 描述补「摩尔斯电码」；`color-toolbox` 描述补「吸管取色与图片调色板」；`exam-split` 描述由「OCR 切题敬请期待」改为「试卷 OCR 自动切题 + PDF 拆页/合并/删页/旋转/裁剪」
+- **order 去冲突**：`fs-cleaner` 66 → 69（避免与 `disk-analyzer` 66 冲突）；`example` 90 → 95（避免与 `password-generator` 90 冲突）
+- **不做**：PDF 基础操作（exam-split vs pdf-toolkit）、OCR 三入口、图片三件套的包级合并——另行排期，不在 M48 动壳与路由
+- **验收**：受影响包 typecheck + 单测 + e2e 同步删改用例；`pnpm gate` 全绿；文档（spec/smoke/README/CHANGELOG）同步
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -762,6 +773,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M45 v4.4**  | 开发工具扩展（§4.45，2026-11-21）：`dev-toolbox` 增「JWT 解码」（Base64URL 解 header/payload + exp/iat 时效，不验签）与「UUID 生成」（RFC 4122 v4 批量 1–100 + 时间戳 ID）两页签；纯 renderer、零 IPC、零新增依赖                                                                                                                        | §4.45 验收；e2e 新增 2 用例；R2 映射；chunk <200KB gzip；包覆盖率 ≥80%；gate 全绿        | 0.5 天    |
 | **M46 v4.5**  | 颜色工具箱扩展（§4.46，2026-11-21）：`color-toolbox` 增「图片调色板」区块 —— 本地选图（≤20MB）→ canvas 下采样读 RGBA → 量化聚合 Top 8 主色与占比，色块联动主色、复制整组、`CT_PALETTE_FAILED`；纯 renderer、零 IPC、零新增依赖                                                                                                                    | §4.46 验收；e2e 新增 2 用例；R2 映射；chunk <200KB gzip；包覆盖率 ≥80%；gate 全绿        | 0.5 天    |
 | **M47 v4.6**  | 文本工具箱 CSV ↔ JSON（§4.47，2026-11-21）：`text-toolbox` 增「CSV/JSON」页签 —— RFC 4180 解析（引号/转义/字段内换行）与扁平对象数组序列化，四种分隔符、表头开关、`TT_CSV_INVALID`；纯 renderer、零 IPC、零新增依赖，不新建工具包                                                                                                          | §4.47 验收；e2e 新增 2 用例；R2 映射；chunk 16,663 B gzip；包覆盖率 ≥80%；gate 全绿      | 0.5 天    |
+| **M48 v4.7**  | 工具去重与文案校正（§4.48，2026-11-21）：移除 `dev-toolbox` UUID 页签（归口 password-generator）、移除 `time-toolbox` 倒计时页签（归口 misc-toolbox 计时器）；补全 text/color/exam-split manifest 文案；修复 fs-cleaner / example order 冲突；不新建工具包、不动壳   | §4.48 验收；受影响包 typecheck/单测/e2e 同步；`pnpm gate` 全绿；文档五处同步            | 0.5 天    |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

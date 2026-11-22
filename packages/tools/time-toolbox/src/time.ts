@@ -39,12 +39,6 @@ export interface CalendarDiff {
   totalDays: number
 }
 
-/** 倒计时结果（expired 表示目标时间已到或已过） */
-export interface Countdown {
-  expired: boolean
-  parts: DurationParts
-}
-
 /** 常用时区选项 */
 export interface TimeZoneOption {
   id: string
@@ -272,16 +266,6 @@ export function diffCalendar(startMs: number, endMs: number): CalendarDiff {
     days: endNumber - anchor,
     totalDays: endNumber - startNumber
   }
-}
-
-/**
- * 倒计时：目标时间 - 当前时间，分解为天/时/分/秒
- * @param targetMs 目标毫秒时间戳
- * @param nowMs 当前毫秒时间戳
- */
-export function countdownTo(targetMs: number, nowMs: number): Countdown {
-  const diff = targetMs - nowMs
-  return { expired: diff <= 0, parts: formatDuration(diff) }
 }
 
 /**

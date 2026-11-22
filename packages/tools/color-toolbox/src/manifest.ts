@@ -10,7 +10,7 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'color-toolbox',
   name: '颜色工具箱',
-  description: 'HEX/RGB/HSL 互转、色阶与配色方案、WCAG 对比度检测',
+  description: 'HEX/RGB/HSL 互转、色阶与配色方案、WCAG 对比度检测、吸管取色与图片调色板',
   icon: 'palette',
   category: 'misc',
   order: 80,

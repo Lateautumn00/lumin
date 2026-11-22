@@ -10,7 +10,6 @@ import type { StructuredError } from '@lumin/shared'
 
 import {
   COMMON_TIME_ZONES,
-  countdownTo,
   diffCalendar,
   formatDateTime,
   formatDuration,
@@ -21,7 +20,6 @@ import {
   parseLocalDateTime,
   parseTimestamp,
   type CalendarDiff,
-  type Countdown,
   type DurationParts,
   type TimestampMode
 } from '../time'
@@ -235,33 +233,6 @@ const dateDiffRows = computed<{ key: string; label: string; value: string }[]>((
   return [{ key: 'date-diff-total-days', label: '总天数', value: `${diff.totalDays} 天` }]
 })
 
-/* ---------- Tab6 倒计时 ---------- */
-
-const countdownTargetInput = ref(toDateTimeLocalInput(floorToMinute(Date.now()) + 3_600_000))
-
-const countdownState = computed<{ countdown: Countdown | null; error: StructuredError | null }>(
-  () => {
-    const target = parseLocalDateTime(countdownTargetInput.value)
-    if (target === null) {
-      return { countdown: null, error: toolError('TT_INVALID_INPUT', '请填写完整的目标时间') }
-    }
-    return { countdown: countdownTo(target, nowTick.value), error: null }
-  }
-)
-
-const countdownSummary = computed(() => {
-  const countdown = countdownState.value.countdown
-  if (countdown === null) return ''
-  const { days, hours, minutes, seconds } = countdown.parts
-  return `${days} 天 ${hours} 小时 ${minutes} 分钟 ${seconds} 秒`
-})
-
-const countdownExpired = computed(() => countdownState.value.countdown?.expired === true)
-
-function setCountdownPreset(offsetMs: number): void {
-  countdownTargetInput.value = toDateTimeLocalInput(floorToMinute(Date.now()) + offsetMs)
-}
-
 /* ---------- Tab4 Cron 解析 ---------- */
 
 const cronInput = ref('*/5 * * * *')
@@ -353,9 +324,6 @@ onUnmounted(() => {
       </NTabPane>
       <NTabPane name="date-diff">
         <template #tab>日期差</template>
-      </NTabPane>
-      <NTabPane name="countdown">
-        <template #tab>倒计时</template>
       </NTabPane>
       <NTabPane name="cron">
         <template #tab>Cron</template>
@@ -603,41 +571,6 @@ onUnmounted(() => {
       <NText depth="3" class="text-xs">
         按本地日历日计算；月末按「加月截断」借位（如 1-31 → 3-01 为 1 个月 1 天）。
       </NText>
-    </div>
-
-    <!-- 倒计时 -->
-    <div v-if="activeTab === 'countdown'" class="flex max-w-2xl flex-col gap-3">
-      <div class="flex flex-wrap items-end gap-3">
-        <div class="flex flex-col gap-1">
-          <NText depth="2" class="text-sm">目标时间</NText>
-          <input
-            v-model="countdownTargetInput"
-            type="datetime-local"
-            step="1"
-            aria-label="倒计时目标时间"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1.5 text-sm"
-          />
-        </div>
-        <NButton size="small" quaternary @click="setCountdownPreset(3_600_000)">1 小时后</NButton>
-        <NButton size="small" quaternary @click="setCountdownPreset(86_400_000)">1 天后</NButton>
-        <NButton size="small" quaternary @click="setCountdownPreset(604_800_000)">7 天后</NButton>
-      </div>
-
-      <div
-        v-if="countdownState.error !== null"
-        role="alert"
-        class="text-sm text-[var(--lumin-color-error, #d03050)]"
-      >
-        {{ countdownState.error.message }}（{{ countdownState.error.code }}）
-      </div>
-      <template v-else-if="countdownState.countdown !== null">
-        <NText depth="2" class="text-sm">
-          {{ countdownExpired ? '目标时间已过，已过时长：' : '距离目标还有：' }}
-        </NText>
-        <NText class="text-2xl font-semibold tabular-nums">{{ countdownSummary }}</NText>
-      </template>
-
-      <NText depth="3" class="text-xs">每秒自动刷新；目标时间早于当前时间时显示已过时长。</NText>
     </div>
 
     <!-- Cron 解析 -->

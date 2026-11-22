@@ -4,7 +4,6 @@ import {
   COMMON_TIME_ZONES,
   MAX_DATE_MS,
   MIN_DATE_MS,
-  countdownTo,
   detectTimestampUnit,
   diffCalendar,
   formatDateTime,
@@ -215,28 +214,5 @@ describe('diffCalendar', () => {
     expect(diff.negative).toBe(true)
     expect([diff.years, diff.months, diff.days]).toEqual([0, 0, 1])
     expect(diff.totalDays).toBe(1)
-  })
-})
-
-describe('countdownTo', () => {
-  it('未来目标：剩余天/时/分/秒', () => {
-    const result = countdownTo(90_061_000, 0)
-    expect(result.expired).toBe(false)
-    expect(result.parts.days).toBe(1)
-    expect(result.parts.hours).toBe(1)
-    expect(result.parts.minutes).toBe(1)
-    expect(result.parts.seconds).toBe(1)
-  })
-
-  it('目标已过：expired 且按绝对差分解', () => {
-    const result = countdownTo(0, 3_600_000)
-    expect(result.expired).toBe(true)
-    expect(result.parts.hours).toBe(1)
-  })
-
-  it('目标等于当前：expired 且全 0', () => {
-    const result = countdownTo(1_700_000_000_000, 1_700_000_000_000)
-    expect(result.expired).toBe(true)
-    expect(result.parts.totalSeconds).toBe(0)
   })
 })

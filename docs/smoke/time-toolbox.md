@@ -57,8 +57,18 @@
 
 | 项          | 方式                                                   | 结果                                                                                                                                                             |
 | ----------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 日期差      | `pnpm exec vitest run packages/tools/time-toolbox/src` | ✅ 46 tests（time/cron/errors/manifest）：同日、跨月跨年、闰年 `2024-02-29 → 2025-02-28 = 1 年`、月末借位 `2026-01-31 → 2026-03-01 = 1 个月 1 天`、反向 negative |
-| 倒计时      | `time.test.ts`                                         | ✅ 未来 `1 天 1 时 1 分 1 秒`、已过、目标等于当前（`expired=true` 且全 0）                                                                                       |
+| 日期差      | `pnpm exec vitest run packages/tools/time-toolbox/src` | ✅ 43 tests（time/cron/errors/manifest）：同日、跨月跨年、闰年 `2024-02-29 → 2025-02-28 = 1 年`、月末借位 `2026-01-31 → 2026-03-01 = 1 个月 1 天`、反向 negative |
+| 倒计时      | —                                                      | M48 已移除（含 `countdownTo` 与 3 例单测），统一由 misc-toolbox 计时器承担                                                                                       |
 | 纯日期校验  | `parseLocalDate`                                       | ✅ `2026-02-30`/`2026-13-01`/`2026-1-1`/带时间 → `null`                                                                                                          |
-| chunk（R5） | `pnpm build` 产物实测                                  | ✅ `time-toolbox-*.js` = 54,678 B raw / **12,516 B gzip**，远低于 200KB                                                                                          |
+| chunk（R5） | `pnpm build` 产物实测                                  | ✅ `time-toolbox-*.js` = 50,106 B raw / **11,980 B gzip**，远低于 200KB                                                                                          |
 | R2 八类映射 | 纯 renderer、无文件 IO                                 | 1–4 **不适用**；非法日期 → `TT_INVALID_INPUT`；5 取消：同步 <1ms；6 并发：无共享状态；7 磁盘满：无写入；8 断电恢复：无持久化，刷新回到默认值                     |
+
+## 7. M48 去重复测（2026-11-21）
+
+| 项            | 方式                                                    | 结果                                                                                      |
+| ------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| 倒计时页签    | 代码与文档检索                                          | ✅ 页签、状态、`countdownTo` / `Countdown` 与 3 例单测全部移除；剩余 5 页签                  |
+| 单测          | `pnpm exec vitest run packages/tools/time-toolbox`      | ✅ 43/43 通过                                                                             |
+| 覆盖率（R1）  | 限定本包 include                                        | ✅ Statements 93.92% · Branches 85.65% · Functions 100% · Lines 98.23%                     |
+| chunk（R5）   | `pnpm build` 产物实测                                   | ✅ 50,106 B raw / 11,980 B gzip                                                            |
+| 质量门禁      | `pnpm gate`                                             | ✅ 全绿（audit 仅 2 moderate，boundary 0 违规）                                           |
