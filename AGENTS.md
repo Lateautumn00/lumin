@@ -3,6 +3,7 @@
 > 本文件是 Lumin 项目的**强制规范**，由 `.project-rules/role-skills` 精选 8 份角色规则 + 方案评审修订（R1–R10）收敛而成。
 > 配套方案：`docs/opencode/plan.md`（决策依据与里程碑）。
 > **任何 AI 或人员生成/修改代码前必须遵守本文件；决策变更时必须同步更新本文件（口头无效）。**
+> 命名与工程细则速查：`.project-rules/skills/project-conventions/SKILL.md`（编码、评审、提交前必读；与本文件冲突时以本文件为准）。
 
 ---
 
