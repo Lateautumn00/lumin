@@ -27,6 +27,7 @@ import {
   Info,
   KeyRound,
   LayoutGrid,
+  Monitor,
   Palette,
   PiggyBank,
   QrCode,
@@ -80,6 +81,7 @@ const iconMap: Record<string, LucideIcon> = {
   'key-round': KeyRound,
   palette: Palette,
   'piggy-bank': PiggyBank,
+  monitor: Monitor,
   terminal: Terminal,
   timer: Timer,
   wrench: Wrench

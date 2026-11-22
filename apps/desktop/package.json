@@ -50,6 +50,7 @@
     "@lumin/tool-pdf-images": "workspace:*",
     "@lumin/tool-pdf-toolkit": "workspace:*",
     "@lumin/tool-qr-code": "workspace:*",
+    "@lumin/tool-system-info": "workspace:*",
     "@lumin/tool-text-diff": "workspace:*",
     "@lumin/tool-text-toolbox": "workspace:*",
     "@lumin/tool-time-toolbox": "workspace:*",

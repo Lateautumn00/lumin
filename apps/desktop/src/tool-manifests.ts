@@ -25,6 +25,7 @@ import { manifest as passwordGeneratorManifest } from '@lumin/tool-password-gene
 import { manifest as pdfImagesManifest } from '@lumin/tool-pdf-images/manifest'
 import { manifest as pdfToolkitManifest } from '@lumin/tool-pdf-toolkit/manifest'
 import { manifest as qrCodeManifest } from '@lumin/tool-qr-code/manifest'
+import { manifest as systemInfoManifest } from '@lumin/tool-system-info/manifest'
 import { manifest as textDiffManifest } from '@lumin/tool-text-diff/manifest'
 import { manifest as textToolboxManifest } from '@lumin/tool-text-toolbox/manifest'
 import { manifest as timeToolboxManifest } from '@lumin/tool-time-toolbox/manifest'
@@ -65,5 +66,6 @@ export const toolManifests: readonly ToolManifest[] = [
   passwordGeneratorManifest,
   devToolboxManifest,
   miscToolboxManifest,
+  systemInfoManifest,
   exampleManifest
 ]
