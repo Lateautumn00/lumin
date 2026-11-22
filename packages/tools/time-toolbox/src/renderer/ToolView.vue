@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
- * 时间工具箱（time-toolbox）：时间戳转换 / 时区查看 / 时长计算 / Cron 解析。
+ * 时间工具箱（time-toolbox）：时间戳转换 / 时区查看 / 时长计算 / Cron 解析与反向生成。
  * 三态：空态（各页签均带默认值）/ 加载态（全同步纯函数，豁免）/ 报错态（结构化错误码 + 中文文案）。
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ArrowLeftRight, Clock, Copy } from '@lucide/vue'
 import { NButton, NInput, NSelect, NTabPane, NTabs, NText } from 'naive-ui'
 import type { StructuredError } from '@lumin/shared'
@@ -23,7 +23,7 @@ import {
   type DurationParts,
   type TimestampMode
 } from '../time'
-import { describeCron, nextCronRuns, parseCron, type ParsedCron } from '../cron'
+import { buildCron, describeCron, nextCronRuns, parseCron, type ParsedCron } from '../cron'
 import { toolError } from '../errors'
 
 const LOCAL_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -271,6 +271,81 @@ const cronState = computed<CronViewState>(() => {
 
 function applyCronPreset(value: string): void {
   cronInput.value = value
+}
+
+/* ---------- Tab4 反向生成（M55 §4.55） ---------- */
+
+/** 反向生成勾选状态（空数组 = 未选 → 该字段通配 `*`） */
+interface CronBuilderState {
+  minutes: number[]
+  hours: number[]
+  daysOfMonth: number[]
+  months: number[]
+  daysOfWeek: number[]
+}
+
+type CronBuilderField = keyof CronBuilderState
+
+/** 反向生成快捷预设（回填勾选状态） */
+const CRON_BUILDER_PRESETS: { label: string; pick: Partial<CronBuilderState> }[] = [
+  { label: '每 5 分钟', pick: { minutes: Array.from({ length: 12 }, (_, index) => index * 5) } },
+  { label: '每小时整点', pick: { minutes: [0] } },
+  { label: '每天 9 点', pick: { minutes: [0], hours: [9] } },
+  { label: '每周一 9 点', pick: { minutes: [0], hours: [9], daysOfWeek: [1] } },
+  { label: '每月 1 日', pick: { minutes: [0], hours: [0], daysOfMonth: [1] } }
+]
+
+/** 周字段选项（周一 → 周日；值 = Date#getDay，周日 0） */
+const WEEK_OPTIONS = [
+  { value: 1, label: '一' },
+  { value: 2, label: '二' },
+  { value: 3, label: '三' },
+  { value: 4, label: '四' },
+  { value: 5, label: '五' },
+  { value: 6, label: '六' },
+  { value: 0, label: '日' }
+] as const
+
+const builder = reactive<CronBuilderState>({
+  minutes: [],
+  hours: [],
+  daysOfMonth: [],
+  months: [],
+  daysOfWeek: []
+})
+
+const builderHasSelection = computed<boolean>(() =>
+  (Object.keys(builder) as CronBuilderField[]).some((field) => builder[field].length > 0)
+)
+
+function toggleBuilder(field: CronBuilderField, value: number): void {
+  const list = builder[field]
+  const index = list.indexOf(value)
+  if (index >= 0) list.splice(index, 1)
+  else list.push(value)
+}
+
+function clearBuilder(): void {
+  for (const field of Object.keys(builder) as CronBuilderField[]) builder[field] = []
+}
+
+function applyBuilderPreset(preset: { label: string; pick: Partial<CronBuilderState> }): void {
+  clearBuilder()
+  for (const field of Object.keys(preset.pick) as CronBuilderField[]) {
+    builder[field] = [...(preset.pick[field] ?? [])]
+  }
+}
+
+/** 生成表达式并回填解析框（cronState computed 自动联动描述与未来触发） */
+function applyBuilder(): void {
+  if (!builderHasSelection.value) return
+  cronInput.value = buildCron({
+    minutes: builder.minutes,
+    hours: builder.hours,
+    daysOfMonth: builder.daysOfMonth,
+    months: builder.months,
+    daysOfWeek: builder.daysOfWeek
+  })
 }
 
 /* ---------- 通用 ---------- */
@@ -624,6 +699,153 @@ onUnmounted(() => {
       <NText v-else depth="3" class="text-sm">
         输入 5 字段表达式后显示中文描述与未来 5 次触发时间。
       </NText>
+
+      <!-- 反向生成（M55 §4.55）：勾选矩阵 → 表达式回填 -->
+      <div
+        class="flex flex-col gap-2 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] p-3"
+      >
+        <div class="flex flex-wrap items-center gap-2">
+          <NText depth="2" class="text-sm font-medium">反向生成</NText>
+          <NButton
+            size="tiny"
+            type="primary"
+            data-testid="cron-generate"
+            :disabled="!builderHasSelection"
+            @click="applyBuilder"
+          >
+            生成表达式
+          </NButton>
+          <NButton size="tiny" quaternary data-testid="cron-clear" @click="clearBuilder">
+            清空勾选
+          </NButton>
+          <NText depth="3" class="text-xs">
+            勾选后生成并回填上方表达式框，解析结果自动联动；未勾选的字段按通配（*）处理
+          </NText>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <NButton
+            v-for="preset in CRON_BUILDER_PRESETS"
+            :key="preset.label"
+            size="tiny"
+            quaternary
+            data-testid="cron-bp"
+            @click="applyBuilderPreset(preset)"
+          >
+            {{ preset.label }}
+          </NButton>
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <NText depth="3" class="text-xs">分钟（已选 {{ builder.minutes.length }}）</NText>
+          <div class="grid grid-cols-12 gap-1">
+            <button
+              v-for="minute in 60"
+              :key="`m-${minute}`"
+              type="button"
+              :data-testid="`cron-minute-${minute - 1}`"
+              :aria-pressed="builder.minutes.includes(minute - 1)"
+              class="rounded-[var(--lumin-radius-md)] border py-0.5 text-xs transition-colors"
+              :class="
+                builder.minutes.includes(minute - 1)
+                  ? 'border-[var(--lumin-color-primary)] bg-[var(--lumin-color-primary)] text-white'
+                  : 'border-[var(--lumin-color-border)] text-[var(--lumin-color-text-secondary)] hover:border-[var(--lumin-color-primary)]'
+              "
+              @click="toggleBuilder('minutes', minute - 1)"
+            >
+              {{ minute - 1 }}
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <NText depth="3" class="text-xs">小时（已选 {{ builder.hours.length }}）</NText>
+          <div class="grid grid-cols-12 gap-1">
+            <button
+              v-for="hour in 24"
+              :key="`h-${hour}`"
+              type="button"
+              :data-testid="`cron-hour-${hour - 1}`"
+              :aria-pressed="builder.hours.includes(hour - 1)"
+              class="rounded-[var(--lumin-radius-md)] border py-0.5 text-xs transition-colors"
+              :class="
+                builder.hours.includes(hour - 1)
+                  ? 'border-[var(--lumin-color-primary)] bg-[var(--lumin-color-primary)] text-white'
+                  : 'border-[var(--lumin-color-border)] text-[var(--lumin-color-text-secondary)] hover:border-[var(--lumin-color-primary)]'
+              "
+              @click="toggleBuilder('hours', hour - 1)"
+            >
+              {{ hour - 1 }}
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <NText depth="3" class="text-xs">日（已选 {{ builder.daysOfMonth.length }}）</NText>
+          <div class="grid grid-cols-12 gap-1">
+            <button
+              v-for="day in 31"
+              :key="`d-${day}`"
+              type="button"
+              :data-testid="`cron-dom-${day}`"
+              :aria-pressed="builder.daysOfMonth.includes(day)"
+              class="rounded-[var(--lumin-radius-md)] border py-0.5 text-xs transition-colors"
+              :class="
+                builder.daysOfMonth.includes(day)
+                  ? 'border-[var(--lumin-color-primary)] bg-[var(--lumin-color-primary)] text-white'
+                  : 'border-[var(--lumin-color-border)] text-[var(--lumin-color-text-secondary)] hover:border-[var(--lumin-color-primary)]'
+              "
+              @click="toggleBuilder('daysOfMonth', day)"
+            >
+              {{ day }}
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <NText depth="3" class="text-xs">月（已选 {{ builder.months.length }}）</NText>
+          <div class="grid grid-cols-12 gap-1">
+            <button
+              v-for="month in 12"
+              :key="`mo-${month}`"
+              type="button"
+              :data-testid="`cron-month-${month}`"
+              :aria-pressed="builder.months.includes(month)"
+              class="rounded-[var(--lumin-radius-md)] border py-0.5 text-xs transition-colors"
+              :class="
+                builder.months.includes(month)
+                  ? 'border-[var(--lumin-color-primary)] bg-[var(--lumin-color-primary)] text-white'
+                  : 'border-[var(--lumin-color-border)] text-[var(--lumin-color-text-secondary)] hover:border-[var(--lumin-color-primary)]'
+              "
+              @click="toggleBuilder('months', month)"
+            >
+              {{ month }}月
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <NText depth="3" class="text-xs">周（已选 {{ builder.daysOfWeek.length }}）</NText>
+          <div class="grid grid-cols-7 gap-1">
+            <button
+              v-for="weekday in WEEK_OPTIONS"
+              :key="`w-${weekday.value}`"
+              type="button"
+              :data-testid="`cron-dow-${weekday.value}`"
+              :aria-pressed="builder.daysOfWeek.includes(weekday.value)"
+              class="rounded-[var(--lumin-radius-md)] border py-0.5 text-xs transition-colors"
+              :class="
+                builder.daysOfWeek.includes(weekday.value)
+                  ? 'border-[var(--lumin-color-primary)] bg-[var(--lumin-color-primary)] text-white'
+                  : 'border-[var(--lumin-color-border)] text-[var(--lumin-color-text-secondary)] hover:border-[var(--lumin-color-primary)]'
+              "
+              @click="toggleBuilder('daysOfWeek', weekday.value)"
+            >
+              {{ weekday.label }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 报错态：复制失败（全局） -->

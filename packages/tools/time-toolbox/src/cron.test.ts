@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { describeCron, nextCronRuns, parseCron, parseCronField, type ParsedCron } from './cron'
+import {
+  buildCron,
+  describeCron,
+  nextCronRuns,
+  parseCron,
+  parseCronField,
+  type CronSelection,
+  type ParsedCron
+} from './cron'
 import { formatDateTime } from './time'
 
 function valuesOf(result: ReturnType<typeof parseCronField>): number[] {
@@ -121,5 +129,96 @@ describe('nextCronRuns', () => {
 
   it('count 为 0 时返回空数组', () => {
     expect(nextCronRuns(parseOrThrow('* * * * *'), base, 0)).toEqual([])
+  })
+})
+
+describe('buildCron 反向生成（M55 §4.55）', () => {
+  const empty: CronSelection = {
+    minutes: [],
+    hours: [],
+    daysOfMonth: [],
+    months: [],
+    daysOfWeek: []
+  }
+
+  it('空勾选 → 全通配；全量勾选 → 该字段通配', () => {
+    expect(buildCron(empty)).toBe('* * * * *')
+    expect(buildCron({ ...empty, minutes: Array.from({ length: 60 }, (_, index) => index) })).toBe(
+      '* * * * *'
+    )
+    expect(buildCron({ ...empty, months: Array.from({ length: 12 }, (_, i) => i + 1) })).toBe(
+      '* * * * *'
+    )
+  })
+
+  it('快捷预设：每 5 分钟 / 整点 / 每天 9 点 / 每周一 9 点 / 每月 1 日', () => {
+    expect(buildCron({ ...empty, minutes: Array.from({ length: 12 }, (_, i) => i * 5) })).toBe(
+      '*/5 * * * *'
+    )
+    expect(buildCron({ ...empty, minutes: [0] })).toBe('0 * * * *')
+    expect(buildCron({ ...empty, minutes: [0, 30] })).toBe('*/30 * * * *')
+    expect(buildCron({ ...empty, minutes: [0], hours: [9] })).toBe('0 9 * * *')
+    expect(buildCron({ ...empty, minutes: [0], hours: [9], daysOfWeek: [1] })).toBe('0 9 * * 1')
+    expect(buildCron({ ...empty, minutes: [0], hours: [0], daysOfMonth: [1] })).toBe('0 0 1 * *')
+  })
+
+  it('连续段 ≥3 压缩为区间；短段与散值逐个列出', () => {
+    expect(buildCron({ ...empty, hours: [9, 10, 11] })).toBe('* 9-11 * * *')
+    expect(buildCron({ ...empty, hours: [9, 10] })).toBe('* 9,10 * * *')
+    expect(buildCron({ ...empty, minutes: [1, 3, 5] })).toBe('1,3,5 * * * *')
+    expect(buildCron({ ...empty, daysOfMonth: [1, 2, 3, 5, 6, 7] })).toBe('* * 1-3,5-7 * *')
+    expect(buildCron({ ...empty, daysOfWeek: [1, 2, 3, 4, 5] })).toBe('* * * * 1-5')
+  })
+
+  it('去重升序归一与越界/非法值过滤；周末不渲染成费解步长', () => {
+    expect(buildCron({ ...empty, minutes: [30, 5, 30, 5, 0] })).toBe('0,5,30 * * * *')
+    expect(buildCron({ ...empty, hours: [9, 99, -1, 2.5] })).toBe('* 9 * * *')
+    expect(buildCron({ ...empty, daysOfWeek: [0, 6] })).toBe('* * * * 0,6')
+    expect(buildCron({ ...empty, months: [1, 6, 12] })).toBe('* * * 1,6,12 *')
+    expect(buildCron({ ...empty, daysOfWeek: [0, 3, 6] })).toBe('* * * * */3')
+  })
+
+  it('往返：buildCron → parseCron 字段取值等价（空 = 通配全量）', () => {
+    const range = (min: number, max: number): number[] =>
+      Array.from({ length: max - min + 1 }, (_, index) => min + index)
+    const norm = (values: readonly number[], min: number, max: number): number[] =>
+      values.length === 0 ? range(min, max) : [...new Set(values)].sort((a, b) => a - b)
+    // 周字段通配解析为 0–7（parseCronField 的 `*` 分支不做 7→0 归一，既有行为；matchesCron 只查 0–6 不受影响）
+    const dowNorm = (values: readonly number[]): number[] =>
+      values.length === 0 || values.length === 7
+        ? range(0, 7)
+        : [...new Set(values)].sort((a, b) => a - b)
+    const cases: CronSelection[] = [
+      { ...empty, minutes: [0, 15, 30, 45] },
+      { ...empty, minutes: Array.from({ length: 60 }, (_, i) => i), hours: [9] },
+      {
+        ...empty,
+        minutes: [0],
+        hours: [9, 17],
+        daysOfMonth: [1, 15],
+        months: [1, 7],
+        daysOfWeek: [1, 5]
+      },
+      { ...empty, daysOfWeek: [0, 6] },
+      { ...empty, daysOfWeek: [0, 1, 2, 3, 4, 5, 6] },
+      { ...empty, hours: [22, 23], minutes: [30] }
+    ]
+    for (const selection of cases) {
+      const parsed = parseOrThrow(buildCron(selection))
+      const actual = [
+        parsed.minutes,
+        parsed.hours,
+        parsed.daysOfMonth,
+        parsed.months,
+        parsed.daysOfWeek
+      ].map((field) => [...field.values].sort((a, b) => a - b))
+      expect(actual).toEqual([
+        norm(selection.minutes, 0, 59),
+        norm(selection.hours, 0, 23),
+        norm(selection.daysOfMonth, 1, 31),
+        norm(selection.months, 1, 12),
+        dowNorm(selection.daysOfWeek)
+      ])
+    }
   })
 })
