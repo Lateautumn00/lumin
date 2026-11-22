@@ -130,7 +130,7 @@
 5. `apps/desktop/src/renderer/src/tools/color-toolbox.vue`：薄页面。
 6. `apps/desktop/src/renderer/src/layout/AppSidebar.vue`：iconMap 新增 `palette: Palette`。
 
-清单：`id: color-toolbox`、`name: 颜色工具箱`、`icon: palette`、`category: misc`、`order: 80`、`version: 0.1.0`。
+清单：`id: color-toolbox`、`name: 颜色工具箱`、`icon: palette`、`category: misc`、`order: 80`、`version: 0.2.0`（M55 色觉模拟升级）。
 
 ## 6. R5 体积口径
 
@@ -139,7 +139,7 @@
 ## 7. 验收
 
 - 本包单测（color / palette / errors / manifest / picker / schema / node / client）通过，覆盖率 ≥80%（root `vitest.config.ts` 增加 `packages/tools/color-toolbox/src/**/*.ts` 阈值）。
-- e2e `apps/desktop/e2e/color-toolbox-smoke.spec.ts` 5 用例：默认色三格式展示、非法输入报错与恢复、示例色/色阶联动 + 对比度数值与徽标、图片调色板选图统计与色块联动、非图片文件 `CT_PALETTE_FAILED`；第 1 用例覆盖吸管：点击 → 预览层提示可见 → Esc 关闭。
+- e2e `apps/desktop/e2e/color-toolbox-smoke.spec.ts` 基础 5 用例：默认色三格式展示、非法输入报错与恢复、示例色/色阶联动 + 对比度数值与徽标、图片调色板选图统计与色块联动、非图片文件 `CT_PALETTE_FAILED`；第 1 用例覆盖吸管：点击 → 预览层提示可见 → Esc 关闭；M55 增 1 条色觉模拟用例（共 6 条）。
 - 图片调色板断言：2×2 半红半蓝 PNG → 出现 `调色板 #FF0000` / `调色板 #0000FF` 且占比 50%；点击 `#FF0000` 后颜色值卡片显示 `rgb(255, 0, 0)`。
 - R2 八类映射记录于 `docs/smoke/color-toolbox.md`。
 - `pnpm gate` / `pnpm coverage` / `pnpm build` 全绿。
@@ -148,12 +148,12 @@
 
 ## M55 追加节（2026-11-22 R8 登记：plan Q56 / §4.55）
 
-> 状态：待实施。原 spec 冻结项「色盲模拟」解冻（Q56 拍板）。
+> 状态：已实施（2026-11-22）。原 spec 冻结项「色盲模拟」解冻（Q56 拍板）。
 
 - **字段级清单（色盲模拟）**
-  1. 新增「色盲模拟」下拉：正常（默认）/ 红色弱（protanomaly）/ 红色盲（protanopia）/ 绿色弱（deuteranomaly）/ 绿色盲（deuteranopia）/ 蓝黄色弱（tritanomaly）/ 蓝黄色盲（tritanopia）/ 全色盲（achromatopsia），共 8 类
-  2. 作用域：主色卡片与配色列表叠加显示（切换即变、再选「正常」还原）；对比度徽标同步按模拟后颜色计算
-  3. 附「本页颜色在该缺陷下的近似色值」提示（点击色块仍复制原值）
+  1. 新增「色觉缺陷模拟」下拉：正常（默认）/ 红色弱（protanomaly）/ 红色盲（protanopia）/ 绿色弱（deuteranomaly）/ 绿色盲（deuteranopia）/ 蓝黄色弱（tritanomaly）/ 蓝黄色盲（tritanopia）/ 全色盲（achromatopsia）/ 全色弱（achromatomaly），共 8 类缺陷 + 正常
+  2. 作用域：主色对比卡、配色列表叠加显示（切换即变、点「还原」恢复）；对比度数值与 AA/AAA 徽标同步按模拟后颜色计算
+  3. 附「本页颜色在该缺陷下的近似色值」提示（HEX/RGB/HSL 模拟值）；点击色块设为主色仍使用原始颜色
   4. 纯 canvas 3×3 矩阵变换，零 IPC、零新增依赖；无新错误码
-- **实现**：新增 `vision.ts`——8 组 Viénot/Brettel 仿真矩阵常量（UPPER_SNAKE 命名）+ `simulateColor(hex, type)` 纯函数（sRGB → 线性 → 矩阵 → sRGB 回转）
-- **验收**：`simulateColor` 单测（白/黑不变量、正常恒等、矩阵输出在 [0,255]、每类型各 1 例回归向量）本包 ≥80%；e2e 新增「切换红色盲 → 主色值变化 / 切回正常 → 还原」用例；R2 记入 `docs/smoke/color-toolbox.md` M55 增量节；chunk <200KB gzip
+- **实现**：新增 `vision.ts`——8 组 Viénot/Brettel/Machado 仿真矩阵常量（UPPER_SNAKE 命名）+ `simulateColor(rgb, id)` 纯函数（sRGB → 线性 → 矩阵 → sRGB 回转，输出取整并钳制 0–255）；`ToolView.vue` 用原生 `<select aria-label="色觉缺陷模拟">` 切换，`simulatedMain/simulatedSchemes/simulatedValues/contrast` 统一走模拟色
+- **验收**：`vision.test.ts` 6 用例（8 类清单、黑/白/中性灰不变量、8 类红色回归向量、全色盲通道相等、越界钳制与入参不变、重复调用稳定）本包 ≥80%；e2e 新增「红色盲 → 主色 `#FF0000` 模拟 `#6D5F00` + 对比度 `6.39 : 1` → 还原」；R2 记入 `docs/smoke/color-toolbox.md` M55 增量节；chunk <200KB gzip

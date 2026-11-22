@@ -27,6 +27,11 @@ import { toolError, type ColorToolboxErrorCode } from '../errors'
 import { extractPalette, paletteText, type PaletteResult } from '../palette'
 import { mapPointToPixel } from '../picker'
 import type { CaptureDisplayResult } from '../schema'
+import {
+  VISION_DEFICIENCIES,
+  simulateColor,
+  type VisionDeficiencyId
+} from '../vision'
 import { captureDisplay } from './client'
 
 const WHITE_RGB: Rgb = { r: 255, g: 255, b: 255 }
@@ -43,6 +48,14 @@ const PRESETS: readonly { name: string; hex: string }[] = [
   { name: '绿', hex: '#22C55E' },
   { name: '橙', hex: '#F59E0B' },
   { name: '紫', hex: '#8B5CF6' }
+]
+
+/** 色觉模拟：正常（关闭）+ 8 类色觉缺陷 */
+type VisionOption = VisionDeficiencyId | 'none'
+
+const VISION_OPTIONS: readonly { label: string; value: VisionOption }[] = [
+  { label: '正常（不模拟）', value: 'none' },
+  ...VISION_DEFICIENCIES.map((item) => ({ label: item.name, value: item.id }))
 ]
 
 /** 图片调色板：单张图片大小上限 20MB（spec §2.7） */
@@ -71,6 +84,7 @@ const palette = ref<PaletteState | null>(null)
 const paletteLoading = ref(false)
 const paletteError = ref<StructuredError | null>(null)
 const paletteInput = ref<HTMLInputElement | null>(null)
+const vision = ref<VisionOption>('none')
 const copied = ref('')
 
 let copiedTimer: ReturnType<typeof setTimeout> | undefined
@@ -87,7 +101,32 @@ const scale = computed<Rgb[]>(() => generateScale(main.value))
 const schemes = computed(() => harmonies(main.value))
 
 const backgroundRgb = computed<Rgb>(() => parseHex(backgroundColor.value) ?? WHITE_RGB)
-const contrast = computed(() => contrastRatio(main.value, backgroundRgb.value))
+
+/** 按当前色觉模拟选项转换颜色；`none` 时原样返回 */
+function simulateOrOriginal(rgb: Rgb): Rgb {
+  return vision.value === 'none' ? rgb : simulateColor(rgb, vision.value)
+}
+
+const visionLabel = computed(
+  () => VISION_OPTIONS.find((item) => item.value === vision.value)?.label ?? '正常（不模拟）'
+)
+const simulatedMain = computed<Rgb>(() => simulateOrOriginal(main.value))
+const simulatedBackground = computed<Rgb>(() => simulateOrOriginal(backgroundRgb.value))
+const simulatedSchemes = computed(() =>
+  schemes.value.map((scheme) => ({
+    ...scheme,
+    colors: scheme.colors.map((color) => simulateOrOriginal(color))
+  }))
+)
+const simulatedValues = computed<readonly { key: string; label: string; value: string }[]>(() => [
+  { key: 'hex', label: 'HEX', value: rgbToHex(simulatedMain.value) },
+  { key: 'rgb', label: 'RGB', value: formatColor(simulatedMain.value, 'rgb') },
+  { key: 'hsl', label: 'HSL', value: formatColor(simulatedMain.value, 'hsl') }
+])
+
+const contrast = computed(() =>
+  contrastRatio(simulatedMain.value, simulatedBackground.value)
+)
 const normalVerdict = computed<WcagVerdict>(() => wcagVerdict(contrast.value, false))
 const largeVerdict = computed<WcagVerdict>(() => wcagVerdict(contrast.value, true))
 
@@ -146,6 +185,24 @@ function onBackgroundPick(event: Event): void {
 
 function onRandom(): void {
   applyColor(randomColor())
+}
+
+function isVisionOption(value: string): value is VisionOption {
+  return VISION_OPTIONS.some((item) => item.value === value)
+}
+
+function onVisionChange(event: Event): void {
+  const target = event.target
+  if (!(target instanceof HTMLSelectElement)) return
+  if (isVisionOption(target.value)) vision.value = target.value
+}
+
+function resetVision(): void {
+  vision.value = 'none'
+}
+
+function simulatedHex(rgb: Rgb): string {
+  return rgbToHex(simulateOrOriginal(rgb))
 }
 
 const displayOptions = computed<readonly { label: string; value: string }[]>(() =>
@@ -334,7 +391,7 @@ onUnmounted(() => {
     <header class="flex flex-col gap-1">
       <h2 class="text-lg font-semibold text-[var(--lumin-color-text)]">颜色工具箱</h2>
       <p class="text-sm text-[var(--lumin-color-text-secondary)]">
-        HEX / RGB / HSL 互转、色阶与配色方案、图片调色板、WCAG 对比度检测，全程本地计算
+        HEX / RGB / HSL 互转、色阶与配色方案、图片调色板、色觉缺陷模拟、WCAG 对比度检测，全程本地计算
       </p>
     </header>
 
@@ -527,6 +584,98 @@ onUnmounted(() => {
         {{ clipboardError.message }}
         <span class="ml-2 text-xs opacity-70">{{ clipboardError.code }}</span>
       </p>
+      <p class="text-xs text-[var(--lumin-color-text-secondary)]">
+        以上为原始色值，复制不受色觉模拟影响；模拟仅改变下方预览。
+      </p>
+    </section>
+
+    <section
+      class="flex flex-col gap-3 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-4"
+    >
+      <div class="flex flex-wrap items-center gap-2">
+        <h3 class="text-sm font-semibold text-[var(--lumin-color-text)]">色觉模拟</h3>
+        <span class="text-xs text-[var(--lumin-color-text-secondary)]">
+          切换缺陷查看近似色，不影响主色与复制值
+        </span>
+        <select
+          :value="vision"
+          aria-label="色觉缺陷模拟"
+          class="ml-auto h-8 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] px-2 text-sm text-[var(--lumin-color-text)]"
+          @change="onVisionChange"
+        >
+          <option v-for="option in VISION_OPTIONS" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+        <NButton size="small" :disabled="vision === 'none'" @click="resetVision">还原</NButton>
+      </div>
+
+      <p v-if="vision === 'none'" class="text-xs text-[var(--lumin-color-text-secondary)]">
+        选择一种色觉缺陷后，主色、配色方案与对比度将按模拟后的近似色显示；对比度徽标同步变化。
+      </p>
+
+      <div v-else class="flex flex-col gap-3">
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div
+            class="flex flex-col gap-2 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] p-3"
+          >
+            <span class="text-sm font-medium text-[var(--lumin-color-text)]">
+              主色 · {{ visionLabel }}
+            </span>
+            <div class="flex gap-2">
+              <span
+                :class="swatchClass()"
+                class="h-10 flex-1"
+                :style="{ backgroundColor: hex }"
+                title="原始颜色"
+              />
+              <span
+                :class="swatchClass()"
+                class="h-10 flex-1"
+                :style="{ backgroundColor: rgbToHex(simulatedMain) }"
+                title="模拟颜色"
+              />
+            </div>
+            <p class="text-xs text-[var(--lumin-color-text-secondary)]">
+              原 {{ hex }} → 模拟 {{ rgbToHex(simulatedMain) }}
+            </p>
+            <div class="grid gap-1 font-mono text-xs text-[var(--lumin-color-text)]">
+              <span v-for="item in simulatedValues" :key="item.key">
+                {{ item.label }} {{ item.value }}
+              </span>
+            </div>
+          </div>
+
+          <div
+            v-for="(scheme, index) in simulatedSchemes"
+            :key="scheme.id"
+            class="flex flex-col gap-2 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] p-3"
+          >
+            <span class="text-sm font-medium text-[var(--lumin-color-text)]">
+              {{ scheme.name }} · 模拟
+            </span>
+            <div class="flex gap-2">
+              <span
+                v-for="(color, colorIndex) in scheme.colors"
+                :key="colorIndex"
+                :class="swatchClass()"
+                class="h-10 flex-1"
+                :style="{ backgroundColor: rgbToHex(color) }"
+                :title="rgbToHex(color)"
+              />
+            </div>
+            <p class="text-xs text-[var(--lumin-color-text-secondary)]">
+              原 {{ schemes[index]?.colors.map((color) => rgbToHex(color)).join(' · ') }}
+            </p>
+            <p class="text-xs text-[var(--lumin-color-text-secondary)]">
+              模拟 {{ scheme.colors.map((color) => rgbToHex(color)).join(' · ') }}
+            </p>
+          </div>
+        </div>
+        <p class="text-xs text-[var(--lumin-color-text-secondary)]">
+          以上为 {{ visionLabel }} 下的近似色值；点击任意色块设为主色时仍使用原始颜色。
+        </p>
+      </div>
     </section>
 
     <section
@@ -581,15 +730,21 @@ onUnmounted(() => {
               :key="index"
               type="button"
               :aria-label="`${scheme.name} ${rgbToHex(color)}`"
-              :title="rgbToHex(color)"
+              :title="`${rgbToHex(color)}${vision === 'none' ? '' : ` → ${rgbToHex(simulateOrOriginal(color))}`}`"
               :class="swatchClass()"
               class="h-10 flex-1"
-              :style="{ backgroundColor: rgbToHex(color) }"
+              :style="{ backgroundColor: simulatedHex(color) }"
               @click="applyColor(color)"
             />
           </div>
           <p class="text-xs text-[var(--lumin-color-text-secondary)]">
-            {{ scheme.colors.map((color) => rgbToHex(color)).join(' · ') }}
+            原 {{ scheme.colors.map((color) => rgbToHex(color)).join(' · ') }}
+          </p>
+          <p
+            v-if="vision !== 'none'"
+            class="text-xs text-[var(--lumin-color-text-secondary)]"
+          >
+            模拟 {{ scheme.colors.map((color) => simulatedHex(color)).join(' · ') }}
           </p>
         </div>
       </div>
@@ -600,6 +755,12 @@ onUnmounted(() => {
     >
       <div class="flex flex-wrap items-center gap-3">
         <h3 class="text-sm font-semibold text-[var(--lumin-color-text)]">对比度</h3>
+        <span
+          v-if="vision !== 'none'"
+          class="text-xs text-[var(--lumin-color-text-secondary)]"
+        >
+          按{{ visionLabel }}模拟色计算
+        </span>
         <label class="flex items-center gap-2 text-xs text-[var(--lumin-color-text-secondary)]">
           背景色
           <input
@@ -627,7 +788,10 @@ onUnmounted(() => {
 
       <div
         class="flex flex-col gap-1 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] p-4"
-        :style="{ backgroundColor: backgroundColor, color: hex }"
+        :style="{
+          backgroundColor: rgbToHex(simulatedBackground),
+          color: rgbToHex(simulatedMain)
+        }"
       >
         <p class="text-sm">示例正文：Lumin 颜色工具箱</p>
         <p class="text-2xl font-semibold">大字示例 Sample</p>

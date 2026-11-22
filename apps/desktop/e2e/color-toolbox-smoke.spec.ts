@@ -97,6 +97,29 @@ test.describe('color-toolbox（颜色工具箱）冒烟', () => {
     }
   })
 
+  test('色觉模拟：切换红色盲显示近似主色与配色，还原后恢复原值', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '颜色工具箱')
+      await page.getByPlaceholder('#3B82F6').fill('#FF0000')
+
+      const select = page.getByLabel('色觉缺陷模拟')
+      await select.selectOption('protanopia')
+      await expect(page.getByText('主色 · 红色盲')).toBeVisible()
+      await expect(page.getByText('原 #FF0000 → 模拟 #6D5F00')).toBeVisible()
+      await expect(page.getByText('按红色盲模拟色计算')).toBeVisible()
+      await expect(page.getByText('6.39 : 1', { exact: true })).toBeVisible()
+
+      await page.getByRole('button', { name: '还原' }).click()
+      await expect(page.getByText('主色 · 红色盲')).toBeHidden()
+      await expect(select).toHaveValue('none')
+      await expect(page.getByText('rgb(255, 0, 0)', { exact: true })).toBeVisible()
+    } finally {
+      await app.close()
+    }
+  })
+
   test('图片调色板：选图后统计主色与占比，点击色块联动主色', async () => {
     const { app, page } = await launch()
     await ensureReady(page)
