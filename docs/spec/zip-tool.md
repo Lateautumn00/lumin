@@ -275,3 +275,18 @@ export const setConfigPayloadSchema = z.object({
 - [ ] 用户确认功能方向（2026-11-20，选定「压缩包工具（ZIP 打包/解压）」）
 - [x] plan 决策总表 Q29 / §4.25 / 里程碑 M25 登记
 - [x] 字段级清单（本文）先行
+
+---
+
+## M55 追加节（2026-11-22 R8 登记：plan Q56 / §4.55）
+
+> 状态：待实施。原 spec 冻结项「GBK 条目名转码」解冻（Q56 拍板，替代低价值的 text-diff 词级高亮）；7z/RAR/加密/分卷维持冻结。
+
+- **背景**：Windows 老工具（WinRAR 中文版/7-Zip 旧版/资源管理器 zip）打包的 ZIP 常用本地代码页（GBK/CP936）存条目名且不置通用标志位 bit11（EFS），fflate 按 UTF-8 解码产生 U+FFFD 乱码
+- **字段级清单（解压条目名转码）**
+  1. 解压时逐条目：通用标志位 bit11 未置位 **且** 解码名含 U+FFFD → 用 `TextDecoder('gbk')` 对原始名字节重解码（Node 24 full-icu 原生，零依赖）
+  2. 转码后仍含 U+FFFD（真乱码/非 GBK）→ 维持既有「跳过计数 + 汇总提示」行为，不误改
+  3. 打包侧零改动（仍写 UTF-8 名 + bit11 置位）；已有 UTF-8 条目零回归
+  4. 无新错误码；进度/取消/冲突递增语义不变
+- **实现触点**：`archive.ts` 流式 `Unzip` 段（L514–586）。**开工首日 spike：fflate `Unzip` 元数据是否保留原始名字节**；不保留则自解析中央目录取名字节（+0.5d，预算内）
+- **验收**：构造 GBK zip fixture（`strToU8` 无法直接产出，用 Buffer 拼本地头/中央目录）单测（bit11 置位不转码 / 未置位含 U+FFFD 转码 / 非 GBK 乱码维持跳过 / UTF-8 中文名零回归）本包 ≥80%；e2e 新增「GBK 中文名 zip 解压 → 条目名无乱码且落盘正确」用例；R2 记入 `docs/smoke/zip-tool.md` M55 增量节（中文/空格路径类）；chunk 不变、零新增依赖

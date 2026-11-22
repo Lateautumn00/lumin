@@ -66,6 +66,7 @@
 | Q53 | 系统信息查看器                      | **新增只读工具 `system-info`（2026-11-22 用户选定，M53）**：操作系统/CPU/内存/磁盘/网络概览 + 一键复制；主进程 `node:os` + `fs.statfs` 采集，单通道 `system-info:snapshot`；零新增依赖、不写盘；详见 §4.53                                                                                                                                                                                                                                                              |
 | Q54 | 开发规范                            | **命名与工程规范 skill 化（2026-11-22 用户选定）**：新增 `.project-rules/skills/project-conventions/SKILL.md` 收敛文件/目录/包名/符号/zod/错误码/IPC/测试/文档/Git 细则，并在 `AGENTS.md` 头部登记为**编码、评审、提交前必读**；两者冲突以 `AGENTS.md` 为准；不改 ESLint/Prettier 配置、零新增依赖                                                                                                                                                                      |
 | Q55 | 拼音转换                            | **在既有 `text-toolbox` 增「拼音」页签（第 7 个，2026-11-22 用户选定，M54，不新建工具包）**：带声调 / 数字声调 / 无声调 / 首字母四模式，非汉字默认原样保留可勾选移除，多音字按分词取常用读音；新增依赖 `pinyin-pro` 3.29.5（MIT，精确钉版，动态 import 独立 chunk）；纯 renderer、零 IPC；详见 §4.54                                                                                                                                                                    |
+| Q56 | P0 缺口补齐二（M55）                | **M55 十条（2026-11-22 用户拍板，零新增依赖、零新包，除 hidden 契约小改外无契约变更）**：① image-toolbox 调色（亮度/对比度/饱和度/锐化/模糊，ffmpeg 滤镜链串联）；② time-toolbox Cron 反向生成；③ color-toolbox 色盲模拟（8 类仿真矩阵）；④ password-generator passphrase（EFF 7776 词表动态 import 独立 chunk）；⑤ markdown-tool JSON Schema 生成（draft-07）；⑥ misc-toolbox IPv6 子网计算（BigInt、主机数 2^n 字符串化）；⑦ file-hasher SHA-512；⑧ zip-tool GBK 条目名转码（TextDecoder，替代低价值的词级高亮）；⑨ qr-code 批量识别（≤50 张）；⑩ 卫生四项（example 置 `hidden` 出生产清单 + ipc-smoke 适配、batch-ocr 残留清理、image-rotate 3 条 SKIP e2e 补验、6 个 spec 状态行回写）；`plugin-api` manifest 增可选 `hidden` 字段属本条契约登记；详见 §4.55 |                                                                                                                                                                                                                                  |
 | —   | 硬约束                              | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -743,6 +744,22 @@ lumin/
 - **三态**：空态 placeholder 引导；加载态首次动态加载字典期间按钮禁用并显示「处理中」；报错态 `TT_TEXT_TOO_LARGE` + 重试/详情
 - **验收**：单测 9（四模式/多音字/非汉字保留与移除/换行/空串/体积上限）；e2e **7/7**（新增「带声调 → 首字母」用例，顺带修复 M47 旧用例 CRLF 归一与 placeholder 两处断言）；工具 chunk **84,938 B raw / 18,054 B gzip** + 拼音字典独占 chunk **401,263 B raw / 148,071 B gzip**，合计 **166,125 B gzip < 200KB**（R5）；包覆盖率 96.93 / 92.69 / 100 / 100；`pnpm gate` 全绿（2,489 passed / 1 skipped，boundary 805 modules 0 违规）；spec/smoke/README/CHANGELOG 同步
 
+### 4.55 P0 缺口补齐二（M55，2026-11-22 R8 登记）
+
+- **决策（Q56）**：按 `docs/opencode/feature-research-2026-11-22.md` §6 P0 批次实施 10 条；零新包、零新增依赖；三项拍板（2026-11-22）：P0-8 词级高亮经核实已被 text-diff 字符级 LCS 覆盖 → 换成 zip-tool GBK 转码；P0-9 qr 二选一取批量识别；example 出生产清单走 `hidden` 字段 + ipc-smoke 适配（通道保留，R3 门禁不破）
+- **① image-toolbox 调色**：`EFFECT_KINDS` 不变，`effectOptionsSchema` 增 5 个可选数值——`brightness`/`contrast`/`saturation`（-100..100）、`sharpen`/`blur`（0..100），zod 默认值使无参路径与现状逐字节一致；`buildEffectFilter` 改为滤镜链拼接（`eq=b=…:c=…:s=…`、`unsharp`、`gblur`），与既有 grayscale/invert/binary 串联；UI 调整页加滑杆组（禁用态=不生效）
+- **② time-toolbox Cron 反向生成**：纯函数 `buildCron(selection)` 五字段（分/时/日/月/周）勾选矩阵 → 表达式；与 `parseCron`/`describeCron` 往返测试；Cron 页增「反向生成」子区，生成结果回填解析框联动
+- **③ color-toolbox 色盲模拟**：新增 `vision.ts`，8 类色觉缺陷 3×3 仿真矩阵（Viénot/Brettel 常量，UPPER_SNAKE），下拉切换 + 还原，对主色/配色卡片叠加显示；纯 canvas 变换、零 IPC
+- **④ password-generator passphrase**：新增 `words.ts` + EFF long 词表 7776 词包内 JSON，动态 `import()` 独立 chunk（pinyin-pro 先例，不走 fetch-binaries）；词数 3–10、分隔符可选、首词大写/数字后缀开关；熵 = log2(7776)×词数；拒绝采样复用 Web Crypto 现有随机源
+- **⑤ markdown-tool JSON Schema**：JSON→TS 输出模式三选 `interface / type / json-schema(draft-07)`；整数→`integer`、null→union、字符串不猜 `format`；导出走既有 save 通道
+- **⑥ misc-toolbox IPv6 子网**：`ip.ts` `':'` 分派 → `parseCidr6`/`computeSubnet6`（BigInt 128 位）：`::` 零段压缩、/0–/128、网络/广播/首末可用地址、可用主机数 **2^n 一律字符串**（防 Number 溢出）、类型判定（回环/链路本地/唯一本地/组播/全局）；原「暂只支持 IPv4」分支移除，IPv4 路径零回归
+- **⑦ file-hasher SHA-512**：`ALGORITHMS` +`sha512`（node:crypto 原生）、期望哈希 128 位自动识别（`HEX_LENGTHS` +1）、TSV +1 列、manifest 描述同步
+- **⑧ zip-tool GBK 条目名转码**：解压时 ZIP 通用标志位 bit11（EFS）未置位且名字含替换字符 → `TextDecoder('gbk')` 转码（Node 24 full-icu 原生）；转码后仍含 U+FFFD 维持跳过计数；**开工首日 spike：fflate 流式 `Unzip` 是否暴露原始名字节**，不暴露则自解析中央目录（+0.5d）
+- **⑨ qr-code 批量识别**：识别 Tab 增「单张/批量」子模式；多选 ≤50 逐张串行，结果列表（文件名/文本/状态/复制/失败重试/未识别标注/进度计数）；复用 `decodeImageFile` 零改动
+- **⑩ 卫生四项**：(a) `plugin-api` `toolManifestSchema` 增可选 `hidden: z.boolean()`，侧边栏过滤 `hidden` 项，example 置 `hidden: true`（通道保留），`ipc-smoke.spec.ts` 清单用例改直连 invoke 并补「侧边栏无示例工具」断言；(b) 删除 `packages/tools/batch-ocr/` 残留目录（gitignored）；(c) `image-rotate-tasks.md` L56–58 三条 SKIP e2e 本机补验；(d) 6 个滞后 spec 状态行回写
+- **三态**：各扩展页签沿用工具既有三态；批量识别含进度 + 取消 + 失败重试；IPv6/Cron/Schema 生成为同步纯函数，报错态走既有结构化错误码
+- **验收**：9 个 spec 以「M55 追加节」先行（含原冻结项解冻标注）；每包纯函数单测 ≥80%；受影响 e2e 套件全绿 + ipc-smoke 回归；chunk 全部 <200KB gzip（passphrase 工具+词表合计预估 <60KB gzip，smoke 单列 raw/gzip）；R2 八类映射记入 9 个 smoke 增量节；`pnpm gate` 全绿；main 只读、MR 合入
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -839,6 +856,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M52 v5.1**  | 单位补齐（§4.52，2026-11-22）：`unit-converter` 类别 13→17——能量、频率、数据速率（SI 十进制）、油耗（倒数模型）；`convert` 增油耗分支与 `INVALID_VALUE`；零新增依赖，不新建工具包                                                                                                                                                               | §4.52 验收；包单测；e2e 新增 1 用例；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步                                                      | 0.5 天   |
 | **M53 v5.2**  | 系统信息查看器（§4.53，2026-11-22）：新增只读工具 `system-info`——`node:os` + `fs.statfs` 采集 OS/CPU/内存/磁盘/网络，单通道 `system-info:snapshot`；五区卡片 + 刷新 + 复制全部；零新增依赖、不写盘                                                                                                                                              | §4.53 验收；单测 34；e2e 新增 2 用例；限包覆盖率 ≥80%；chunk 6,643 B gzip；`pnpm gate` 全绿（2,480 测试）；文档五处同步                     | 0.5 天   |
 | **M54 v5.3**  | 文本工具箱拼音（§4.54，2026-11-22）：`text-toolbox` 增「拼音」页签 —— 带声调/数字声调/无声调/首字母四模式，非汉字可保留/移除，多音字按分词取音；新增 `pinyin-pro` 3.29.5 动态独立 chunk；纯 renderer、零 IPC                                                                                                                                    | §4.54 验收；单测 9；e2e 7/7（含新增拼音用例）；限包覆盖率 ≥80%；工具+字典 chunk 合计 166,125 B gzip < 200KB；`pnpm gate` 全绿；文档五处同步 | 0.5 天   |
+| **M55 v5.4**  | P0 缺口补齐二（§4.55，2026-11-22）：九工具扩展（image 调色 / Cron 反向生成 / 色盲模拟 / passphrase / JSON Schema / IPv6 子网 / SHA-512 / zip GBK 转码 / qr 批量识别）+ 卫生四项（example `hidden` 出清单 + ipc-smoke 适配、batch-ocr 清理、SKIP e2e 补验、spec 状态行回写）；零新增依赖，仅 `plugin-api` manifest 增可选 `hidden` 字段                                                                                                          | §4.55 验收；9 spec 追加节先行；每包限包覆盖率 ≥80%；受影响 e2e 全绿 + ipc-smoke 回归；chunk <200KB gzip（词表单列）；R2 八类记入 9 个 smoke 增量节；`pnpm gate` 全绿；文档同步                                                 | 5.5–6.5 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

@@ -143,3 +143,17 @@
 - 图片调色板断言：2×2 半红半蓝 PNG → 出现 `调色板 #FF0000` / `调色板 #0000FF` 且占比 50%；点击 `#FF0000` 后颜色值卡片显示 `rgb(255, 0, 0)`。
 - R2 八类映射记录于 `docs/smoke/color-toolbox.md`。
 - `pnpm gate` / `pnpm coverage` / `pnpm build` 全绿。
+
+---
+
+## M55 追加节（2026-11-22 R8 登记：plan Q56 / §4.55）
+
+> 状态：待实施。原 spec 冻结项「色盲模拟」解冻（Q56 拍板）。
+
+- **字段级清单（色盲模拟）**
+  1. 新增「色盲模拟」下拉：正常（默认）/ 红色弱（protanomaly）/ 红色盲（protanopia）/ 绿色弱（deuteranomaly）/ 绿色盲（deuteranopia）/ 蓝黄色弱（tritanomaly）/ 蓝黄色盲（tritanopia）/ 全色盲（achromatopsia），共 8 类
+  2. 作用域：主色卡片与配色列表叠加显示（切换即变、再选「正常」还原）；对比度徽标同步按模拟后颜色计算
+  3. 附「本页颜色在该缺陷下的近似色值」提示（点击色块仍复制原值）
+  4. 纯 canvas 3×3 矩阵变换，零 IPC、零新增依赖；无新错误码
+- **实现**：新增 `vision.ts`——8 组 Viénot/Brettel 仿真矩阵常量（UPPER_SNAKE 命名）+ `simulateColor(hex, type)` 纯函数（sRGB → 线性 → 矩阵 → sRGB 回转）
+- **验收**：`simulateColor` 单测（白/黑不变量、正常恒等、矩阵输出在 [0,255]、每类型各 1 例回归向量）本包 ≥80%；e2e 新增「切换红色盲 → 主色值变化 / 切回正常 → 还原」用例；R2 记入 `docs/smoke/color-toolbox.md` M55 增量节；chunk <200KB gzip

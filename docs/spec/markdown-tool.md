@@ -169,3 +169,17 @@
   4. 导出 HTML：选目录 → 文件名 `中文 空格` → 产物存在且含 `<!doctype html>`；同名再导出生成 `(1)`。
 - R2 八类映射记录于 `docs/smoke/markdown-tool.md`。
 - `pnpm gate` / `pnpm coverage` / `pnpm build` / e2e 全绿；CHANGELOG 与 README 登记。
+
+---
+
+## M55 追加节（2026-11-22 R8 登记：plan Q56 / §4.55）
+
+> 状态：待实施。原 spec 冻结项「JSON Schema 生成」解冻（Q56 拍板）。
+
+- **字段级清单（JSON→TS 页签输出模式扩展）**
+  1. 输出模式三选：`interface`（默认，现状）/ `type` / `json-schema`（JSON Schema draft-07）
+  2. `json-schema` 模式规则：对象 → `type: object` + `properties` + `required`（出现过的键）；嵌套递归 `$defs` 引用；数组 → `items` 取首个元素类型并标注；整数 → `integer`；小数 → `number`；`null` → `{ "type": ["string","null"] }` 类 union；布尔各自独立；**字符串不猜 `format`**（不产生 format 字段）
+  3. 复制/导出沿用既有 save 通道；非法 JSON 仍报 `MD_JSON_INVALID`（无新错误码）
+  4. 空数组/空对象 → 照实输出 `type: array`（无 items）/ `type: object`（无 properties）
+- **实现**：与 `json-to-ts` 同源遍历，新增 `jsonToSchema(value)` 纯函数；纯 renderer、零 IPC、零新增依赖
+- **验收**：`jsonToSchema` 单测（嵌套/数组/整数/小数/null/布尔/空容器/required 集合/$defs 引用不重复）本包 ≥80%；e2e 新增「合法对象数组 → json-schema 模式 → 输出含 draft-07 与 properties」用例；R2 记入 `docs/smoke/markdown-tool.md` M55 增量节；chunk <200KB gzip

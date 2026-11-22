@@ -106,3 +106,16 @@
 5. 期望哈希（带前缀/大写/带空格）命中行高亮 + 「匹配」；长度/字符非法红字提示。
 6. 复制单行/复制全部为 TSV（含表头，列 = 已选算法）。
 7. R2 八类异常逐条实测记录于 `docs/smoke/file-hasher.md`。
+
+---
+
+## M55 追加节（2026-11-22 R8 登记：plan Q56 / §4.55）
+
+> 状态：待实施。原 spec 冻结项「SHA-512」解冻（Q56 拍板）。
+
+- **字段级清单（算法扩展）**
+  1. `ALGORITHMS` 增 `sha512`，四选：MD5 / SHA-1 / SHA-256 / SHA-512（默认仍仅 SHA-256，勾选语义不变）
+  2. 期望哈希比对：128 位 hex 自动识别为 SHA-512（`HEX_LENGTHS` +1），带前缀/大写/空格清洗沿用既有
+  3. 结果表 TSV +1 列（列序 = 已选算法序）；manifest 描述同步为「MD5 / SHA-1 / SHA-256 / SHA-512」
+  4. 无新错误码；`hash.worker.ts` 走 `createHash('sha512')`（node:crypto 原生）
+- **验收**：RFC 向量（`abc` → `ba7816bf8f01cfea…` 128 位）+ schema/contract 单测本包 ≥80%；e2e 既有 4 算法相关用例回归 + 勾选 SHA-512 断言 TSV 列；R2 记入 `docs/smoke/file-hasher.md` M55 增量节；chunk 不变、零新增依赖
