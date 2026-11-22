@@ -364,7 +364,7 @@ lumin/
 
 ### 4.16 二维码工具（M16，2026-11-19 R8 登记）
 
-- **决策（用户拍板 2026-11-19）**：新增 `qr-code` 工具，两 Tab —— **生成（文本/网址/WiFi/vCard 3.0，纠错 L/M/Q/H、128–2048px、边距 0–10、前景/背景色、PNG/SVG）**、**识别（本地图片 → canvas → jsQR）**；不做批量、摄像头扫码与 Logo 嵌入
+- **决策（用户拍板 2026-11-19）**：新增 `qr-code` 工具，两 Tab —— **生成（文本/网址/WiFi/vCard 3.0，纠错 L/M/Q/H、128–2048px、边距 0–10、前景/背景色、PNG/SVG）**、**识别（本地图片 → canvas → jsQR）**；不做摄像头扫码与 Logo 嵌入（批量识别于 M55 ⑨ 解冻，上限 50 张，见 §4.55）
 - 形态：`packages/tools/qr-code`；生成与解码都在 renderer（`qrcode@1.5.4` + `jsqr@1.4.0`），主进程只做输出目录记忆与原子写盘（临时文件 + rename），**无三段式长任务**
 - 通道：`config` / `set-output-dir` / `save` 三条同步；`save` zod 校验 → 文件名清洗（非法字符/路径穿越）→ 冲突 `(n)` → 原子写盘；识别图片上限 20MB，错误码 `QR_*` 8 个（可重试：OUTPUT_WRITE_FAILED）
 - 字段级清单：`docs/spec/qr-code.md`；冒烟：`docs/smoke/qr-code.md`（R2 八类映射 + chunk **372,970 B raw / 88,831 B gzip**）；e2e `apps/desktop/e2e/qr-code-smoke.spec.ts`（5 用例）

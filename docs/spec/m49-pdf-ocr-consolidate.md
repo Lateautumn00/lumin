@@ -1,6 +1,6 @@
 # M49 PDF 基础操作收敛 + OCR 双模式合并（字段级规格）
 
-> 状态：**待批准**（批准后按 `docs/spec/m49-pdf-ocr-consolidate-tasks.md` 执行）
+> 状态：**已实施**（2026-11-22 回写；`docs/spec/m49-pdf-ocr-consolidate-tasks.md` 全 [x]）
 > 分支：`feature/m49-pdf-ocr-consolidate`（自 `feature/m48-dedupe-cleanup` 切出，堆叠不合并）
 > 关联：plan §1 Q49 / §4.49 / 里程碑 M49；AGENTS §2（零耦合）、§5.3（三态）、§7（覆盖率）、§8（chunk）
 > 背景：M48 §4.48 明确「PDF 基础操作（exam-split vs pdf-toolkit）、OCR 三入口包级合并另行排期」，本里程碑落地该两项。
