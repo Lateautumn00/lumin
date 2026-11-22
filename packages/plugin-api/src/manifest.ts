@@ -21,7 +21,9 @@ export const toolManifestSchema = z.object({
   icon: z.string().min(1),
   category: z.enum(TOOL_CATEGORIES),
   order: z.number().int(),
-  version: z.string().regex(/^\d+\.\d+\.\d+$/, 'version 须为 x.y.z')
+  version: z.string().regex(/^\d+\.\d+\.\d+$/, 'version 须为 x.y.z'),
+  /** 置 true 时壳侧边栏不展示（路由与 IPC 通道保留） */
+  hidden: z.boolean().optional()
 })
 
 export type ToolManifest = z.infer<typeof toolManifestSchema>
