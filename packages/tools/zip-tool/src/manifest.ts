@@ -10,9 +10,9 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'zip-tool',
   name: '压缩包工具',
-  description: 'ZIP 打包与解压（保留目录结构、冲突自动重命名、路径穿越防护）',
+  description: 'ZIP 打包与解压（保留目录结构、冲突自动重命名、路径穿越防护、GBK 条目名转码）',
   icon: 'archive',
   category: 'file',
   order: 68,
-  version: '0.1.0'
+  version: '0.2.0'
 })

@@ -5,6 +5,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  decodeLegacyEntryName,
+  decodeZipEntryName,
   defaultArchiveName,
   defaultTargetDir,
   entryKey,
@@ -138,5 +140,40 @@ describe('uniqueArchiveEntryName', () => {
 
   it('无扩展名时追加序号', () => {
     expect(uniqueArchiveEntryName(new Set(['readme']), 'readme')).toBe('readme (1)')
+  })
+})
+
+describe('条目名编码纠偏（M55 ⑧ GBK）', () => {
+  /** GBK：测 B2E2、试 CAD4 */
+  const GBK_NAME = Uint8Array.from([0xb2, 0xe2, 0xca, 0xd4, 0x2e, 0x74, 0x78, 0x74])
+  const UTF8_NAME = Uint8Array.from([0xe6, 0xb5, 0x8b, 0xe8, 0xaf, 0x95, 0x2e, 0x74, 0x78, 0x74])
+
+  it('decodeZipEntryName：bit11 未置位且 UTF-8 失败 → GBK', () => {
+    expect(decodeZipEntryName(GBK_NAME, false)).toBe('测试.txt')
+  })
+
+  it('decodeZipEntryName：bit11 置位不转码（保留替换符）', () => {
+    const decoded = decodeZipEntryName(GBK_NAME, true)
+    expect(decoded).not.toBe('测试.txt')
+    expect(decoded).toContain('\ufffd')
+  })
+
+  it('decodeZipEntryName：UTF-8 中文名零回归（两种标志位一致）', () => {
+    expect(decodeZipEntryName(UTF8_NAME, true)).toBe('测试.txt')
+    expect(decodeZipEntryName(UTF8_NAME, false)).toBe('测试.txt')
+  })
+
+  it('decodeLegacyEntryName：latin1 折叠名恢复为 GBK 中文', () => {
+    const latin1 = String.fromCharCode(...GBK_NAME)
+    expect(decodeLegacyEntryName(latin1)).toBe('测试.txt')
+  })
+
+  it('decodeLegacyEntryName：纯 ASCII / 合法 UTF-8 原样返回', () => {
+    expect(decodeLegacyEntryName('a/b.txt')).toBe('a/b.txt')
+    expect(decodeLegacyEntryName('测试.txt')).toBe('测试.txt')
+  })
+
+  it('decodeLegacyEntryName：非 GBK latin1 高字节 → null（跳过计数）', () => {
+    expect(decodeLegacyEntryName('\u0081')).toBeNull()
   })
 })

@@ -3,7 +3,7 @@
  * @author cuilanchao
  * @date 2026-11-20
  * @description 覆盖：页面加载/打包空态、UI 打包产物落盘、UI 解压回读、
- *              IPC zip slip 跳过与计数、非法 zip（ZP_ARCHIVE_INVALID）。
+ *              IPC zip slip 跳过与计数、GBK 条目名转码落盘、非法 zip（ZP_ARCHIVE_INVALID）。
  *              注意：临时目录名必须 ASCII（非 ASCII 目录名会导致本机 Node fs 硬崩），文件名保留中文。
  */
 import fs from 'node:fs'
@@ -114,6 +114,45 @@ function storedZip(entries: { name: string; content: string }[]): Buffer {
   eocd.writeUInt32LE(cd.length, 12)
   eocd.writeUInt32LE(offset, 16)
   return Buffer.concat([...locals, cd, eocd])
+}
+
+/** 手工构造单条目 stored zip（原始名字节 + 指定通用标志位，用于 GBK 名） */
+function storedZipRawName(name: Buffer, content: string, flags: number): Buffer {
+  const data = Buffer.from(content, 'utf8')
+  const crc = zlib.crc32(data)
+
+  const local = Buffer.alloc(30)
+  local.writeUInt32LE(0x04034b50, 0)
+  local.writeUInt16LE(20, 4)
+  local.writeUInt16LE(flags, 6)
+  local.writeUInt16LE(0, 8)
+  local.writeUInt32LE(crc, 14)
+  local.writeUInt32LE(data.length, 18)
+  local.writeUInt32LE(data.length, 22)
+  local.writeUInt16LE(name.length, 26)
+
+  const central = Buffer.alloc(46)
+  central.writeUInt32LE(0x02014b50, 0)
+  central.writeUInt16LE(0x031e, 4)
+  central.writeUInt16LE(20, 6)
+  central.writeUInt16LE(flags, 8)
+  central.writeUInt16LE(0, 10)
+  central.writeUInt32LE(crc, 16)
+  central.writeUInt32LE(data.length, 20)
+  central.writeUInt32LE(data.length, 24)
+  central.writeUInt16LE(name.length, 28)
+  central.writeUInt32LE((0o100644 << 16) >>> 0, 38)
+  central.writeUInt32LE(0, 42)
+
+  const centralOffset = local.length + name.length + data.length
+  const centralSize = central.length + name.length
+  const eocd = Buffer.alloc(22)
+  eocd.writeUInt32LE(0x06054b50, 0)
+  eocd.writeUInt16LE(1, 8)
+  eocd.writeUInt16LE(1, 10)
+  eocd.writeUInt32LE(centralSize, 12)
+  eocd.writeUInt32LE(centralOffset, 16)
+  return Buffer.concat([local, name, data, central, name, eocd])
 }
 
 /** 通过 IPC 跑任务并等待终态（done 返回结果；error 返回错误码） */
@@ -228,6 +267,31 @@ test.describe('zip-tool（压缩包工具）冒烟', () => {
       await page.getByRole('button', { name: '开始解压' }).click()
       await expect(page.getByText(`已解压到 ${unpackDir}`)).toBeVisible({ timeout: 30_000 })
       expect(fs.readFileSync(path.join(unpackDir, '素材.txt'), 'utf8')).toBe('压缩包内容')
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('IPC：GBK 条目名 zip 解压 → 中文名无乱码且落盘', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const root = freshDir('lumin-zip-e2e-gbk')
+    const targetDir = path.join(root, 'gbk-out')
+    try {
+      // GBK：测 B2E2、试 CAD4；bit11 未置位
+      const gbkName = Buffer.from([0xb2, 0xe2, 0xca, 0xd4, 0x2e, 0x74, 0x78, 0x74])
+      const archive = path.join(root, 'gbk.zip')
+      fs.writeFileSync(archive, storedZipRawName(gbkName, 'GBK 内容', 0))
+
+      const outcome = await runTask(page, 'zip-tool:unpack', {
+        archive,
+        targetDir,
+        conflict: 'rename'
+      })
+      expect(outcome.errorCode).toBeUndefined()
+      expect(outcome.result).toMatchObject({ files: 1, skipped: 0, renamed: 0 })
+      expect(fs.readFileSync(path.join(targetDir, '测试.txt'), 'utf8')).toBe('GBK 内容')
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
       await app.close()

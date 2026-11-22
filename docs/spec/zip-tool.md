@@ -1,7 +1,7 @@
 # 压缩包工具（zip-tool）字段级功能清单
 
 > 里程碑：M25（已登记 plan §1 Q29 / §4.25 / §6）
-> 状态：**待用户确认后实施**
+> 状态：**已实施**（M25 交付；M55 ⑧ GBK 条目名转码 2026-11-22）。
 > 关联规范：`AGENTS.md` §2（零耦合）、§5（三态/tokens/图标）、§6（IPC 三段式）、§7（测试门禁）、§8（性能）、§10（依赖治理）
 
 ---
@@ -37,7 +37,7 @@
 - 加密压缩包（密码输入/解密）、分卷、注释、自解压
 - 覆盖写入、删除源文件（打包后源文件保留）
 - 压缩包内预览、增删改单条（重新打包请重新选择源）
-- GBK 老 zip 文件名转码（先按 UTF-8 解析，无法解码/非法条目跳过并计数；见 §9 限制）
+- 7z/RAR 等非 ZIP 格式（GBK 条目名转码已于 M55 解冻，见 §M55 追加节）
 
 ### 1.4 与既有工具边界
 
@@ -241,7 +241,8 @@ export const setConfigPayloadSchema = z.object({
 
 ## 9. 已知限制
 
-- 仅 UTF-8 文件名的 zip：GBK 编码条目可能乱码或解码失败，失败条目跳过并计入 `skipped`（不做转码）
+- 条目名编码：优先 UTF-8（bit11 置位）；bit11 未置位且 UTF-8 解码失败时回退 GBK/CP936。两者都失败（真乱码/非 GBK）的条目跳过并计入 `skipped`（见 §M55）
+- 非 GBK 的其它本地代码页（Big5/Shift-JIS 等）不做识别，按 UTF-8 无法解码时跳过
 - 不解析加密 zip：加密条目解压失败 → `ZP_ARCHIVE_INVALID`
 - 不保留空目录以外的权限/ACL/所有者/时间戳（时间戳仅写入条目 mtime）
 
@@ -280,13 +281,13 @@ export const setConfigPayloadSchema = z.object({
 
 ## M55 追加节（2026-11-22 R8 登记：plan Q56 / §4.55）
 
-> 状态：待实施。原 spec 冻结项「GBK 条目名转码」解冻（Q56 拍板，替代低价值的 text-diff 词级高亮）；7z/RAR/加密/分卷维持冻结。
+> 状态：已实施（2026-11-22）。原 spec 冻结项「GBK 条目名转码」解冻（Q56 拍板，替代低价值的 text-diff 词级高亮）；7z/RAR/加密/分卷维持冻结。
 
-- **背景**：Windows 老工具（WinRAR 中文版/7-Zip 旧版/资源管理器 zip）打包的 ZIP 常用本地代码页（GBK/CP936）存条目名且不置通用标志位 bit11（EFS），fflate 按 UTF-8 解码产生 U+FFFD 乱码
+- **背景**：Windows 老工具（WinRAR 中文版/7-Zip 旧版/资源管理器 zip）打包的 ZIP 常用本地代码页（GBK/CP936）存条目名且不置通用标志位 bit11（EFS）。**实测 fflate `UnzipFile.name` 在 bit11 未置位时按 latin1 解码**（字节 → U+0080–U+00FF，不产生 U+FFFD），故需先由 latin1 还原原始字节再按 GBK 重解；中央目录自解析侧仍按 UTF-8 解码，失败回退 GBK。
 - **字段级清单（解压条目名转码）**
-  1. 解压时逐条目：通用标志位 bit11 未置位 **且** 解码名含 U+FFFD → 用 `TextDecoder('gbk')` 对原始名字节重解码（Node 24 full-icu 原生，零依赖）
-  2. 转码后仍含 U+FFFD（真乱码/非 GBK）→ 维持既有「跳过计数 + 汇总提示」行为，不误改
+  1. 解压时逐条目：bit11 未置位且名含 latin1 高字节（或 U+FFFD）→ 还原原始字节后用 `TextDecoder('gbk')` 重解码（Node 24 full-icu 原生，零依赖）
+  2. 转码后仍含 U+FFFD（真乱码/非 GBK）→ 跳过计数 + 汇总提示，不误改
   3. 打包侧零改动（仍写 UTF-8 名 + bit11 置位）；已有 UTF-8 条目零回归
   4. 无新错误码；进度/取消/冲突递增语义不变
-- **实现触点**：`archive.ts` 流式 `Unzip` 段（L514–586）。**开工首日 spike：fflate `Unzip` 元数据是否保留原始名字节**；不保留则自解析中央目录取名字节（+0.5d，预算内）
-- **验收**：构造 GBK zip fixture（`strToU8` 无法直接产出，用 Buffer 拼本地头/中央目录）单测（bit11 置位不转码 / 未置位含 U+FFFD 转码 / 非 GBK 乱码维持跳过 / UTF-8 中文名零回归）本包 ≥80%；e2e 新增「GBK 中文名 zip 解压 → 条目名无乱码且落盘正确」用例；R2 记入 `docs/smoke/zip-tool.md` M55 增量节（中文/空格路径类）；chunk 不变、零新增依赖
+- **实现触点**：`contract.ts` 新增 `decodeZipEntryName(bytes, efs)` / `decodeLegacyEntryName(name)`；`archive.ts` 中央目录解析与流式 `Unzip` 段复用同一解码规则（符号链接键因此保持一致）。spike 结论：fflate 不暴露原始名字节，但 latin1 解码可逆，**无需自解析中央目录取名字节**
+- **验收**：Buffer 手拼 GBK zip fixture 单测（bit11 置位不转码 / 未置位转码 / 非 GBK 乱码跳过 / UTF-8 中文名零回归）本包 ≥80%；e2e 新增「GBK 中文名 zip 解压 → 条目名无乱码且落盘正确」用例；R2 记入 `docs/smoke/zip-tool.md` M55 增量节（中文/空格路径类）；chunk 不变、零新增依赖
