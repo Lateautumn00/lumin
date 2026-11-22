@@ -10,9 +10,10 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'text-toolbox',
   name: '文本工具箱',
-  description: 'JSON 格式化压缩、Base64/URL/Hex/Unicode 编解码、正则测试、批量文本处理与字数统计、摩尔斯电码、CSV/JSON 互转',
+  description:
+    'JSON 格式化压缩、Base64/URL/Hex/Unicode 编解码、正则测试、批量文本处理与字数统计、摩尔斯电码、CSV/JSON 互转、汉字转拼音',
   icon: 'braces',
   category: 'text',
   order: 60,
-  version: '0.3.0'
+  version: '0.4.0'
 })

@@ -21,6 +21,7 @@
     "@lumin/plugin-api": "workspace:*",
     "@lumin/shared": "workspace:*",
     "naive-ui": "2.45.3",
+    "pinyin-pro": "3.29.5",
     "vue": "3.5.45"
   }
 }
