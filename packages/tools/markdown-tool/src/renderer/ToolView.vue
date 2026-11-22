@@ -91,6 +91,14 @@ const tsOutcome = computed(() =>
   generateTypes(jsonInput.value, { rootName: rootName.value, style: tsStyle.value })
 )
 const tsCode = computed(() => (tsOutcome.value.ok ? tsOutcome.value.value.code : ''))
+const tsExtension = computed<'ts' | 'json'>(() =>
+  tsStyle.value === 'json-schema' ? 'json' : 'ts'
+)
+watch(tsStyle, (style) => {
+  if (style === 'json-schema' && tsFileName.value === 'types') tsFileName.value = 'schema'
+  if (style !== 'json-schema' && tsFileName.value === 'schema') tsFileName.value = 'types'
+  actionError.value = null
+})
 const tsFailure = computed<ToolFailure | null>(() => {
   if (tsOutcome.value.ok) return null
   if (jsonInput.value.trim() === '' && rootName.value === '') return null
@@ -337,11 +345,14 @@ function loadSample(): void {
           <div class="grid gap-3 md:grid-cols-2">
             <div class="flex flex-col gap-2">
               <div class="flex flex-wrap items-center gap-2">
-                <NText depth="2" class="text-sm">根类型名</NText>
+                <NText depth="2" class="text-sm">
+                  {{ tsStyle === 'json-schema' ? '根标题' : '根类型名' }}
+                </NText>
                 <NInput v-model:value="rootName" size="small" class="w-32" data-testid="ts-root-name" />
                 <NRadioGroup v-model:value="tsStyle" size="small" data-testid="ts-style">
                   <NRadioButton value="interface">interface</NRadioButton>
                   <NRadioButton value="type">type</NRadioButton>
+                  <NRadioButton value="json-schema">json-schema</NRadioButton>
                 </NRadioGroup>
               </div>
               <div data-testid="ts-input">
@@ -389,9 +400,9 @@ function loadSample(): void {
               :loading="exporting"
               :disabled="tsCode === ''"
               data-testid="export-ts"
-              @click="exportFile('ts', tsFileName, tsCode)"
+              @click="exportFile(tsExtension, tsFileName, tsCode)"
             >
-              <Download class="mr-1 h-3 w-3" />导出 .ts
+              <Download class="mr-1 h-3 w-3" />导出 .{{ tsExtension }}
             </NButton>
           </div>
         </div>

@@ -97,7 +97,7 @@ const CATEGORY_LABEL: Record<ToolCategory, MessageKey> = {
   misc: 'shell.sidebar.category.misc'
 }
 
-const groups = computed(() => groupToolsByCategory(toolManifests))
+const groups = computed(() => groupToolsByCategory(toolManifests.filter((tool) => !tool.hidden)))
 
 /** 手风琴折叠：默认全部折叠，展开某分类时其余分类自动收起 */
 const openCategory = ref<ToolCategory | null>(null)

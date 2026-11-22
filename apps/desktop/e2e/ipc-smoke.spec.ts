@@ -28,8 +28,13 @@ test.describe('IPC 冒烟（R3）', () => {
     await expect(page.getByRole('button', { name: /计算与转换/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /其他/ })).toBeVisible()
     await expect(page.getByRole('heading', { name: '计算器' })).toBeVisible()
-    await clickSidebarTool(page, '示例工具')
-    await expect(page.getByRole('heading', { name: '示例工具' })).toBeVisible()
+
+    // example 置 hidden：侧边栏不展示，但 IPC 通道保留（直连 invoke 验证）
+    await expect(page.getByText('示例工具')).toHaveCount(0)
+    const pong = await page.evaluate(() =>
+      window.lumin.invoke<{ pong: boolean; at: number }>('example:ping')
+    )
+    expect(pong.pong).toBe(true)
   })
 
   test('单位换算：类别切换单位重置 + 实时换算 + 收藏', async () => {

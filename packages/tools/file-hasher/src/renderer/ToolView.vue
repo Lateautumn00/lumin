@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 文件哈希校验主视图（M13）
 // 作者：cuilanchao · 修改时间：2026-11-19
-// 三态强制（空拖拽引导/加载进度可取消/报错码 + 详情）、三算法可多选、粘贴期望哈希比对、
+// 三态强制（空拖拽引导/加载进度可取消/报错码 + 详情）、四算法可多选、粘贴期望哈希比对、
 // 复制单行/全部 TSV、失败项重试（spec §2/§6）
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { NButton, NCheckbox, NEmpty, NInput, NText, NTag } from 'naive-ui'
@@ -282,7 +282,7 @@ onUnmounted(detach)
     <div>
       <h1 class="text-base font-semibold">文件哈希校验</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        批量选择文件计算 MD5 / SHA-1 / SHA-256；粘贴期望哈希即可自动比对完整性，结果可复制。
+        批量选择文件计算 MD5 / SHA-1 / SHA-256 / SHA-512；粘贴期望哈希即可自动比对完整性，结果可复制。
       </p>
     </div>
 
@@ -400,13 +400,13 @@ onUnmounted(detach)
         <NText depth="2" class="w-16 shrink-0 text-sm">期望哈希</NText>
         <NInput
           v-model:value="expectedRaw"
-          placeholder="粘贴 MD5 / SHA-1 / SHA-256，可带 md5: 等前缀"
+          placeholder="粘贴 MD5 / SHA-1 / SHA-256 / SHA-512，可带 md5: 等前缀"
           :disabled="busy"
           clearable
         />
       </div>
       <NText v-if="expectedInvalid" type="error" class="text-xs">
-        格式非法：需为 32/40/64 位十六进制，或带 md5: / sha1: / sha256: 前缀
+        格式非法：需为 32/40/64/128 位十六进制，或带 md5: / sha1: / sha256: / sha512: 前缀
       </NText>
       <NText v-else-if="expected !== null" depth="3" class="text-xs">
         按 {{ algorithmLabel(expected.algorithm) }} 比对，命中 {{ matchedPaths.size }} 个文件

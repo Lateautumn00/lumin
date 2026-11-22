@@ -143,7 +143,7 @@ export type CompressOptions = z.infer<typeof compressOptionsSchema>
 export type ConvertOptions = z.infer<typeof convertOptionsSchema>
 export type ResizeOptions = z.infer<typeof resizeOptionsSchema>
 
-// —— 调整 options（M40，spec §2.4） ——
+// —— 调整 options（M40，spec §2.4；M55 §4.55 增调色） ——
 
 export const EFFECT_KINDS = ['grayscale', 'invert', 'binary'] as const
 
@@ -153,10 +153,22 @@ export const effectKindSchema = z.enum(EFFECT_KINDS)
 /** 黑白二值阈值（0–255，仅 binary 生效） */
 export const thresholdSchema = z.number().int().min(0).max(255)
 
+/** 调色滑杆（有符号）：亮度/对比度/饱和度 -100..100，0 = 不生效（M55 §4.55） */
+export const adjustSignedSchema = z.number().int().min(-100).max(100)
+
+/** 调色滑杆（强度）：锐化/模糊 0..100，0 = 不生效（M55 §4.55） */
+export const adjustIntensitySchema = z.number().int().min(0).max(100)
+
 export const effectOptionsSchema = z.object({
   effect: effectKindSchema,
   threshold: thresholdSchema,
-  quality: qualitySchema
+  quality: qualitySchema,
+  // M55 调色：default(0) 保证旧 payload（无这些字段）与全 0 路径输出逐字节一致
+  brightness: adjustSignedSchema.default(0),
+  contrast: adjustSignedSchema.default(0),
+  saturation: adjustSignedSchema.default(0),
+  sharpen: adjustIntensitySchema.default(0),
+  blur: adjustIntensitySchema.default(0)
 })
 
 export type EffectOptions = z.infer<typeof effectOptionsSchema>
@@ -172,10 +184,7 @@ export const gifLoopSchema = z
   })
 
 /** 目标宽：0 = 按首张图片宽；否则 64–4096 */
-export const gifWidthSchema = z.union([
-  z.literal(0),
-  z.number().int().min(64).max(GIF_MAX_EDGE)
-])
+export const gifWidthSchema = z.union([z.literal(0), z.number().int().min(64).max(GIF_MAX_EDGE)])
 
 export const gifOptionsSchema = z.object({
   durationMs: z.number().int().min(GIF_MIN_FRAME_MS).max(GIF_MAX_FRAME_MS),

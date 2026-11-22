@@ -2,8 +2,8 @@
  * @file password-generator（密码生成器）e2e 冒烟：真实 Electron 驱动页面交互
  * @author cuilanchao
  * @date 2026-11-20
- * @description 覆盖：页面加载与三页签、默认密码与强度/熵展示、长度与字符集联动、
- *              UUID v4 形状与数量、随机字符串/整数与非法范围报错恢复。
+ * @description 覆盖：页面加载与四页签、默认密码与强度/熵展示、长度与字符集联动、
+ *              UUID v4 形状与数量、随机字符串/整数与非法范围报错恢复、口令短语词数与分隔符。
  */
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
@@ -36,7 +36,7 @@ async function ensureReady(
 }
 
 test.describe('password-generator（密码生成器）冒烟', () => {
-  test('页面加载 + 三页签与默认密码结果展示', async () => {
+  test('页面加载 + 四页签与默认密码结果展示', async () => {
     const { app, page } = await launch()
     await ensureReady(page)
     try {
@@ -45,6 +45,7 @@ test.describe('password-generator（密码生成器）冒烟', () => {
       await expect(page.getByText('密码', { exact: true }).first()).toBeVisible()
       await expect(page.getByText('UUID', { exact: true })).toBeVisible()
       await expect(page.getByText('随机', { exact: true })).toBeVisible()
+      await expect(page.getByText('口令短语', { exact: true })).toBeVisible()
 
       await expect(page.locator('[data-password]')).toHaveText(/^.{16}$/)
       await expect(page.locator('[data-strength]')).toContainText('强度：')
@@ -101,6 +102,39 @@ test.describe('password-generator（密码生成器）冒烟', () => {
       await countInput.fill('3')
       await countInput.press('Tab')
       await expect(items).toHaveCount(3)
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('口令短语：默认 4 词连字符 → 6 词空格分隔', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '密码生成器')
+      await page.getByText('口令短语', { exact: true }).click()
+
+      const items = page.locator('[data-passphrase-item]')
+      await expect(items).toHaveCount(1)
+      const first = await items.first().locator('span').first().textContent()
+      expect((first ?? '').trim().split('-')).toHaveLength(4)
+      await expect(page.locator('[data-passphrase-strength]')).toContainText('强度：')
+
+      const wordInput = page.getByPlaceholder('词数（3–10）')
+      await wordInput.fill('6')
+      await wordInput.press('Tab')
+      await page.getByLabel('口令分隔符').selectOption('space')
+      await expect
+        .poll(async () => {
+          const text = await items.first().locator('span').first().textContent()
+          return (text ?? '').trim().split(' ').length
+        })
+        .toBe(6)
+
+      const countInput = page.getByPlaceholder('数量（1–20）')
+      await countInput.fill('2')
+      await countInput.press('Tab')
+      await expect(items).toHaveCount(2)
     } finally {
       await app.close()
     }

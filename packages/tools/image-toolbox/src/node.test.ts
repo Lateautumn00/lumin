@@ -634,6 +634,27 @@ describe('process effect（M40 调整）', () => {
     expect(firstOf(r.outputs).output).toBe(join(outDir, 'photo.bw200.png'))
     expect(findEncodeCall(harness)?.args).toContain("format=gray,lut=y='if(gt(val,200),255,0)'")
   })
+
+  it('调色参数透传为 eq 滤镜段、缺省补 0 不改滤镜（M55 §4.55）', async () => {
+    const harness = createHarness()
+    const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
+    roots.push(outDir)
+    const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(inDir)
+    const { result, error } = await runTask(harness, {
+      mode: 'effect',
+      files: [makeInput(inDir, 'photo.jpg')],
+      outputDir: outDir,
+      options: { effect: 'grayscale', threshold: 128, quality: 75, brightness: 40 }
+    })
+    expect(error).toBeUndefined()
+    const r = result as { outputs: { output: string }[] }
+    expect(firstOf(r.outputs).output).toBe(join(outDir, 'photo.gray.jpg'))
+    const args = findEncodeCall(harness)?.args ?? []
+    const vfIndex = args.indexOf('-vf')
+    expect(vfIndex).toBeGreaterThan(-1)
+    expect(args[vfIndex + 1]).toBe('eq=brightness=0.4,hue=s=0')
+  })
 })
 
 describe('make-gif（M40）', () => {
@@ -652,16 +673,18 @@ describe('make-gif（M40）', () => {
     roots.push(outDir)
     const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
     roots.push(inDir)
-    const files = [
-      makeInput(inDir, '1.png'),
-      makeInput(inDir, '2.png'),
-      makeInput(inDir, '3.png')
-    ]
+    const files = [makeInput(inDir, '1.png'), makeInput(inDir, '2.png'), makeInput(inDir, '3.png')]
     const { result, updates, error } = await runTask(harness, gifPayload(files, outDir), {
       action: 'make-gif'
     })
     expect(error).toBeUndefined()
-    const r = result as { outputPath: string; width: number; height: number; frames: number; sizeBytes: number }
+    const r = result as {
+      outputPath: string
+      width: number
+      height: number
+      frames: number
+      sizeBytes: number
+    }
     expect(r.width).toBe(200)
     expect(r.height).toBe(200)
     expect(r.frames).toBe(3)
@@ -687,11 +710,9 @@ describe('make-gif（M40）', () => {
     roots.push(outDir)
     const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
     roots.push(inDir)
-    const { error } = await runTask(
-      harness,
-      gifPayload([makeInput(inDir, 'big.png')], outDir),
-      { action: 'make-gif' }
-    )
+    const { error } = await runTask(harness, gifPayload([makeInput(inDir, 'big.png')], outDir), {
+      action: 'make-gif'
+    })
     expect(error).toMatchObject({ code: 'IT_GIF_TOO_LARGE' })
     expect(harness.calls.filter((c) => c.args?.[0] === '-y')).toHaveLength(0)
   })
@@ -724,11 +745,9 @@ describe('make-gif（M40）', () => {
     expect(bad.error).toMatchObject({ code: 'INVALID_PAYLOAD' })
     const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
     roots.push(inDir)
-    const exe = await runTask(
-      harness,
-      gifPayload([makeInput(inDir, 'a.exe')], outDir),
-      { action: 'make-gif' }
-    )
+    const exe = await runTask(harness, gifPayload([makeInput(inDir, 'a.exe')], outDir), {
+      action: 'make-gif'
+    })
     expect(exe.error).toMatchObject({ code: 'IT_FILE_UNSUPPORTED' })
   })
 })

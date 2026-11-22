@@ -107,6 +107,49 @@ function writeZip(files: Record<string, string>): string {
   return archive
 }
 
+/** 构造仅含一个 0 字节文件的 stored zip（可指定原始名字节与通用标志位） */
+function writeRawNameZip(nameBytes: Uint8Array, flags = 0): string {
+  const name = Buffer.from(nameBytes)
+  const local = Buffer.alloc(30)
+  local.writeUInt32LE(0x04034b50, 0)
+  local.writeUInt16LE(20, 4)
+  local.writeUInt16LE(flags, 6)
+  local.writeUInt16LE(0, 8)
+  local.writeUInt32LE(0, 14)
+  local.writeUInt32LE(0, 18)
+  local.writeUInt32LE(0, 22)
+  local.writeUInt16LE(name.length, 26)
+  local.writeUInt16LE(0, 28)
+
+  const central = Buffer.alloc(46)
+  central.writeUInt32LE(0x02014b50, 0)
+  central.writeUInt16LE(20, 4)
+  central.writeUInt16LE(20, 6)
+  central.writeUInt16LE(flags, 8)
+  central.writeUInt16LE(0, 10)
+  central.writeUInt32LE(0, 16)
+  central.writeUInt32LE(0, 20)
+  central.writeUInt32LE(0, 24)
+  central.writeUInt16LE(name.length, 28)
+  central.writeUInt32LE(0, 42)
+
+  const centralOffset = local.length + name.length
+  const centralSize = central.length + name.length
+  const eocd = Buffer.alloc(22)
+  eocd.writeUInt32LE(0x06054b50, 0)
+  eocd.writeUInt16LE(1, 8)
+  eocd.writeUInt16LE(1, 10)
+  eocd.writeUInt32LE(centralSize, 12)
+  eocd.writeUInt32LE(centralOffset, 16)
+
+  const archive = join(tempRoot(), 'gbk.zip')
+  writeFileSync(
+    archive,
+    Buffer.concat([local, name, central, name, eocd])
+  )
+  return archive
+}
+
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
@@ -247,6 +290,56 @@ describe('runUnpack', () => {
     expect(readFileSync(join(targetDir, 'a.txt'), 'utf8')).toBe('甲')
     expect(readFileSync(join(targetDir, '子目录', 'b.txt'), 'utf8')).toBe('乙')
     expect(updates.at(-1)).toMatchObject({ current: 3, total: 3, stage: 'unpack' })
+  })
+
+  it('GBK 条目名（bit11 未置位）→ 转码为中文并落盘', () => {
+    const gbkName = Uint8Array.from([0xb2, 0xe2, 0xca, 0xd4, 0x2e, 0x74, 0x78, 0x74])
+    const archive = writeRawNameZip(gbkName)
+    const targetDir = join(tempRoot(), '解压')
+    const result = runUnpack(
+      unpackRequest({ archive, targetDir, conflict: 'rename' }),
+      () => undefined
+    )
+    expect(result.files).toBe(1)
+    expect(result.skipped).toBe(0)
+    expect(existsSync(join(targetDir, '测试.txt'))).toBe(true)
+  })
+
+  it('bit11 置位 → 不按 GBK 转码', () => {
+    const gbkName = Uint8Array.from([0xb2, 0xe2, 0xca, 0xd4, 0x2e, 0x74, 0x78, 0x74])
+    const archive = writeRawNameZip(gbkName, 0x800)
+    const targetDir = join(tempRoot(), '解压')
+    const result = runUnpack(
+      unpackRequest({ archive, targetDir, conflict: 'rename' }),
+      () => undefined
+    )
+    expect(result.files).toBe(1)
+    expect(existsSync(join(targetDir, '测试.txt'))).toBe(false)
+  })
+
+  it('非 GBK 损坏名 → 跳过计数且不落盘', () => {
+    const archive = writeRawNameZip(Uint8Array.from([0x81]))
+    const targetDir = join(tempRoot(), '解压')
+    const result = runUnpack(
+      unpackRequest({ archive, targetDir, conflict: 'rename' }),
+      () => undefined
+    )
+    expect(result.skipped).toBe(1)
+    expect(result.files).toBe(0)
+  })
+
+  it('UTF-8 中文名（bit11 置位）零回归', () => {
+    const utf8Name = Uint8Array.from([
+      0xe6, 0xb5, 0x8b, 0xe8, 0xaf, 0x95, 0x2e, 0x74, 0x78, 0x74
+    ])
+    const archive = writeRawNameZip(utf8Name, 0x800)
+    const targetDir = join(tempRoot(), '解压')
+    const result = runUnpack(
+      unpackRequest({ archive, targetDir, conflict: 'rename' }),
+      () => undefined
+    )
+    expect(result.files).toBe(1)
+    expect(existsSync(join(targetDir, '测试.txt'))).toBe(true)
   })
 
   it('rename：同名自动递增；skip：跳过已存在文件', () => {

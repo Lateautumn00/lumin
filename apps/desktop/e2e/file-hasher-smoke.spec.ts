@@ -2,7 +2,7 @@
  * @file file-hasher（文件哈希校验）e2e 冒烟：真实 Electron + 真实磁盘文件
  * @author cuilanchao
  * @date 2026-11-19
- * @description 覆盖：页面加载/空态、UI 选文件 + 三算法计算 + 期望哈希比对、中文+空格路径、
+ * @description 覆盖：页面加载/空态、UI 选文件 + 四算法计算 + 期望哈希比对、中文+空格路径、
  *              不可读项逐项失败不中断、任务取消终态、3 任务并发、断电恢复（强杀重启后可重算）。
  *              注意：临时目录名必须 ASCII（本机 Node fs 对非 ASCII 目录名会硬崩，见 docx2pdf 先例），
  *              文件名保留中文验证路径。
@@ -29,14 +29,16 @@ const appDir = path.resolve(__dirname, '..')
 const ABC = {
   md5: '900150983cd24fb0d6963f7d28e17f72',
   sha1: 'a9993e364706816aba3e25717850c26c9cd0d89d',
-  sha256: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+  sha256: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+  sha512:
+    'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f'
 }
 
 interface HashFileResult {
   path: string
   size: number
   mtimeMs: number
-  hashes: { md5?: string; sha1?: string; sha256?: string }
+  hashes: { md5?: string; sha1?: string; sha256?: string; sha512?: string }
   status: 'ok' | 'failed'
   code?: string
   message?: string
@@ -125,7 +127,7 @@ test.describe('file-hasher（文件哈希校验）冒烟', () => {
     }
   })
 
-  test('UI 选文件 → 三算法计算 → 结果表 + 期望哈希比对命中', async () => {
+  test('UI 选文件 → 四算法计算 → 结果表 + 期望哈希比对命中', async () => {
     const { app, page } = await launch()
     await ensureReady(page)
     const dir = freshDir('lumin-fh-e2e-ui')
@@ -136,20 +138,20 @@ test.describe('file-hasher（文件哈希校验）冒烟', () => {
       await clickSidebarTool(page, '文件哈希校验')
       await expect(page.getByRole('heading', { name: '文件哈希校验' })).toBeVisible()
 
-      // 通过设置通道预置三算法（页面 mounted 时读取记忆），再验证 UI 勾选态与切换
+      // 通过设置通道预置四算法（页面 mounted 时读取记忆），再验证 UI 勾选态与切换
       await page.evaluate(() =>
         window.lumin.invoke('file-hasher:set-config', {
-          algorithms: ['md5', 'sha1', 'sha256']
+          algorithms: ['md5', 'sha1', 'sha256', 'sha512']
         })
       )
       await clickSidebarTool(page, '计算器')
       await clickSidebarTool(page, '文件哈希校验')
-      const sha1Checkbox = page.locator('.n-checkbox', { hasText: 'SHA-1' }).first()
-      await expect(sha1Checkbox).toHaveClass(/n-checkbox--checked/)
-      await sha1Checkbox.click()
-      await expect(sha1Checkbox).not.toHaveClass(/n-checkbox--checked/)
-      await sha1Checkbox.click()
-      await expect(sha1Checkbox).toHaveClass(/n-checkbox--checked/)
+      const sha512Checkbox = page.locator('.n-checkbox', { hasText: 'SHA-512' }).first()
+      await expect(sha512Checkbox).toHaveClass(/n-checkbox--checked/)
+      await sha512Checkbox.click()
+      await expect(sha512Checkbox).not.toHaveClass(/n-checkbox--checked/)
+      await sha512Checkbox.click()
+      await expect(sha512Checkbox).toHaveClass(/n-checkbox--checked/)
 
       // 隐藏 input 选择真实磁盘文件（DropZone → getPathForFile）
       await page.locator('input[type=file]').setInputFiles(target)
@@ -157,14 +159,15 @@ test.describe('file-hasher（文件哈希校验）冒烟', () => {
 
       await page.getByRole('button', { name: '开始校验' }).click()
 
-      // 结果表出现三种算法已知值
+      // 结果表出现四种算法已知值
       await expect(page.getByText(ABC.md5)).toBeVisible({ timeout: 30_000 })
       await expect(page.getByText(ABC.sha1)).toBeVisible()
       await expect(page.getByText(ABC.sha256)).toBeVisible()
+      await expect(page.getByText(ABC.sha512)).toBeVisible()
 
       // 粘贴期望哈希（带前缀、大写）→ 命中高亮 + 匹配标签
       await page
-        .getByPlaceholder('粘贴 MD5 / SHA-1 / SHA-256，可带 md5: 等前缀')
+        .getByPlaceholder('粘贴 MD5 / SHA-1 / SHA-256 / SHA-512，可带 md5: 等前缀')
         .fill(`MD5:${ABC.md5.toUpperCase()}`)
       await expect(page.getByText('按 MD5 比对，命中 1 个文件')).toBeVisible()
       await expect(page.getByText('匹配', { exact: true })).toBeVisible()
@@ -174,7 +177,7 @@ test.describe('file-hasher（文件哈希校验）冒烟', () => {
     }
   })
 
-  test('中文+空格路径：三算法已知值且结果保持输入顺序', async () => {
+  test('中文+空格路径：四算法已知值且结果保持输入顺序', async () => {
     const { app, page } = await launch()
     await ensureReady(page)
     const dir = freshDir('lumin-fh-e2e-cn')
@@ -186,7 +189,7 @@ test.describe('file-hasher（文件哈希校验）冒烟', () => {
 
       const outcome = await runHash(page, {
         paths: [first, second],
-        algorithms: ['md5', 'sha1', 'sha256']
+        algorithms: ['md5', 'sha1', 'sha256', 'sha512']
       })
 
       expect(outcome.hasProgress).toBe(true)

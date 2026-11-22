@@ -13,7 +13,7 @@ describe('manifest', () => {
     expect(manifest.icon).toBe('file-code')
     expect(manifest.category).toBe('document')
     expect(manifest.order).toBe(80)
-    expect(manifest.version).toBe('0.1.0')
+    expect(manifest.version).toBe('0.2.0')
     expect(manifest.description).toContain('Markdown')
   })
 })

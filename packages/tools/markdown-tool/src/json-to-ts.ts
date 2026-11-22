@@ -13,7 +13,7 @@ export const JSON_LIMIT = 2_000_000
 /** 嵌套深度上限 */
 export const MAX_DEPTH = 64
 
-export type DeclarationStyle = 'interface' | 'type'
+export type DeclarationStyle = 'interface' | 'type' | 'json-schema'
 
 export interface GenerateOptions {
   /** 根类型名（须为合法 TS 标识符且非保留字） */
@@ -371,6 +371,131 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : ''
 }
 
+/** JSON Schema 节点（draft-07 子集） */
+type SchemaNode = Record<string, unknown>
+
+/** 嵌套对象定义收集器：根对象内联，其余对象抽到 $defs */
+class SchemaBuilder {
+  private readonly defs: Record<string, SchemaNode> = {}
+  private readonly usedNames = new Set<string>()
+
+  constructor(private readonly rootName: string) {}
+
+  /**
+   * 构建根 schema
+   * @param value 已解析 JSON 值
+   */
+  build(value: unknown): SchemaNode {
+    return this.value(value, this.rootName, 0, false)
+  }
+
+  /** 已收集的 $defs */
+  definitions(): Record<string, SchemaNode> {
+    return this.defs
+  }
+
+  /**
+   * 单值 → schema；嵌套对象登记到 $defs 并返回 $ref
+   * @param value JSON 值
+   * @param pathName 当前命名路径
+   * @param depth 嵌套深度
+   * @param hoistObject 是否把对象抽到 $defs
+   */
+  private value(
+    value: unknown,
+    pathName: string,
+    depth: number,
+    hoistObject: boolean
+  ): SchemaNode {
+    if (depth > MAX_DEPTH) throw new DepthError()
+    if (value === null) return { type: ['string', 'null'] }
+    if (typeof value === 'string') return { type: 'string' }
+    if (typeof value === 'number') {
+      return { type: Number.isInteger(value) ? 'integer' : 'number' }
+    }
+    if (typeof value === 'boolean') return { type: 'boolean' }
+    if (Array.isArray(value)) {
+      const schema: SchemaNode = { type: 'array' }
+      const first = value[0]
+      if (first !== undefined) {
+        schema.items = this.value(first, `${pathName}Item`, depth + 1, true)
+      }
+      return schema
+    }
+    if (typeof value === 'object') {
+      return this.object(value as Record<string, unknown>, pathName, depth, hoistObject)
+    }
+    return {}
+  }
+
+  /**
+   * 对象 → type/properties/required；可选抽到 $defs
+   * @param record JSON 对象
+   * @param pathName 当前命名路径
+   * @param depth 嵌套深度
+   * @param hoist 是否抽到 $defs
+   */
+  private object(
+    record: Record<string, unknown>,
+    pathName: string,
+    depth: number,
+    hoist: boolean
+  ): SchemaNode {
+    if (depth > MAX_DEPTH) throw new DepthError()
+    const keys = Object.keys(record)
+    const schema: SchemaNode = { type: 'object' }
+    if (keys.length > 0) {
+      const properties: Record<string, SchemaNode> = {}
+      for (const key of keys) {
+        properties[key] = this.value(record[key], `${pathName}${pascalCase(key)}`, depth + 1, true)
+      }
+      schema.properties = properties
+      schema.required = keys
+    }
+    if (!hoist) return schema
+    const name = this.uniqueName(pathName)
+    this.defs[name] = schema
+    return { $ref: `#/$defs/${name}` }
+  }
+
+  /**
+   * $defs 名称去重（冲突追加 2/3…）
+   * @param base 期望名字
+   */
+  private uniqueName(base: string): string {
+    const fallback = base === '' ? 'Schema' : base
+    let candidate = fallback
+    let index = 2
+    while (this.usedNames.has(candidate)) {
+      candidate = `${fallback}${index}`
+      index += 1
+    }
+    this.usedNames.add(candidate)
+    return candidate
+  }
+}
+
+/**
+ * JSON 值 → JSON Schema（draft-07 子集）
+ * 规则：对象 → object/properties/required；嵌套对象 → $defs/$ref；
+ * 数组取首个元素为 items；整数 → integer；null → string|null union；
+ * 字符串不猜 format；空容器只输出 type。
+ * @param value 已解析 JSON 值
+ * @param rootName 根标题与 $defs 命名前缀
+ */
+export function jsonToSchema(value: unknown, rootName = 'Root'): SchemaNode {
+  const builder = new SchemaBuilder(rootName)
+  const root = builder.build(value)
+  const schema: SchemaNode = {
+    $schema: 'http://json-schema.org/draft-07/schema#',
+    title: rootName,
+    ...root
+  }
+  const defs = builder.definitions()
+  if (Object.keys(defs).length > 0) schema.$defs = defs
+  return schema
+}
+
 /**
  * JSON 文本 → TypeScript 类型代码
  * @param input JSON 文本
@@ -389,6 +514,10 @@ export function generateTypes(input: string, options: GenerateOptions): Generate
   }
 
   try {
+    if (options.style === 'json-schema') {
+      const schema = jsonToSchema(parsed, options.rootName)
+      return { ok: true, value: { code: `${JSON.stringify(schema, null, 2)}\n` } }
+    }
     const shape = infer(parsed, 0)
     const emitter = new Emitter(options.rootName, options.style)
     return { ok: true, value: { code: emitter.render(shape) } }

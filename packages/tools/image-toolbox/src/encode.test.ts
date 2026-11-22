@@ -7,13 +7,15 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  buildAdjustFilters,
   buildEffectFilter,
   buildEncodeArgs,
   buildScaleArgs,
   classifyFfmpegFailure,
   qualityToCrf,
   qualityToQscale,
-  resolveTargetSize
+  resolveTargetSize,
+  ZERO_ADJUST
 } from './encode'
 
 describe('buildEffectFilter（M40 调整，spec §5）', () => {
@@ -26,9 +28,7 @@ describe('buildEffectFilter（M40 调整，spec §5）', () => {
   })
 
   it('黑白二值 → format=gray + lut 阈值', () => {
-    expect(buildEffectFilter('binary', 128)).toBe(
-      "format=gray,lut=y='if(gt(val,128),255,0)'"
-    )
+    expect(buildEffectFilter('binary', 128)).toBe("format=gray,lut=y='if(gt(val,128),255,0)'")
   })
 
   it('阈值钳制 0–255 并取整', () => {
@@ -36,6 +36,71 @@ describe('buildEffectFilter（M40 调整，spec §5）', () => {
     expect(buildEffectFilter('binary', 300)).toContain('gt(val,255)')
     expect(buildEffectFilter('binary', 127.6)).toContain('gt(val,128)')
     expect(buildEffectFilter('binary', Number.NaN)).toContain('gt(val,128)')
+  })
+})
+
+describe('调色滤镜链（M55 §4.55）', () => {
+  it('全 0 / 缺省参数与 M40 输出逐字节一致', () => {
+    expect(buildEffectFilter('grayscale', 128, ZERO_ADJUST)).toBe('hue=s=0')
+    expect(buildEffectFilter('invert', 128, ZERO_ADJUST)).toBe('negate')
+    expect(buildEffectFilter('binary', 100, ZERO_ADJUST)).toBe(
+      "format=gray,lut=y='if(gt(val,100),255,0)'"
+    )
+    expect(buildAdjustFilters(ZERO_ADJUST)).toEqual({ color: null, spatial: [] })
+  })
+
+  it('eq 色彩段先于效果：映射 brightness/100、contrast/saturation 1+v/100', () => {
+    expect(
+      buildEffectFilter('grayscale', 128, {
+        brightness: 50,
+        contrast: 20,
+        saturation: -30,
+        sharpen: 0,
+        blur: 0
+      })
+    ).toBe('eq=brightness=0.5:contrast=1.2:saturation=0.7,hue=s=0')
+  })
+
+  it('单参只产出对应段（亮度 / 锐化 / 模糊）', () => {
+    expect(buildEffectFilter('invert', 128, { ...ZERO_ADJUST, brightness: -100 })).toBe(
+      'eq=brightness=-1,negate'
+    )
+    expect(buildEffectFilter('grayscale', 128, { ...ZERO_ADJUST, sharpen: 50 })).toBe(
+      'hue=s=0,unsharp=5:5:1:5:5:0'
+    )
+    expect(buildEffectFilter('grayscale', 128, { ...ZERO_ADJUST, blur: 10 })).toBe(
+      'hue=s=0,gblur=sigma=2'
+    )
+  })
+
+  it('空间段置于效果之后：eq → 效果 → unsharp → gblur', () => {
+    expect(
+      buildEffectFilter('binary', 128, {
+        brightness: 10,
+        contrast: 0,
+        saturation: 0,
+        sharpen: 25,
+        blur: 5
+      })
+    ).toBe(
+      "eq=brightness=0.1,format=gray,lut=y='if(gt(val,128),255,0)',unsharp=5:5:0.5:5:5:0,gblur=sigma=1"
+    )
+  })
+
+  it('越界钳制与非有限值回退 0', () => {
+    expect(
+      buildEffectFilter('grayscale', 128, {
+        brightness: 999,
+        contrast: -999,
+        saturation: Number.NaN,
+        sharpen: -5,
+        blur: 101
+      })
+    ).toBe('eq=brightness=1:contrast=0,hue=s=0,gblur=sigma=20')
+    expect(buildAdjustFilters({ ...ZERO_ADJUST, brightness: 40.6, blur: 9.9 })).toEqual({
+      color: 'eq=brightness=0.41',
+      spatial: ['gblur=sigma=2']
+    })
   })
 })
 

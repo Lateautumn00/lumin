@@ -7,5 +7,6 @@ export const manifest = defineManifest({
   icon: 'flask-conical',
   category: 'misc',
   order: 95,
-  version: '0.1.0'
+  version: '0.1.0',
+  hidden: true
 })

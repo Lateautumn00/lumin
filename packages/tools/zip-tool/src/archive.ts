@@ -26,6 +26,8 @@ import { Zip, ZipDeflate, ZipPassThrough, Unzip, UnzipInflate, type UnzipFile } 
 import { resolveConflictPath } from '@lumin/node-kit'
 import { errnoCode, isStructuredError, toolError } from './errors'
 import {
+  decodeLegacyEntryName,
+  decodeZipEntryName,
   entryKey,
   isZipFileName,
   normalizeArchivePath,
@@ -367,7 +369,7 @@ export function parseCentralDirectory(data: Uint8Array): CentralEntry[] | null {
     const nameStart = offset + 46
     const nameEnd = nameStart + nameLength
     if (nameEnd > view.length) return null
-    const name = view.toString('utf8', nameStart, nameEnd)
+    const name = decodeZipEntryName(view.subarray(nameStart, nameEnd), (flags & 0x800) !== 0)
     const unixMode = (externalAttrs >>> 16) & 0xffff
     entries.push({
       name,
@@ -512,7 +514,13 @@ export function runUnpack(
     }
 
     const unzip = new Unzip((file) => {
-      const rawName = file.name
+      // GBK 老 zip（bit11 未置位）由 fflate 按 latin1 解码，此处回退 GBK 重解；无法恢复则跳过计数
+      const decodedName = decodeLegacyEntryName(file.name)
+      if (decodedName === null) {
+        drainSkipped(file, file.name)
+        return
+      }
+      const rawName = decodedName
       if (symlinkKeys.has(entryKey(rawName))) {
         drainSkipped(file, rawName)
         return

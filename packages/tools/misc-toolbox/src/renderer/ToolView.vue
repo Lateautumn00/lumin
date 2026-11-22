@@ -23,7 +23,12 @@ import type { StructuredError } from '@lumin/shared'
 
 import ScreenRulerPanel from './ScreenRulerPanel.vue'
 import { errorMessage } from '../errors'
-import { parseAndCompute, type SubnetInfo } from '../ip'
+import {
+  isIpv6Info,
+  parseAndCompute,
+  type SubnetInfo,
+  type SubnetInfo6
+} from '../ip'
 import {
   MAX_LAPS,
   TICK_INTERVAL_MS,
@@ -43,15 +48,32 @@ import {
 
 const activeTab = ref('ip')
 
-const CIDR_PRESETS = ['10.0.0.0/8', '172.16.0.0/12', '192.168.1.0/24', '0.0.0.0/0'] as const
+const CIDR_PRESETS = [
+  '10.0.0.0/8',
+  '172.16.0.0/12',
+  '192.168.1.0/24',
+  '0.0.0.0/0',
+  '2001:db8::/32'
+] as const
 
 const cidrInput = ref('')
-const subnet = ref<SubnetInfo | null>(null)
+const subnet = ref<SubnetInfo | SubnetInfo6 | null>(null)
 const subnetError = ref<StructuredError | null>(null)
 
 const subnetRows = computed<{ key: string; label: string; value: string }[]>(() => {
   const info = subnet.value
   if (info === null) return []
+  if (isIpv6Info(info)) {
+    return [
+      { key: 'network', label: '网络地址', value: info.network },
+      { key: 'prefix', label: '前缀长度', value: `/${info.prefix}` },
+      { key: 'last', label: '末地址', value: info.last },
+      { key: 'first-host', label: '首地址', value: info.firstHost },
+      { key: 'last-host', label: '末可用地址', value: info.lastHost },
+      { key: 'host-count', label: '可用主机数', value: info.hostCount },
+      { key: 'type', label: '地址类型', value: info.addressType }
+    ]
+  }
   return [
     { key: 'network', label: '网络地址', value: info.network },
     { key: 'broadcast', label: '广播地址', value: info.broadcast },
@@ -428,7 +450,7 @@ onUnmounted(() => {
           <NText depth="2" class="text-sm">CIDR</NText>
           <NInput
             v-model:value="cidrInput"
-            placeholder="输入 CIDR，如 192.168.1.0/24"
+            placeholder="输入 CIDR，如 192.168.1.0/24 或 2001:db8::/32"
             aria-label="CIDR 输入"
             @keyup.enter="runSubnet"
           />
@@ -476,8 +498,8 @@ onUnmounted(() => {
       </template>
 
       <NText v-else-if="subnetError === null" depth="3" class="text-sm">
-        输入 CIDR（如 192.168.1.0/24）后点击「计算」或按回车；也支持 192.168.1.10/255.255.255.0
-        的掩码写法。
+        输入 IPv4 / IPv6 CIDR（如 192.168.1.0/24 或 2001:db8::/32）后点击「计算」或按回车；IPv4 也支持
+        192.168.1.10/255.255.255.0 的掩码写法。
       </NText>
     </div>
 

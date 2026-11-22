@@ -10,9 +10,9 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'password-generator',
   name: '密码生成器',
-  description: '强随机密码生成（熵与强度评估）、UUID v4、随机字符串与随机整数',
+  description: '强随机密码生成（熵与强度评估）、EFF 口令短语、UUID v4、随机字符串与随机整数',
   icon: 'key-round',
   category: 'misc',
   order: 90,
-  version: '0.1.0'
+  version: '0.2.0'
 })

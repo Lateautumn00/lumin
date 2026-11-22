@@ -26,6 +26,17 @@ import {
   type StrengthLevel
 } from '../password'
 import { toolError } from '../errors'
+import {
+  EFF_ENTROPY_BITS_PER_WORD,
+  PASSPHRASE_COUNT_MAX,
+  PASSPHRASE_COUNT_MIN,
+  PASSPHRASE_WORD_COUNT_MAX,
+  PASSPHRASE_WORD_COUNT_MIN,
+  generatePassphrase,
+  loadEffWords,
+  type PassphraseResult,
+  type PassphraseSeparator
+} from '../words'
 
 const activeTab = ref('password')
 const copiedLabel = ref('')
@@ -182,6 +193,108 @@ function regenerateRandomInt(): void {
 
 watch([randomIntMin, randomIntMax], regenerateRandomInt, { immediate: true })
 
+/* ---------- Tab4 口令短语 ---------- */
+
+const passphraseWordCount = ref<number | null>(4)
+const passphraseSeparator = ref<PassphraseSeparator>('hyphen')
+const passphraseCustomSeparator = ref('')
+const passphraseCapitalize = ref(false)
+const passphraseAppendDigits = ref(false)
+const passphraseCount = ref<number | null>(1)
+
+const passphraseWords = ref<readonly string[] | null>(null)
+const passphraseLoading = ref(false)
+const passphraseResult = ref<PassphraseResult | null>(null)
+const passphraseError = ref<StructuredError | null>(null)
+
+const SEPARATOR_OPTIONS: readonly { label: string; value: PassphraseSeparator }[] = [
+  { label: '连字符 -', value: 'hyphen' },
+  { label: '空格', value: 'space' },
+  { label: '句点 .', value: 'dot' },
+  { label: '下划线 _', value: 'underscore' },
+  { label: '自定义', value: 'custom' }
+]
+
+const passphraseStrength = computed(() =>
+  passphraseResult.value === null ? null : strengthOf(passphraseResult.value.entropyBits)
+)
+
+function regeneratePassphrase(): void {
+  const words = passphraseWords.value
+  if (words === null) return
+  const wordCount = passphraseWordCount.value
+  const count = passphraseCount.value
+  if (wordCount === null || count === null) {
+    passphraseResult.value = null
+    passphraseError.value = toolError('PG_INVALID_OPTIONS', '请填写词数与数量')
+    return
+  }
+  const result = generatePassphrase(
+    {
+      wordCount,
+      separator: passphraseSeparator.value,
+      customSeparator: passphraseCustomSeparator.value,
+      capitalizeFirst: passphraseCapitalize.value,
+      appendTwoDigits: passphraseAppendDigits.value,
+      count
+    },
+    words
+  )
+  if (!result.ok) {
+    passphraseResult.value = null
+    passphraseError.value = toolError('PG_INVALID_OPTIONS', result.message)
+    return
+  }
+  passphraseError.value = null
+  passphraseResult.value = result.value
+}
+
+async function ensurePassphraseWords(): Promise<void> {
+  if (passphraseWords.value !== null || passphraseLoading.value) return
+  passphraseLoading.value = true
+  passphraseError.value = null
+  try {
+    passphraseWords.value = await loadEffWords()
+    regeneratePassphrase()
+  } catch {
+    passphraseError.value = toolError('PG_INVALID_OPTIONS', '词表加载失败，请重新进入页签重试')
+  } finally {
+    passphraseLoading.value = false
+  }
+}
+
+watch(
+  activeTab,
+  (tab) => {
+    if (tab === 'passphrase') void ensurePassphraseWords()
+  },
+  { immediate: true }
+)
+
+watch(
+  [
+    passphraseWordCount,
+    passphraseSeparator,
+    passphraseCustomSeparator,
+    passphraseCapitalize,
+    passphraseAppendDigits,
+    passphraseCount
+  ],
+  regeneratePassphrase
+)
+
+function onSeparatorChange(event: Event): void {
+  const target = event.target
+  if (!(target instanceof HTMLSelectElement)) return
+  const matched = SEPARATOR_OPTIONS.find((item) => item.value === target.value)
+  if (matched !== undefined) passphraseSeparator.value = matched.value
+}
+
+function copyPassphraseAll(): void {
+  const phrases = passphraseResult.value?.phrases ?? []
+  void copyText(phrases.join('\n'), 'passphrase-all')
+}
+
 /* ---------- 通用 ---------- */
 
 function onPoolChange(value: string | number): void {
@@ -236,6 +349,9 @@ onUnmounted(() => {
       </NTabPane>
       <NTabPane name="random">
         <template #tab>随机</template>
+      </NTabPane>
+      <NTabPane name="passphrase">
+        <template #tab>口令短语</template>
       </NTabPane>
     </NTabs>
 
@@ -400,7 +516,7 @@ onUnmounted(() => {
     </div>
 
     <!-- 随机字符串 / 整数 -->
-    <div v-else class="flex flex-col gap-5">
+    <div v-else-if="activeTab === 'random'" class="flex flex-col gap-5">
       <section class="flex flex-col gap-3">
         <h2 class="text-sm font-semibold">随机字符串</h2>
         <div class="flex flex-wrap items-end gap-3">
@@ -528,6 +644,131 @@ onUnmounted(() => {
           </NButton>
         </div>
       </section>
+    </div>
+
+    <!-- 口令短语 -->
+    <div v-else class="flex flex-col gap-4">
+      <div class="flex flex-wrap items-end gap-3">
+        <div class="flex w-40 flex-col gap-1">
+          <NText depth="2" class="text-sm">词数</NText>
+          <NInputNumber
+            v-model:value="passphraseWordCount"
+            :min="PASSPHRASE_WORD_COUNT_MIN"
+            :max="PASSPHRASE_WORD_COUNT_MAX"
+            :step="1"
+            placeholder="词数（3–10）"
+            aria-label="口令词数"
+          />
+        </div>
+        <div class="flex w-40 flex-col gap-1">
+          <NText depth="2" class="text-sm">分隔符</NText>
+          <select
+            :value="passphraseSeparator"
+            aria-label="口令分隔符"
+            class="h-8 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] px-2 text-sm text-[var(--lumin-color-text)]"
+            @change="onSeparatorChange"
+          >
+            <option v-for="option in SEPARATOR_OPTIONS" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </div>
+        <div v-if="passphraseSeparator === 'custom'" class="flex w-40 flex-col gap-1">
+          <NText depth="2" class="text-sm">自定义分隔符</NText>
+          <NInput
+            v-model:value="passphraseCustomSeparator"
+            maxlength="1"
+            placeholder="单个字符"
+            aria-label="自定义分隔符"
+          />
+        </div>
+        <div class="flex w-36 flex-col gap-1">
+          <NText depth="2" class="text-sm">数量</NText>
+          <NInputNumber
+            v-model:value="passphraseCount"
+            :min="PASSPHRASE_COUNT_MIN"
+            :max="PASSPHRASE_COUNT_MAX"
+            :step="1"
+            placeholder="数量（1–20）"
+            aria-label="口令数量"
+          />
+        </div>
+        <NButton type="primary" :disabled="passphraseWords === null" @click="regeneratePassphrase">
+          <template #icon>
+            <Dices :size="14" />
+          </template>
+          生成
+        </NButton>
+        <NButton
+          :disabled="passphraseResult === null"
+          @click="copyPassphraseAll"
+        >
+          <template #icon>
+            <Check v-if="copiedLabel === 'passphrase-all'" :size="14" />
+            <Copy v-else :size="14" />
+          </template>
+          {{ copiedLabel === 'passphrase-all' ? '已复制全部' : '复制全部' }}
+        </NButton>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-4">
+        <NCheckbox v-model:checked="passphraseCapitalize">首词首字母大写</NCheckbox>
+        <NCheckbox v-model:checked="passphraseAppendDigits">末尾追加 2 位数字</NCheckbox>
+      </div>
+
+      <p v-if="passphraseLoading" class="text-sm text-[var(--lumin-color-text-secondary)]">
+        词表加载中（首次使用，约 77KB）…
+      </p>
+
+      <div
+        v-if="passphraseError !== null"
+        role="alert"
+        class="text-sm text-[var(--lumin-color-error)]"
+      >
+        {{ passphraseError.message }}（{{ passphraseError.code }}）
+      </div>
+
+      <div
+        v-if="passphraseResult !== null"
+        class="flex flex-col gap-3 rounded-[var(--lumin-radius-md)] bg-[var(--lumin-color-surface)] p-4"
+      >
+        <div class="flex flex-wrap items-center gap-3 text-xs text-[var(--lumin-color-text-secondary)]">
+          <span>
+            熵 {{ passphraseResult.entropyBits.toFixed(1) }} bits ·
+            {{ passphraseResult.wordCount }} 词 · 每词
+            {{ EFF_ENTROPY_BITS_PER_WORD.toFixed(1) }} bit
+          </span>
+          <span
+            v-if="passphraseStrength !== null"
+            data-passphrase-strength
+            class="rounded-full px-2 py-0.5 text-xs font-medium"
+            :style="{
+              color: STRENGTH_COLOR[passphraseStrength.level],
+              backgroundColor: 'color-mix(in srgb, currentColor 12%, transparent)'
+            }"
+          >
+            强度：{{ passphraseStrength.label }}
+          </span>
+        </div>
+
+        <ul class="flex flex-col gap-2">
+          <li
+            v-for="(phrase, index) in passphraseResult.phrases"
+            :key="`${phrase}-${index}`"
+            data-passphrase-item
+            class="flex items-center justify-between gap-3 rounded-[var(--lumin-radius-md)] bg-[var(--lumin-color-bg)] px-3 py-2"
+          >
+            <span class="select-all break-all font-mono text-sm">{{ phrase }}</span>
+            <NButton size="tiny" @click="copyText(phrase, `passphrase-${index}`)">
+              <template #icon>
+                <Check v-if="copiedLabel === `passphrase-${index}`" :size="12" />
+                <Copy v-else :size="12" />
+              </template>
+              {{ copiedLabel === `passphrase-${index}` ? '已复制' : '复制' }}
+            </NButton>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 </template>

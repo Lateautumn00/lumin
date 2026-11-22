@@ -41,6 +41,13 @@ describe('toolManifestSchema', () => {
     expect(toolManifestSchema.safeParse({ ...valid, category: 'video' }).success).toBe(false)
     expect(toolManifestSchema.safeParse({ ...valid, category: undefined }).success).toBe(false)
   })
+
+  it('hidden 可选且须为布尔', () => {
+    expect(toolManifestSchema.safeParse(valid).success).toBe(true)
+    expect(toolManifestSchema.safeParse({ ...valid, hidden: true }).success).toBe(true)
+    expect(toolManifestSchema.safeParse({ ...valid, hidden: false }).success).toBe(true)
+    expect(toolManifestSchema.safeParse({ ...valid, hidden: 'yes' }).success).toBe(false)
+  })
 })
 
 describe('defineManifest', () => {

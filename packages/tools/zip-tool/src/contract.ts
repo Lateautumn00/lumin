@@ -12,6 +12,42 @@ const DRIVE_PREFIX = /^[a-zA-Z]:/
 /** 控制字符（含 NUL）；文件名不允许出现 */
 const CONTROL_CHARS = /[\u0000-\u001f]/
 
+/** Unicode 替换符（解码失败标记） */
+const REPLACEMENT_CHAR = '\ufffd'
+
+/** fflate 在 bit11 未置位时按 latin1 解码，GBK 高阶字节落在 U+0080–U+00FF */
+const LATIN1_HIGH_BYTES = /[\u0080-\u00ff]/
+
+/** GBK（CP936）解码；含替换符或运行环境不支持时返回 null */
+function decodeGbk(bytes: Uint8Array): string | null {
+  try {
+    const decoded = new TextDecoder('gbk').decode(bytes)
+    return decoded.includes(REPLACEMENT_CHAR) ? null : decoded
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 条目名原始字节 → 文本：优先 UTF-8；bit11 未置位且 UTF-8 解码含替换符时回退 GBK
+ * @param bytes 条目名原始字节
+ * @param efs 通用标志位 bit11（UTF-8 名）是否置位
+ */
+export function decodeZipEntryName(bytes: Uint8Array, efs: boolean): string {
+  const utf8 = new TextDecoder().decode(bytes)
+  if (efs || !utf8.includes(REPLACEMENT_CHAR)) return utf8
+  return decodeGbk(bytes) ?? utf8
+}
+
+/**
+ * fflate `UnzipFile.name` 纠偏：bit11 未置位时 fflate 按 latin1 解码，GBK 名会变成 U+0080–U+00FF
+ * @returns 转码成功的中文名；非 latin1 高字节时原样返回；疑似编码损坏（无法 GBK 解码）返回 null
+ */
+export function decodeLegacyEntryName(name: string): string | null {
+  if (name.includes(REPLACEMENT_CHAR) || !LATIN1_HIGH_BYTES.test(name)) return name
+  return decodeGbk(Uint8Array.from(name, (ch) => ch.charCodeAt(0) & 0xff))
+}
+
 /**
  * 归一条目路径并做 zip slip 判定
  * @param raw 压缩包内条目原始名（可能为 `\` 分隔或含 `..`）

@@ -115,6 +115,9 @@ describe('config / set-config', () => {
     expect(harness.settings.get('algorithms')).toEqual(['md5', 'sha256'])
 
     harness.settings.set('algorithms', ['sha512'])
+    await expect(callSync(harness, 'config', {})).resolves.toEqual({ algorithms: ['sha512'] })
+
+    harness.settings.set('algorithms', ['sha384'])
     await expect(callSync(harness, 'config', {})).resolves.toEqual({ algorithms: ['sha256'] })
   })
 
@@ -126,7 +129,7 @@ describe('config / set-config', () => {
       code: 'INVALID_PAYLOAD'
     })
     await expect(
-      callSync(harness, 'set-config', { algorithms: ['sha512'] })
+      callSync(harness, 'set-config', { algorithms: ['sha384'] })
     ).rejects.toMatchObject({ code: 'INVALID_PAYLOAD' })
   })
 })

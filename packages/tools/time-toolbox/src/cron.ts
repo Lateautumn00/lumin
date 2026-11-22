@@ -204,9 +204,7 @@ function describeTime(parsed: ParsedCron): string {
     return `每小时第 ${minutes.join('、')} 分`
   }
 
-  const times = hours.flatMap((hour) =>
-    minutes.map((minute) => `${pad2(hour)}:${pad2(minute)}`)
-  )
+  const times = hours.flatMap((hour) => minutes.map((minute) => `${pad2(hour)}:${pad2(minute)}`))
   if (times.length === 0) return '无触发时刻'
   if (times.length <= 6) return times.join('、')
   return `${times.slice(0, 6).join('、')} 等 ${times.length} 个时刻`
@@ -252,6 +250,89 @@ export function describeCron(parsed: ParsedCron): string {
     return timeText.startsWith('每') ? timeText : `每天 ${timeText}`
   }
   return `${dayText} ${timeText}`
+}
+
+// —— 反向生成（M55 §4.55，spec time-toolbox M55 追加节） ——
+
+/** 反向生成输入：五组勾选值（空数组 = 未选 → 该字段通配 `*`） */
+export interface CronSelection {
+  minutes: readonly number[]
+  hours: readonly number[]
+  daysOfMonth: readonly number[]
+  months: readonly number[]
+  daysOfWeek: readonly number[]
+}
+
+/**
+ * 单字段勾选值 → cron 字段文本（纯函数，M55 §4.55）
+ * - 空 / 全量 → 通配
+ * - 首值 = min 的完整等差循环（末值 + 步长 > max）→ 步长形式（如 `0/5` 语义的通配步长）
+ * - 连续段 ≥3 → `起-止`；其余逐值逗号列表；去重、升序归一
+ * @param values 勾选值
+ * @param min 字段最小值
+ * @param max 字段最大值
+ */
+function renderField(values: readonly number[], min: number, max: number): string {
+  const sorted = [
+    ...new Set(values.filter((value) => Number.isInteger(value) && value >= min && value <= max))
+  ].sort((left, right) => left - right)
+  if (sorted.length === 0) return '*'
+  if (sorted.length === max - min + 1) return '*'
+
+  const first = sorted[0]
+  const second = sorted[1]
+  if (first !== undefined && second !== undefined && first === min) {
+    const step = second - first
+    const last = sorted[sorted.length - 1]
+    // 步长 ≤ 半程才用 */step（避免周「六、日」这种被渲染成费解的 */6）
+    if (
+      step > 1 &&
+      step <= (max - min + 1) / 2 &&
+      last !== undefined &&
+      last + step > max &&
+      sorted.every((value, index) => value === min + index * step)
+    ) {
+      return `*/${step}`
+    }
+  }
+
+  const parts: string[] = []
+  let runStart: number | null = null
+  let runEnd: number | null = null
+  const flush = (): void => {
+    if (runStart === null || runEnd === null) return
+    if (runEnd - runStart >= 2) parts.push(`${runStart}-${runEnd}`)
+    else {
+      parts.push(String(runStart))
+      if (runEnd !== runStart) parts.push(String(runEnd))
+    }
+  }
+  for (const value of sorted) {
+    if (runStart !== null && runEnd !== null && value === runEnd + 1) {
+      runEnd = value
+      continue
+    }
+    flush()
+    runStart = value
+    runEnd = value
+  }
+  flush()
+  return parts.join(',')
+}
+
+/**
+ * 勾选矩阵 → 5 字段 Cron 表达式（M55 §4.55，纯函数）
+ * 永远产出可被 `parseCron` 接受的表达式；周字段仅 0–6（周日 = 0）
+ * @param selection 五组勾选值
+ */
+export function buildCron(selection: CronSelection): string {
+  return [
+    renderField(selection.minutes, 0, 59),
+    renderField(selection.hours, 0, 23),
+    renderField(selection.daysOfMonth, 1, 31),
+    renderField(selection.months, 1, 12),
+    renderField(selection.daysOfWeek, 0, 6)
+  ].join(' ')
 }
 
 /** 判断某个时刻是否命中表达式 */

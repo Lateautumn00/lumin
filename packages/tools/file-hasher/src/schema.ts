@@ -7,7 +7,7 @@
 import { z } from 'zod'
 
 /** 支持的摘要算法（顺序即 UI 展示顺序） */
-export const ALGORITHMS = ['md5', 'sha1', 'sha256'] as const
+export const ALGORITHMS = ['md5', 'sha1', 'sha256', 'sha512'] as const
 
 export type Algorithm = (typeof ALGORITHMS)[number]
 
@@ -41,7 +41,8 @@ export const hashFileResultSchema = z.object({
   hashes: z.object({
     md5: z.string().optional(),
     sha1: z.string().optional(),
-    sha256: z.string().optional()
+    sha256: z.string().optional(),
+    sha512: z.string().optional()
   }),
   status: z.enum(['ok', 'failed']),
   code: z.string().optional(),

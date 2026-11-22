@@ -72,6 +72,21 @@ const resizeQuality = ref(75)
 const effectKind = ref<'grayscale' | 'invert' | 'binary'>('grayscale')
 const effectThreshold = ref(128)
 const effectQuality = ref(75)
+// 调色（M55 §4.55）：0 = 不生效
+const effectBrightness = ref(0)
+const effectContrast = ref(0)
+const effectSaturation = ref(0)
+const effectSharpen = ref(0)
+const effectBlur = ref(0)
+
+/** 调色一键复位（M55 §4.55） */
+function resetAdjust(): void {
+  effectBrightness.value = 0
+  effectContrast.value = 0
+  effectSaturation.value = 0
+  effectSharpen.value = 0
+  effectBlur.value = 0
+}
 // GIF（M40，spec §2.5）
 const gifDuration = ref(500)
 const gifLoop = ref(0)
@@ -343,7 +358,12 @@ function buildPayload() {
       options: {
         effect: effectKind.value,
         threshold: effectThreshold.value,
-        quality: effectQuality.value
+        quality: effectQuality.value,
+        brightness: effectBrightness.value,
+        contrast: effectContrast.value,
+        saturation: effectSaturation.value,
+        sharpen: effectSharpen.value,
+        blur: effectBlur.value
       }
     }
   }
@@ -713,6 +733,80 @@ onUnmounted(detach)
           />
           <span class="w-10 text-right text-sm">{{ effectThreshold }}</span>
         </div>
+        <!-- 调色（M55 §4.55）：0 = 不生效，与效果叠加 -->
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">调色</NText>
+          <NButton
+            size="tiny"
+            quaternary
+            data-testid="adjust-reset"
+            :disabled="phase === 'running'"
+            @click="resetAdjust"
+          >
+            复位
+          </NButton>
+          <NText depth="3" class="text-xs">0 = 不生效，可与效果叠加</NText>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">亮度</NText>
+          <NSlider
+            v-model:value="effectBrightness"
+            data-testid="adjust-brightness"
+            :min="-100"
+            :max="100"
+            :disabled="phase === 'running'"
+            class="flex-1"
+          />
+          <span class="w-10 text-right text-sm">{{ effectBrightness }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">对比度</NText>
+          <NSlider
+            v-model:value="effectContrast"
+            data-testid="adjust-contrast"
+            :min="-100"
+            :max="100"
+            :disabled="phase === 'running'"
+            class="flex-1"
+          />
+          <span class="w-10 text-right text-sm">{{ effectContrast }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">饱和度</NText>
+          <NSlider
+            v-model:value="effectSaturation"
+            data-testid="adjust-saturation"
+            :min="-100"
+            :max="100"
+            :disabled="phase === 'running'"
+            class="flex-1"
+          />
+          <span class="w-10 text-right text-sm">{{ effectSaturation }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">锐化</NText>
+          <NSlider
+            v-model:value="effectSharpen"
+            data-testid="adjust-sharpen"
+            :min="0"
+            :max="100"
+            :disabled="phase === 'running'"
+            class="flex-1"
+          />
+          <span class="w-10 text-right text-sm">{{ effectSharpen }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">模糊</NText>
+          <NSlider
+            v-model:value="effectBlur"
+            data-testid="adjust-blur"
+            :min="0"
+            :max="100"
+            :disabled="phase === 'running'"
+            class="flex-1"
+          />
+          <span class="w-10 text-right text-sm">{{ effectBlur }}</span>
+        </div>
         <div class="flex items-center gap-3">
           <NText depth="2" class="w-20 text-sm">质量</NText>
           <NSlider
@@ -750,7 +844,9 @@ onUnmounted(detach)
           >
             <option :value="0">无限</option>
             <option :value="-1">不循环</option>
-            <option v-for="n in [2, 3, 4, 5, 6, 7, 8, 9, 10]" :key="n" :value="n">{{ n }} 次</option>
+            <option v-for="n in [2, 3, 4, 5, 6, 7, 8, 9, 10]" :key="n" :value="n">
+              {{ n }} 次
+            </option>
           </select>
         </div>
         <div class="flex items-center gap-3">

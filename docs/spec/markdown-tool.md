@@ -1,6 +1,6 @@
 # Markdown 工具（markdown-tool）字段级功能清单
 
-> 版本：v0.1.0 · 定稿日期：2026-11-21（R8）· 工具 id：`markdown-tool` · 里程碑 M39
+> 版本：v0.2.0 · 定稿日期：2026-11-21（R8）· 工具 id：`markdown-tool` · 里程碑 M39（M55 ⑤ 增 JSON Schema）
 > 决策：plan §1 Q39 / §4.39；本文件为该里程碑验收附件，实现与本文件不一致时以本文件为准，变更须走 R8。
 > 新增依赖：`marked`（Markdown 解析）、`js-yaml`（YAML 解析/序列化），均精确钉版，登记于 plan §1.1。
 
@@ -9,10 +9,10 @@
 **做**：
 
 1. **Markdown 预览 + MD→HTML**：输入 Markdown，右侧沙箱 iframe 实时预览；复制 HTML 片段、导出完整 HTML 文件。
-2. **JSON→TypeScript 类型生成**：对象/数组/联合推断，输出 `interface` 或 `type` 声明，支持嵌套命名、可选字段与字段名引号化。
+2. **JSON→TypeScript / JSON Schema 生成**：对象/数组/联合推断，输出 `interface`、`type` 声明或 JSON Schema（draft-07），支持嵌套命名、可选字段与字段名引号化。
 3. **YAML 工具**：YAML→JSON、JSON→YAML、YAML 格式化（缩进 2）。
 
-**不做**：Markdown 编辑器工具栏（粗体/插入表格按钮）、导出 PDF/Word、图片上传与本地图片引用、外链图片代理、YAML 锚点保留（格式化后锚点展开）、多文档 YAML、JSON Schema 生成、历史记录持久化、联网。
+**不做**：Markdown 编辑器工具栏（粗体/插入表格按钮）、导出 PDF/Word、图片上传与本地图片引用、外链图片代理、YAML 锚点保留（格式化后锚点展开）、多文档 YAML、历史记录持久化、联网。
 
 **形态**：解析与生成全部在 renderer（同步纯函数）；主进程仅 3 个同步短通道（`config` / `set-output-dir` / `save`）做输出目录记忆与原子写盘，无三段式长任务。
 
@@ -43,11 +43,11 @@
 | 区域     | 控件                                             | 行为                                                                 | 空/默认   |
 | -------- | ------------------------------------------------ | -------------------------------------------------------------------- | --------- |
 | 输入     | `NInput` textarea，等宽字体                      | JSON 文本；超过 2,000,000 字符 → `MD_INPUT_TOO_LONG`                 | 空        |
-| 根类型名 | `NInput`（默认 `Root`）                          | 必须匹配 `^[A-Za-z_$][A-Za-z0-9_$]*$` 且非 TS 保留字，否则 `MD_TS_NAME_INVALID` | `Root`    |
-| 声明方式 | `NRadioGroup`：`interface` / `type`              | 切换即重算                                                           | `interface` |
-| 输出     | 只读 textarea（等宽）                            | 生成代码；JSON 非法 → `MD_JSON_INVALID`（含解析位置），输出区隐藏为空态引导 | —   |
+| 根类型名 | `NInput`（默认 `Root`）                          | json-schema 模式显示为「根标题」；TypeScript 模式必须匹配 `^[A-Za-z_$][A-Za-z0-9_$]*$` 且非 TS 保留字，否则 `MD_TS_NAME_INVALID` | `Root`    |
+| 声明方式 | `NRadioGroup`：`interface` / `type` / `json-schema` | 切换即重算；json-schema 模式输出 draft-07              | `interface` |
+| 输出     | 只读 textarea（等宽）                            | 生成代码/JSON；JSON 非法 → `MD_JSON_INVALID`（含解析位置），输出区隐藏为空态引导 | —   |
 | 复制     | `[复制代码]`                                     | 复制生成代码；失败 → `MD_CLIPBOARD_FAILED`                           | —         |
-| 导出     | 同 Tab1 目录/文件名机制                          | 扩展名固定 `.ts`；冲突递增；失败 → `MD_SAVE_FAILED`                  | —         |
+| 导出     | 同 Tab1 目录/文件名机制                          | 扩展名按模式 `.ts` / `.json`；文件名默认 `types` / `schema`；冲突递增；失败 → `MD_SAVE_FAILED` | —         |
 
 ### 2.3 Tab3 YAML
 
@@ -85,13 +85,15 @@
 
 | 函数                            | 入参 / 输出                                                                       |
 | ------------------------------- | --------------------------------------------------------------------------------- |
-| `generateTypes(input, options)` | `{ rootName: string; style: 'interface' \| 'type' }` → `{ ok:true, value:{ code } }` 或 `{ ok:false, message }` |
+| `generateTypes(input, options)` | `{ rootName: string; style: 'interface' \| 'type' \| 'json-schema' }` → `{ ok:true, value:{ code } }` 或 `{ ok:false, message }` |
+| `jsonToSchema(value, rootName)` | 已解析 JSON 值 → JSON Schema 对象（draft-07 子集）；供 `json-schema` 模式与单测直接调用 |
 | 值类型                          | `null` → `null`；string/number/boolean → 原语；数组 → `T[]`；对象 → 具名声明       |
 | 对象合并（数组元素联合）        | 键在全部元素中出现 → 必选；部分出现 → `?`；同名键类型不同 → 联合 `A \| B`         |
 | 命名                            | 根类型名按用户输入；嵌套对象 `根名 + PascalCase(键路径)`；冲突追加 `2/3…`          |
 | 字段名                          | 合法标识符原样；否则单引号包裹（`'a-b': string`）                                  |
 | 边界                            | 空对象 → `Record<string, never>`；空数组 → `unknown[]`；嵌套深度 >64 → `MD_JSON_INVALID`（detail「嵌套过深」） |
 | 输出                            | 2 空格缩进、声明间空行、文件末尾换行；`interface` 模式 `export interface X {…}`，`type` 模式 `export type X = {…}` |
+| JSON Schema 规则                | 根对象内联 `type/properties/required`；嵌套对象抽 `$defs` + `$ref`；数组 `items` 取首元素；整数 `integer`/小数 `number`；字符串不产生 `format`；空容器只输出 `type`；`$defs` 名冲突递增 |
 
 ### 3.3 `src/yaml.ts`
 
@@ -161,11 +163,26 @@
 
 ## 9. 验收
 
-- 单测：`markdown.test.ts`（标题/列表/表格/代码块/链接/XSS 转义与 CSP 注入/超限）、`json-to-ts.test.ts`（嵌套对象/数组联合/可选字段/字段名引号/声明方式/根名非法/嵌套过深）、`yaml.test.ts`（三模式/语法错误行列/空输入）、`save.test.ts`（清洗与扩展名）、`schema.test.ts`、`node.test.ts`（注入假 fs：写入/冲突/写失败/记忆目录）、`errors.test.ts`、`manifest.test.ts`；本包覆盖率 ≥80%。
-- e2e `apps/desktop/e2e/markdown-tool-smoke.spec.ts` 4 用例：
+- 单测：`markdown.test.ts`（标题/列表/表格/代码块/链接/XSS 转义与 CSP 注入/超限）、`json-to-ts.test.ts`（嵌套对象/数组联合/可选字段/字段名引号/声明方式/根名非法/嵌套过深）、`json-schema.test.ts`（对象/嵌套 $defs/数组首元素/整数小数/null/布尔/空容器/命名冲突/根值）、`yaml.test.ts`（三模式/语法错误行列/空输入）、`save.test.ts`（清洗与扩展名）、`schema.test.ts`、`node.test.ts`（注入假 fs：写入/冲突/写失败/记忆目录）、`errors.test.ts`、`manifest.test.ts`；本包覆盖率 ≥80%。
+- e2e `apps/desktop/e2e/markdown-tool-smoke.spec.ts` 5 用例：
   1. 页面加载 → 三页签可见 → 载入示例 → 预览 iframe 出现标题与表格 → 字符/行统计；
   2. JSON→TS：合法 JSON 生成 `export interface Root` → 非法 JSON 报 `MD_JSON_INVALID` → 恢复；
-  3. YAML→JSON 得到美化 JSON → 切「JSON→YAML」输入 `{a:1}` 得到 `a: 1` → 非法 YAML 报 `MD_YAML_INVALID`；
-  4. 导出 HTML：选目录 → 文件名 `中文 空格` → 产物存在且含 `<!doctype html>`；同名再导出生成 `(1)`。
+  3. JSON→TS：切 json-schema 输出 draft-07/`$defs`，文件名与导出扩展名变 `.json`，切回 interface 恢复；
+  4. YAML→JSON 得到美化 JSON → 切「JSON→YAML」输入 `{a:1}` 得到 `a: 1` → 非法 YAML 报 `MD_YAML_INVALID`；
+  5. 导出 HTML：选目录 → 文件名 `中文 空格` → 产物存在且含 `<!doctype html>`；同名再导出生成 `(1)`。
 - R2 八类映射记录于 `docs/smoke/markdown-tool.md`。
 - `pnpm gate` / `pnpm coverage` / `pnpm build` / e2e 全绿；CHANGELOG 与 README 登记。
+
+---
+
+## M55 追加节（2026-11-22 R8 登记：plan Q56 / §4.55）
+
+> 状态：已实施（2026-11-22）。原 spec 冻结项「JSON Schema 生成」解冻（Q56 拍板）。
+
+- **字段级清单（JSON→TS 页签输出模式扩展）**
+  1. 输出模式三选：`interface`（默认，现状）/ `type` / `json-schema`（JSON Schema draft-07）
+  2. `json-schema` 模式规则：对象 → `type: object` + `properties` + `required`（出现过的键）；嵌套递归 `$defs` 引用；数组 → `items` 取首个元素类型并标注；整数 → `integer`；小数 → `number`；`null` → `{ "type": ["string","null"] }` 类 union；布尔各自独立；**字符串不猜 `format`**（不产生 format 字段）
+  3. 复制/导出沿用既有 save 通道；非法 JSON 仍报 `MD_JSON_INVALID`（无新错误码）；导出扩展名 `.json`、默认文件名 `schema`
+  4. 空数组/空对象 → 照实输出 `type: array`（无 items）/ `type: object`（无 properties）
+- **实现**：与 `json-to-ts` 同源遍历，`json-to-ts.ts` 新增 `jsonToSchema(value, rootName)` 纯函数与 `SchemaBuilder`（根对象内联、嵌套对象 `$defs`、命名冲突递增）；`generateTypes` 在 `style === 'json-schema'` 时输出 2 空格 JSON + 末尾换行；UI 增加第三个单选项，根名标签切为「根标题」，文件名/导出扩展名随模式切换；纯 renderer、零 IPC、零新增依赖
+- **验收**：`json-schema.test.ts` 9 例（扁平对象/字符串无 format/根值/嵌套 $defs/数组首元素/空容器/$defs 命名冲突/输出 draft-07 文本/非法 JSON·超深·非法根名）本包 73 例全绿且 ≥80%；e2e 新增「切 json-schema → draft-07 + `$defs` + 文件名 schema → 切回 interface」；R2 记入 `docs/smoke/markdown-tool.md` M55 增量节；chunk <200KB gzip
