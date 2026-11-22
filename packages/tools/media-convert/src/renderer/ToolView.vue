@@ -1,18 +1,9 @@
 <script setup lang="ts">
-// 音视频处理主视图（M14：转码/截取/提取音频/压缩四 Tab）
+// 音视频处理主视图（M14：转码/截取/提取音频/压缩四 Tab；M50：新增音频互转）
 // 作者：cuilanchao · 修改时间：2026-11-19
 // 三态强制（空态拖拽引导/加载进度可取消/报错码 + 详情）、tokens、@lucide/vue（spec §3）
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import {
-  NButton,
-  NCheckbox,
-  NEmpty,
-  NInput,
-  NSpace,
-  NTabPane,
-  NTabs,
-  NText
-} from 'naive-ui'
+import { NButton, NCheckbox, NEmpty, NInput, NSpace, NTabPane, NTabs, NText } from 'naive-ui'
 import { Film, FolderOpen, RotateCcw, X } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
@@ -24,7 +15,7 @@ import type { VideoStream, AudioStream } from '../schema'
 import type { OutputItem, ProcessFailure, ProcessPayload } from '../schema'
 
 /** Tab 标识（spec §2） */
-type TabId = 'transcode' | 'trim' | 'extract-audio' | 'compress'
+type TabId = 'transcode' | 'trim' | 'extract-audio' | 'audio-convert' | 'compress'
 
 /** 质量档中文标签（转码 / 压缩共用，spec §2） */
 const QUALITY_OPTIONS = [
@@ -37,9 +28,14 @@ const QUALITY_OPTIONS = [
 const VIDEO_ACCEPT = '.mp4,.m4v,.mov,.mkv,.webm,.avi,.flv,.wmv,.ts,.mpg,.mpeg,.3gp'
 /** 全部输入 accept（提取音频 Tab 同时接受音频） */
 const ALL_ACCEPT = `${VIDEO_ACCEPT},.mp3,.wav,.flac,.aac,.m4a,.ogg,.opus,.wma,.aiff`
+/** 音频输入 accept（音频互转 Tab 仅音频） */
+const AUDIO_ACCEPT = '.mp3,.wav,.flac,.aac,.m4a,.ogg,.opus,.wma,.aiff'
 
 /** 本轮 Tab 的 DropZone accept */
-const accept = computed(() => (tab.value === 'extract-audio' ? ALL_ACCEPT : VIDEO_ACCEPT))
+const accept = computed(() => {
+  if (tab.value === 'audio-convert') return AUDIO_ACCEPT
+  return tab.value === 'extract-audio' ? ALL_ACCEPT : VIDEO_ACCEPT
+})
 
 // —— Tab 与参数（spec §2 默认值） ——
 const tab = ref<TabId>('transcode')
@@ -54,9 +50,7 @@ const compressLevel = ref<'high' | 'medium' | 'low'>('medium')
 const compressMaxHeight = ref(0)
 
 /** 无损音频格式：码率控件置灰（spec §2.3） */
-const audioIsLossless = computed(
-  () => audioFormat.value === 'wav' || audioFormat.value === 'flac'
-)
+const audioIsLossless = computed(() => audioFormat.value === 'wav' || audioFormat.value === 'flac')
 
 // —— 文件列表与探测 ——
 interface FileRow {
@@ -244,6 +238,14 @@ function buildPayload(files: string[]): ProcessPayload | null {
       options: { format: audioFormat.value, bitrate: audioBitrate.value as 128 | 192 | 320 }
     }
   }
+  if (tab.value === 'audio-convert') {
+    return {
+      mode: 'audio-convert',
+      files,
+      outputDir: dir,
+      options: { format: audioFormat.value, bitrate: audioBitrate.value as 128 | 192 | 320 }
+    }
+  }
   return {
     mode: 'compress',
     files,
@@ -340,11 +342,11 @@ onUnmounted(detach)
     <div>
       <h1 class="text-base font-semibold">音视频处理</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        转码、截取片段、提取音频与压缩（基于 ffmpeg）
+        转码、音频互转、截取片段、提取音频与压缩（基于 ffmpeg）
       </p>
     </div>
 
-    <!-- 四 Tab：切换不丢文件列表与输出目录 -->
+    <!-- 五 Tab：切换不丢文件列表与输出目录 -->
     <!-- 标签必须走 #tab 插槽：当前 naive-ui 构建下自闭合 pane 的 tab 文本不会渲染 -->
     <NTabs v-model:value="tab" type="line">
       <NTabPane name="transcode">
@@ -355,6 +357,9 @@ onUnmounted(detach)
       </NTabPane>
       <NTabPane name="extract-audio">
         <template #tab>提取音频</template>
+      </NTabPane>
+      <NTabPane name="audio-convert">
+        <template #tab>音频互转</template>
       </NTabPane>
       <NTabPane name="compress">
         <template #tab>压缩</template>
@@ -465,7 +470,7 @@ onUnmounted(detach)
         </NCheckbox>
       </template>
 
-      <template v-else-if="tab === 'extract-audio'">
+      <template v-else-if="tab === 'extract-audio' || tab === 'audio-convert'">
         <div class="flex items-center gap-3">
           <NText depth="2" class="w-20 text-sm">目标格式</NText>
           <select

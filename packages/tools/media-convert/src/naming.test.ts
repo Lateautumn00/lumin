@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildAudioConvertName,
   buildCompressName,
   buildExtractAudioName,
   buildTranscodeName,
@@ -16,10 +17,11 @@ describe('stemOf', () => {
   })
 })
 
-describe('四模式命名', () => {
-  it('转码 / 提取 / 压缩', () => {
+describe('五模式命名', () => {
+  it('转码 / 提取 / 音频互转 / 压缩', () => {
     expect(buildTranscodeName('demo.mp4', 'webm')).toBe('demo.webm')
     expect(buildExtractAudioName('demo.mkv', 'mp3')).toBe('demo.audio.mp3')
+    expect(buildAudioConvertName('样例 音频.wav', 'flac')).toBe('样例 音频.flac')
     expect(buildCompressName('demo.mov', 'medium')).toBe('demo.cmedium.mp4')
   })
 

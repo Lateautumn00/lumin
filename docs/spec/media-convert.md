@@ -1,11 +1,12 @@
-# 音视频处理 — 字段级功能清单（M14 验收附件）
+# 音视频处理 — 字段级功能清单（M14 验收附件 / M50 音频互转）
 
-> 依据 AGENTS §11：开工前定稿。变更须同步更新本文件与 `docs/opencode/plan.md` §4.14。
+> 依据 AGENTS §11：开工前定稿。变更须同步更新本文件与 `docs/opencode/plan.md` §4.14 / §4.50。
 > 工具 id：`media-convert` · 显示名：**音视频处理** · 包：`@lumin/tool-media-convert` · 图标：`film`（壳 AppSidebar `iconMap` 注册 `Film`）
 > 引擎：**复用 `binaries/download/ffmpeg.exe`**（M4 已拉取、M10 已瘦身；零新增依赖、零新增二进制、无联网）。
 > 决策拍板（2026-11-19）：一工具四 Tab = 转码 / 截取 / 提取音频 / 压缩；批量串行、单文件失败不中断；无硬件编码、无字幕、无视频合并。
+> **M50（2026-11-21）**：新增第五 Tab「音频互转」（独立音频文件互转，spec §2.4），复用提取音频的编码参数与批次语义，零新增依赖。
 
-## 1. 输入项（四 Tab 共享）
+## 1. 输入项（五 Tab 共享）
 
 | 字段     | 类型                      | 约束                                                                                                                           | 默认值           |
 | -------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------- |
@@ -18,9 +19,9 @@
 - 音频：`mp3 wav flac aac m4a ogg opus wma aiff`
 
 - 单文件体积上限 **4GB**（超出 → `MC_FILE_UNSUPPORTED`）；不做文件夹递归。
-- 「提取音频」Tab 两者都可作为输入；其余三个 Tab 仅视频扩展名可提交（音频文件提交 → 单文件失败 `MC_NO_STREAM`）。
+- 「提取音频」Tab 两者都可作为输入；「音频互转」Tab 仅音频扩展名可提交（视频提交 → 单文件失败 `MC_FILE_UNSUPPORTED`）；其余三个 Tab 仅视频扩展名可提交（音频文件提交 → 单文件失败 `MC_NO_STREAM`）。
 
-## 2. 四 Tab 参数
+## 2. 五 Tab 参数
 
 ### 2.1 转码 Tab
 
@@ -48,7 +49,18 @@
 
 - 输入无音频轨 → 单文件失败 `MC_NO_STREAM`。
 
-### 2.4 压缩 Tab
+### 2.4 音频互转 Tab（M50）
+
+| 字段     | 类型                                    | 约束                                            | 默认值 |
+| -------- | --------------------------------------- | ----------------------------------------------- | ------ |
+| 目标格式 | enum `mp3 \| m4a \| wav \| flac \| ogg` | 与提取音频同表；wav/flac 无损，mp3/m4a/ogg 有损 | mp3    |
+| 码率     | enum `128 \| 192 \| 320`（kbps）        | 仅 mp3/m4a/ogg 生效；wav/flac 控件置灰          | 192    |
+
+- 输入口径：仅音频扩展名（§1.1 音频白名单）；视频请走「提取音频」Tab。
+- 无音频轨（如扩展名伪装）→ `MC_NO_STREAM`；编码时 `-vn` 丢弃封面等附加视频轨。
+- 参数 UI 与「提取音频」共用同一组控件；切换 Tab 保留已选格式/码率与文件列表。
+
+### 2.5 压缩 Tab
 
 | 字段       | 类型                                   | 约束                                                         | 默认值 |
 | ---------- | -------------------------------------- | ------------------------------------------------------------ | ------ |
@@ -59,15 +71,15 @@
 
 ## 3. 页面结构
 
-| 区域       | 内容                                                                                                                     |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Tab 栏     | 转码 / 截取 / 提取音频 / 压缩（`NTabs` 仅作切换器 + `v-if` 内容 + `#tab` 插槽，规避 naive-ui 2.45.3 的 `NTabPane` 缺陷） |
-| 文件列表区 | 拖拽区（空态引导「拖入音视频或点击添加」）+ 已选列表（文件名/时长/分辨率/大小 + [移除]）+ [添加文件] [清空]              |
-| 参数区     | 随 Tab 变化的字段集（§2）+ 输出目录（[选择] 系统目录对话框 或手输）                                                      |
-| 操作区     | [开始处理]（主按钮，触发 task）+ 进行中 `TaskProgress`（百分比 + 当前文件 + [取消]）                                     |
-| 结果区     | 成功项：输出文件名/时长/前后体积 + [打开所在文件夹]；失败项：错误码文案 + [详情] + 可重试项 [重试失败项]                 |
-| 空态       | 拖拽引导 + [添加文件] 主操作；无白屏                                                                                     |
-| 报错态     | 结构化错误文案 + [重试] / [详情]                                                                                         |
+| 区域       | 内容                                                                                                                                |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Tab 栏     | 转码 / 截取 / 提取音频 / 音频互转 / 压缩（`NTabs` 仅作切换器 + `v-if` 内容 + `#tab` 插槽，规避 naive-ui 2.45.3 的 `NTabPane` 缺陷） |
+| 文件列表区 | 拖拽区（空态引导「拖入音视频或点击添加」）+ 已选列表（文件名/时长/分辨率/大小 + [移除]）+ [添加文件] [清空]                         |
+| 参数区     | 随 Tab 变化的字段集（§2）+ 输出目录（[选择] 系统目录对话框 或手输）                                                                 |
+| 操作区     | [开始处理]（主按钮，触发 task）+ 进行中 `TaskProgress`（百分比 + 当前文件 + [取消]）                                                |
+| 结果区     | 成功项：输出文件名/时长/前后体积 + [打开所在文件夹]；失败项：错误码文案 + [详情] + 可重试项 [重试失败项]                            |
+| 空态       | 拖拽引导 + [添加文件] 主操作；无白屏                                                                                                |
+| 报错态     | 结构化错误文案 + [重试] / [详情]                                                                                                    |
 
 - 图标只用 `@lucide/vue`（工具内直接 import，manifest.icon 走壳 iconMap）。
 
@@ -78,7 +90,7 @@
 | `media-convert:probe`          | sync | `{files: string[]}` → `{items:[{file, durationSec, sizeBytes, video:{codec,width,height,fps}\|null, audio:{codec,sampleRate,channels}\|null}], failures:[{file,code,message}]}`；单文件探测 `ffmpeg -i` 超时 10s |
 | `media-convert:config`         | sync | `{}` → `{outputDir}`（settings `tools.media-convert.outputDir`，缺省 `userData/media`）                                                                                                                          |
 | `media-convert:set-output-dir` | sync | `{outputDir: string}` → void；空串 → `INVALID_PAYLOAD`                                                                                                                                                           |
-| `media-convert:process`        | task | discriminatedUnion（§2 四模式）→ `{taskId}`；progress `{current, total, message}`；done → `{outputs:[{input,output,durationSec,beforeBytes,afterBytes}], failures:[{input,code,message}]}`                       |
+| `media-convert:process`        | task | discriminatedUnion（§2 五模式）→ `{taskId}`；progress `{current, total, message}`；done → `{outputs:[{input,output,durationSec,beforeBytes,afterBytes}], failures:[{input,code,message}]}`                       |
 | `lumin:task:cancel`            | sync | 壳通用取消；`AbortSignal` → 杀 ffmpeg 进程树                                                                                                                                                                     |
 | `lumin:shell:pick-directory`   | sync | 壳通用目录选择（取消 → null）                                                                                                                                                                                    |
 
@@ -97,11 +109,12 @@
 | 截取 快速             | `-ss S -to E -i <in> -c copy`                                                                                                                   |
 | 提取 mp3/m4a/ogg      | `-vn -c:a libmp3lame                                                                                                                            | aac | libvorbis -b:a {128 | 192 | 320}k` |
 | 提取 wav / flac       | `-vn -c:a pcm_s16le` / `-vn -c:a flac`                                                                                                          |
+| 音频互转 有损/无损    | 与提取音频同一组参数（`-vn -c:a ... [-b:a ...]`），仅输入口径不同（限音频扩展名）                                                               |
 | 压缩（高/中/低）      | `-c:v libx264 -preset medium/veryfast/veryfast -crf 20/26/32 -c:a aac -b:a 192k/128k/96k -movflags +faststart`                                  |
 | 压缩 + 分辨率上限     | 追加 `-vf scale=w='min(iw,1920)':h='min(ih,1080)':force_original_aspect_ratio=decrease:force_divisible_by=2 -pix_fmt yuv420p`（720p/480p 同理） |
 
 - 统一前置：`-y -v error -progress pipe:1 -nostats`。
-- 流校验：视频目标要求存在视频轨；提取音频要求存在音频轨；缺失 → `MC_NO_STREAM`。
+- 流校验：视频目标要求存在视频轨；提取音频要求存在音频轨；音频互转要求音频扩展名 + 音频轨；缺失 → 对应 `MC_NO_STREAM` / `MC_FILE_UNSUPPORTED`。
 
 ## 6. 输出命名（纯函数 `naming.ts` / `shared.uniqueFileName`）
 
@@ -110,6 +123,7 @@
 | 转码     | `{stem}.{ext}`                             | `demo.webm`                  |
 | 截取     | `{stem}.cut_{开始HHMMSS}-{结束HHMMSS}.mp4` | `demo.cut_000010-000030.mp4` |
 | 提取音频 | `{stem}.audio.{ext}`                       | `demo.audio.mp3`             |
+| 音频互转 | `{stem}.{ext}`                             | `demo.flac`                  |
 | 压缩     | `{stem}.c{high                             | medium                       | low}.mp4` | `demo.c.medium.mp4` |
 
 - 冲突 → `{base} ({n}){suffix}`（`shared.uniqueFileName`）；同批次已分配名进入 `existing`（lowercase 键，Windows 大小写不敏感）。
@@ -136,8 +150,9 @@
 1. 转码 mp4/webm/mkv 真实文件成功，输出可用 `ffmpeg -i` 复读时长≈源时长。
 2. 截取 `0.5→2.0` 输出时长 1.5s ± 0.35s；快速模式输出可播。
 3. 提取 wav/mp3 成功，输出无视频流；无音频轨输入 → `MC_NO_STREAM`。
-4. 压缩 720p 输出高 ≤720、宽 ≤1280（源 1280x720），不放大。
-5. 冲突自动重命名；同批次互不覆盖；中文/空格路径可处理。
-6. 三态强制 + tokens + `@lucide/vue`；renderer chunk < 200KB gzip。
-7. 核心纯函数（`parseMediaInfo`/`parseTimecode`/`parseProgressLine`/四个 args 构造/命名/schema）≥80%；全仓 ≥60%。
-8. R2 八类异常逐条真实记录 `docs/smoke/media-convert.md`；`pnpm gate` 全绿。
+4. 音频互转 wav→mp3/flac 成功，产物存在且无视频流；视频输入 → `MC_FILE_UNSUPPORTED`。
+5. 压缩 720p 输出高 ≤720、宽 ≤1280（源 1280x720），不放大。
+6. 冲突自动重命名；同批次互不覆盖；中文/空格路径可处理。
+7. 三态强制 + tokens + `@lucide/vue`；renderer chunk < 200KB gzip。
+8. 核心纯函数（`parseMediaInfo`/`parseTimecode`/`parseProgressLine`/五个 args 构造/命名/schema）≥80%；全仓 ≥60%。
+9. R2 八类异常逐条真实记录 `docs/smoke/media-convert.md`；`pnpm gate` 全绿。
