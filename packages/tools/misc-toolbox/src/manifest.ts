@@ -10,9 +10,9 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'misc-toolbox',
   name: '实用工具',
-  description: '子网/IP 计算器、屏幕标尺与秒表、倒计时、番茄钟',
+  description: 'IPv4/IPv6 子网计算器、屏幕标尺与秒表、倒计时、番茄钟',
   icon: 'timer',
   category: 'misc',
   order: 71,
-  version: '0.2.0'
+  version: '0.3.0'
 })

@@ -2,8 +2,8 @@
  * @file misc-toolbox（实用工具）e2e 冒烟：真实 Electron 驱动页面交互（spec §5）
  * @author cuilanchao
  * @date 2026-11-21
- * @description 覆盖：三页签可见、CIDR /24 计算、/33 报错码 → 中文文案、秒表开始/重置、
- *              番茄钟默认 25:00 与递减、屏幕标尺截屏/框选/测量/Esc 关闭。
+ * @description 覆盖：三页签可见、CIDR /24 计算、/33 报错码 → 中文文案、IPv6 子网、
+ *              秒表开始/重置、番茄钟默认 25:00 与递减、屏幕标尺截屏/框选/测量/Esc 关闭。
  */
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
@@ -53,7 +53,7 @@ test.describe('misc-toolbox（实用工具）冒烟', () => {
       await expect(page.locator('.n-tabs-tab[data-name="ip"]')).toBeVisible()
       await expect(page.locator('.n-tabs-tab[data-name="ruler"]')).toBeVisible()
       await expect(page.locator('.n-tabs-tab[data-name="timer"]')).toBeVisible()
-      await expect(page.getByText('输入 CIDR（如 192.168.1.0/24）', { exact: false })).toBeVisible()
+      await expect(page.getByText('输入 IPv4 / IPv6 CIDR', { exact: false })).toBeVisible()
     } finally {
       await app.close()
     }
@@ -64,7 +64,7 @@ test.describe('misc-toolbox（实用工具）冒烟', () => {
     await ensureReady(page)
     try {
       await clickSidebarTool(page, '实用工具')
-      await page.getByPlaceholder('输入 CIDR，如 192.168.1.0/24').fill('192.168.1.10/24')
+      await page.getByPlaceholder(/输入 CIDR/).fill('192.168.1.10/24')
       await page.getByRole('button', { name: '计算', exact: true }).click()
 
       await expect(page.getByText('192.168.1.0', { exact: true }).first()).toBeVisible()
@@ -81,12 +81,29 @@ test.describe('misc-toolbox（实用工具）冒烟', () => {
     await ensureReady(page)
     try {
       await clickSidebarTool(page, '实用工具')
-      await page.getByPlaceholder('输入 CIDR，如 192.168.1.0/24').fill('192.168.1.0/33')
+      await page.getByPlaceholder(/输入 CIDR/).fill('192.168.1.0/33')
       await page.getByRole('button', { name: '计算', exact: true }).click()
 
       await expect(page.getByText(/子网 \/ IP 输入无效/)).toBeVisible()
       await expect(page.getByText(/MT_CIDR_INVALID/)).toBeVisible()
       await expect(page.getByText(/前缀长度 33 超出 0–32/)).toBeVisible()
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('IPv6 2001:db8::/32 → 网络地址、2^96 主机数与地址类型可见', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '实用工具')
+      await page.getByPlaceholder(/输入 CIDR/).fill('2001:db8::3/32')
+      await page.getByRole('button', { name: '计算', exact: true }).click()
+
+      await expect(page.getByText('2001:db8::', { exact: true }).first()).toBeVisible()
+      await expect(page.getByText('79228162514264337593543950336', { exact: true })).toBeVisible()
+      await expect(page.getByText('全局地址', { exact: true })).toBeVisible()
+      await expect(page.getByText(/已按掩码归一化网络地址/)).toBeVisible()
     } finally {
       await app.close()
     }

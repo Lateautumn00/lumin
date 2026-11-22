@@ -3,22 +3,38 @@ import { describe, expect, it } from 'vitest'
 import {
   classOf,
   computeSubnet,
+  computeSubnet6,
   formatIpv4,
+  formatIpv6,
+  ipv6TypeOf,
+  isIpv6Info,
   isLoopbackIp,
   isPrivateIp,
   maskForPrefix,
   netmaskBinary,
   parseAndCompute,
   parseCidr,
+  parseCidr6,
   parseIpv4,
+  parseIpv6,
   prefixFromMask,
-  usableHosts
+  usableHosts,
+  type SubnetInfo
 } from './ip'
 
-/** 断言解析成功并返回子网信息 */
-function subnetOf(input: string) {
+/** 断言解析成功并收窄为 IPv4 子网信息 */
+function subnetOf(input: string): SubnetInfo {
   const result = parseAndCompute(input)
   if (!result.ok) throw new Error(`解析失败：${input} → ${result.error.message}`)
+  if (isIpv6Info(result.value)) throw new Error(`期望 IPv4 结果：${input}`)
+  return result.value
+}
+
+/** 断言解析成功并收窄为 IPv6 子网信息 */
+function subnet6Of(input: string) {
+  const result = parseAndCompute(input)
+  if (!result.ok) throw new Error(`解析失败：${input} → ${result.error.message}`)
+  if (!isIpv6Info(result.value)) throw new Error(`期望 IPv6 结果：${input}`)
   return result.value
 }
 
@@ -111,12 +127,12 @@ describe('parseCidr 非法输入', () => {
     expect(result.error.detail).toContain('请输入 CIDR')
   })
 
-  it('IPv6 输入 → 提示暂只支持 IPv4', () => {
-    const result = parseCidr('2001:db8::1/64')
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.error.code).toBe('MT_CIDR_INVALID')
-    expect(result.error.detail).toBe('暂只支持 IPv4')
+  it('IPv6 输入交由 parseCidr6 处理（parseCidr 保持 IPv4 专用）', () => {
+    const result = parseCidr6('2001:db8::1/64')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.prefix).toBe(64)
+    expect(result.value.normalized).toBe(true)
   })
 
   it('段值越界 → detail 指明段号', () => {
@@ -217,5 +233,140 @@ describe('地址判定与位运算辅助', () => {
     expect(info.network).toBe('172.16.0.0')
     expect(info.broadcast).toBe('172.31.255.255')
     expect(info.isPrivate).toBe(true)
+  })
+})
+
+describe('parseIpv6 / formatIpv6', () => {
+  it('压缩写法与完整写法等价', () => {
+    const full = parseIpv6('2001:0db8:0000:0000:0000:0000:0000:0001')
+    const short = parseIpv6('2001:db8::1')
+    expect(full.ok).toBe(true)
+    expect(short.ok).toBe(true)
+    if (!full.ok || !short.ok) return
+    expect(full.value).toBe(short.value)
+    expect(formatIpv6(short.value)).toBe('2001:db8::1')
+  })
+
+  it('格式化边界：全零 / 回环 / 无零段', () => {
+    expect(formatIpv6(0n)).toBe('::')
+    expect(formatIpv6(1n)).toBe('::1')
+    expect(formatIpv6(0x20010db8_00000000_00000000_00000001n)).toBe('2001:db8::1')
+    const noZero =
+      (1n << 112n) | (2n << 96n) | (3n << 80n) | (4n << 64n) | (5n << 48n) | (6n << 32n) | (7n << 16n)
+    expect(formatIpv6(noZero)).toBe('1:2:3:4:5:6:7:0')
+  })
+
+  it('多段等长零段时压缩第一段', () => {
+    const value = (1n << 112n) | (2n << 64n) | (3n << 16n) | 4n
+    expect(formatIpv6(value)).toBe('1::2:0:0:3:4')
+  })
+
+  it('非法输入返回 MT_CIDR_INVALID', () => {
+    const cases: [string, string][] = [
+      ['', '请输入 IPv6 地址'],
+      [':::', 'IPv6 地址不能包含 :::'],
+      ['1::2::3', 'IPv6 地址最多包含一处 ::'],
+      ['1:2:3:4:5:6:7', 'IPv6 地址须为 8 组十六进制'],
+      ['1:2:3:4:5:6:7:8:9', 'IPv6 地址须为 8 组十六进制'],
+      ['1:2:3:4:5:6:7:8::', ':: 至少省略一组'],
+      ['12345::', 'IPv6 地址每组须为 1–4 位十六进制'],
+      ['gggg::', 'IPv6 地址每组须为 1–4 位十六进制']
+    ]
+    for (const [input, detail] of cases) {
+      const result = parseIpv6(input)
+      expect(result.ok, input).toBe(false)
+      if (result.ok) continue
+      expect(result.error.code).toBe('MT_CIDR_INVALID')
+      expect(result.error.detail).toBe(detail)
+    }
+  })
+})
+
+describe('parseCidr6 / computeSubnet6', () => {
+  it('/32 网络地址与 2^96 主机数', () => {
+    const info = subnet6Of('2001:db8::/32')
+    expect(info.network).toBe('2001:db8::')
+    expect(info.last).toBe('2001:db8:ffff:ffff:ffff:ffff:ffff:ffff')
+    expect(info.firstHost).toBe('2001:db8::1')
+    expect(info.lastHost).toBe('2001:db8:ffff:ffff:ffff:ffff:ffff:fffe')
+    expect(info.hostCount).toBe('79228162514264337593543950336')
+    expect(info.addressType).toBe('全局地址')
+    expect(info.normalized).toBe(false)
+  })
+
+  it('/64 归一化与 2^64 主机数', () => {
+    const info = subnet6Of('2001:db8::1/64')
+    expect(info.network).toBe('2001:db8::')
+    expect(info.last).toBe('2001:db8::ffff:ffff:ffff:ffff')
+    expect(info.hostCount).toBe('18446744073709551616')
+    expect(info.normalized).toBe(true)
+    expect(info.address).toBe('2001:db8::1')
+  })
+
+  it('/0 全网 2^128 主机数不溢出', () => {
+    const info = subnet6Of('::/0')
+    expect(info.network).toBe('::')
+    expect(info.last).toBe('ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff')
+    expect(info.firstHost).toBe('::1')
+    expect(info.lastHost).toBe('ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffe')
+    expect(info.hostCount).toBe('340282366920938463463374607431768211456')
+    expect(info.addressType).toBe('未指定地址')
+  })
+
+  it('/127 首末均可用，/128 单地址', () => {
+    const pair = subnet6Of('2001:db8::/127')
+    expect(pair.firstHost).toBe('2001:db8::')
+    expect(pair.lastHost).toBe('2001:db8::1')
+    expect(pair.hostCount).toBe('2')
+
+    const single = subnet6Of('2001:db8::1/128')
+    expect(single.network).toBe('2001:db8::1')
+    expect(single.firstHost).toBe('2001:db8::1')
+    expect(single.lastHost).toBe('2001:db8::1')
+    expect(single.hostCount).toBe('1')
+  })
+
+  it('IPv6 地址类型判定', () => {
+    expect(subnet6Of('::/128').addressType).toBe('未指定地址')
+    expect(subnet6Of('::1/128').addressType).toBe('回环地址')
+    expect(subnet6Of('fe80::1/64').addressType).toBe('链路本地地址')
+    expect(subnet6Of('fd00::1/8').addressType).toBe('唯一本地地址')
+    expect(subnet6Of('ff02::1/128').addressType).toBe('组播地址')
+    expect(subnet6Of('2001:db8::1/128').addressType).toBe('全局地址')
+    expect(ipv6TypeOf(0xfe80n << 112n)).toBe('链路本地地址')
+    expect(ipv6TypeOf(0xfec0n << 112n)).toBe('全局地址')
+    expect(ipv6TypeOf(0xfc00n << 112n)).toBe('唯一本地地址')
+    expect(ipv6TypeOf(0xfbffn << 112n)).toBe('全局地址')
+  })
+
+  it('非法前缀与结构错误', () => {
+    const cases: [string, string][] = [
+      ['', '请输入 CIDR，如 2001:db8::/32'],
+      ['2001:db8::', '缺少前缀长度（0–128）'],
+      ['2001:db8::/x', '无法识别的前缀：x'],
+      ['2001:db8::/129', '前缀长度 129 超出 0–128'],
+      ['2001:db8::/64/64', '格式应为 IPv6/前缀长度']
+    ]
+    for (const [input, detail] of cases) {
+      const result = parseCidr6(input)
+      expect(result.ok, input).toBe(false)
+      if (result.ok) continue
+      expect(result.error.code).toBe('MT_CIDR_INVALID')
+      expect(result.error.detail).toBe(detail)
+    }
+  })
+
+  it('computeSubnet6 直接消费 parseCidr6 结果', () => {
+    const parsed = parseCidr6('  2001:db8::/48  ')
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const info = computeSubnet6(parsed.value)
+    expect(info.network).toBe('2001:db8::')
+    expect(info.hostCount).toBe('1208925819614629174706176')
+  })
+
+  it('isIpv6Info 按 hostCount 类型判别', () => {
+    expect(isIpv6Info(subnet6Of('2001:db8::/32'))).toBe(true)
+    expect(isIpv6Info(subnetOf('192.168.1.0/24'))).toBe(false)
   })
 })

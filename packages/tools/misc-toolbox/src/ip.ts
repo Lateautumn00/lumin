@@ -1,8 +1,9 @@
 /**
- * @file IPv4 CIDR 解析与子网计算（纯函数，spec/misc-toolbox.md §1）
+ * @file IPv4 / IPv6 CIDR 解析与子网计算（纯函数，spec/misc-toolbox.md §1）
  * @author cuilanchao
  * @date 2026-11-21
- * @description 仅 IPv4；地址以无符号 32 位整数运算（`>>> 0`），主机数用除法避免位运算溢出
+ * @description IPv4 以无符号 32 位整数运算；IPv6 以 BigInt 128 位运算。
+ *              主机数用除法/BigInt 避免位运算溢出。
  */
 import type { StructuredError } from '@lumin/shared'
 
@@ -152,7 +153,6 @@ export function prefixFromMask(mask: number): number | null {
 export function parseCidr(input: string): IpResult<ParsedCidr> {
   const text = input.trim()
   if (text === '') return invalid('请输入 CIDR，如 192.168.1.0/24')
-  if (text.includes(':')) return invalid('暂只支持 IPv4')
 
   const parts = text.split('/')
   if (parts.length > 2) return invalid('格式应为 a.b.c.d/前缀长度')
@@ -218,11 +218,199 @@ export function computeSubnet(cidr: ParsedCidr): SubnetInfo {
   }
 }
 
+/** 解析后的 IPv6 CIDR：128 位地址 + 前缀长度 + 是否已归一化 */
+export interface ParsedCidr6 {
+  address: bigint
+  prefix: number
+  normalized: boolean
+}
+
+/** IPv6 地址类型（按输入地址判定，非网络地址） */
+export type Ipv6AddressType =
+  | '未指定地址'
+  | '回环地址'
+  | '链路本地地址'
+  | '唯一本地地址'
+  | '组播地址'
+  | '全局地址'
+
+/** IPv6 子网计算结果（展示用均为 RFC 5952 压缩文本） */
+export interface SubnetInfo6 {
+  address: string
+  network: string
+  last: string
+  prefix: number
+  firstHost: string
+  lastHost: string
+  hostCount: string
+  addressType: Ipv6AddressType
+  normalized: boolean
+}
+
+/** 单组十六进制（1–4 位） */
+const GROUP_RE = /^[0-9a-f]{1,4}$/i
+
+/** 128 位全 1 */
+const ALL_ONES_128 = (1n << 128n) - 1n
+
 /**
- * 一步解析并计算（UI 主入口）
+ * 解析 IPv6 地址（支持 `::` 压缩与前导零省略）
+ * @param text 如 `2001:db8::1`
+ */
+export function parseIpv6(text: string): IpResult<bigint> {
+  const trimmed = text.trim()
+  if (trimmed === '') return invalid('请输入 IPv6 地址')
+  if (trimmed.includes(':::')) return invalid('IPv6 地址不能包含 :::')
+
+  const halves = trimmed.split('::')
+  if (halves.length > 2) return invalid('IPv6 地址最多包含一处 ::')
+
+  const splitGroups = (part: string): string[] => (part === '' ? [] : part.split(':'))
+
+  const left = splitGroups(halves[0] ?? '')
+  const right = halves.length === 2 ? splitGroups(halves[1] ?? '') : []
+  const all = [...left, ...right]
+  for (const group of all) {
+    if (!GROUP_RE.test(group)) return invalid('IPv6 地址每组须为 1–4 位十六进制')
+  }
+
+  let groups: string[]
+  if (halves.length === 1) {
+    if (all.length !== 8) return invalid('IPv6 地址须为 8 组十六进制')
+    groups = all
+  } else {
+    const zeros = 8 - left.length - right.length
+    if (zeros < 1) return invalid(':: 至少省略一组')
+    groups = [...left, ...Array<string>(zeros).fill('0'), ...right]
+  }
+
+  let value = 0n
+  for (const group of groups) {
+    value = (value << 16n) | BigInt(Number.parseInt(group, 16))
+  }
+  return { ok: true, value }
+}
+
+/**
+ * 128 位整数 → RFC 5952 压缩文本（最长连续 0 组替换为 `::`，平手取第一段）
+ * @param value 0–2^128-1
+ */
+export function formatIpv6(value: bigint): string {
+  const masked = value & ALL_ONES_128
+  const groups: number[] = []
+  let rest = masked
+  for (let index = 0; index < 8; index += 1) {
+    groups.unshift(Number(rest & 0xffffn))
+    rest >>= 16n
+  }
+
+  let bestStart = -1
+  let bestLength = 1
+  let runStart = -1
+  let runLength = 0
+  for (let index = 0; index < 8; index += 1) {
+    if (groups[index] === 0) {
+      if (runLength === 0) runStart = index
+      runLength += 1
+      if (runLength > bestLength) {
+        bestLength = runLength
+        bestStart = runStart
+      }
+    } else {
+      runLength = 0
+    }
+  }
+
+  const hex = groups.map((group) => group.toString(16))
+  if (bestStart < 0) return hex.join(':')
+  const head = hex.slice(0, bestStart).join(':')
+  const tail = hex.slice(bestStart + bestLength).join(':')
+  return `${head}::${tail}`
+}
+
+/**
+ * 解析 IPv6 CIDR
+ * @param input 如 `2001:db8::/32`
+ */
+export function parseCidr6(input: string): IpResult<ParsedCidr6> {
+  const text = input.trim()
+  if (text === '') return invalid('请输入 CIDR，如 2001:db8::/32')
+
+  const parts = text.split('/')
+  if (parts.length > 2) return invalid('格式应为 IPv6/前缀长度')
+
+  const addressText = (parts[0] ?? '').trim()
+  const parsedAddress = parseIpv6(addressText)
+  if (!parsedAddress.ok) return parsedAddress
+
+  const suffix = (parts[1] ?? '').trim()
+  if (suffix === '') return invalid('缺少前缀长度（0–128）')
+  if (!/^\d{1,3}$/.test(suffix)) return invalid(`无法识别的前缀：${suffix}`)
+  const prefix = Number(suffix)
+  if (prefix > 128) return invalid(`前缀长度 ${prefix} 超出 0–128`)
+
+  const hostBits = 1n << BigInt(128 - prefix)
+  const mask = prefix === 0 ? 0n : ALL_ONES_128 ^ (hostBits - 1n)
+  const address = parsedAddress.value
+  return { ok: true, value: { address, prefix, normalized: (address & mask) !== address } }
+}
+
+/**
+ * IPv6 地址类型判定（未指定 / 回环 / 链路本地 / 唯一本地 / 组播 / 全局）
+ * @param value 128 位地址
+ */
+export function ipv6TypeOf(value: bigint): Ipv6AddressType {
+  const v = value & ALL_ONES_128
+  if (v === 0n) return '未指定地址'
+  if (v === 1n) return '回环地址'
+  if (v >> 118n === 0x3fan) return '链路本地地址'
+  if (v >> 121n === 0x7en) return '唯一本地地址'
+  if (v >> 120n === 0xffn) return '组播地址'
+  return '全局地址'
+}
+
+/**
+ * 由解析结果计算 IPv6 子网信息（主机数恒为 2^主机位，不扣减）
+ * @param cidr parseCidr6 的返回值
+ */
+export function computeSubnet6(cidr: ParsedCidr6): SubnetInfo6 {
+  const totalHosts = 1n << BigInt(128 - cidr.prefix)
+  const mask = cidr.prefix === 0 ? 0n : ALL_ONES_128 ^ (totalHosts - 1n)
+  const network = cidr.address & mask
+  const last = network | (totalHosts - 1n)
+  const firstHost = cidr.prefix >= 127 ? network : network + 1n
+  const lastHost = cidr.prefix >= 127 ? last : last - 1n
+  return {
+    address: formatIpv6(cidr.address),
+    network: formatIpv6(network),
+    last: formatIpv6(last),
+    prefix: cidr.prefix,
+    firstHost: formatIpv6(firstHost),
+    lastHost: formatIpv6(lastHost),
+    hostCount: totalHosts.toString(),
+    addressType: ipv6TypeOf(cidr.address),
+    normalized: cidr.normalized
+  }
+}
+
+/**
+ * 结果判别：IPv6 的 hostCount 为字符串，IPv4 为数字
+ * @param info parseAndCompute 的返回值
+ */
+export function isIpv6Info(info: SubnetInfo | SubnetInfo6): info is SubnetInfo6 {
+  return typeof info.hostCount === 'string'
+}
+
+/**
+ * 一步解析并计算（UI 主入口）：含 `:` 走 IPv6，否则走 IPv4
  * @param input CIDR 文本
  */
-export function parseAndCompute(input: string): IpResult<SubnetInfo> {
+export function parseAndCompute(input: string): IpResult<SubnetInfo | SubnetInfo6> {
+  if (input.includes(':')) {
+    const parsed = parseCidr6(input)
+    if (!parsed.ok) return parsed
+    return { ok: true, value: computeSubnet6(parsed.value) }
+  }
   const parsed = parseCidr(input)
   if (!parsed.ok) return parsed
   return { ok: true, value: computeSubnet(parsed.value) }
