@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@lucide/vue": "1.72.0",
+    "@lumin/node-kit": "workspace:*",
     "@lumin/plugin-api": "workspace:*",
     "@lumin/shared": "workspace:*",
     "naive-ui": "2.45.3",

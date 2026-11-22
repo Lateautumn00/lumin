@@ -4,7 +4,12 @@ import { MISC_TOOLBOX_ERROR_CODES, errorMessage, toolError } from './errors'
 
 describe('errors', () => {
   it('错误码集合稳定', () => {
-    expect([...MISC_TOOLBOX_ERROR_CODES]).toEqual(['MT_CIDR_INVALID'])
+    expect([...MISC_TOOLBOX_ERROR_CODES]).toEqual([
+      'MT_CIDR_INVALID',
+      'MT_CAPTURE_FAILED',
+      'MT_RULER_INVALID',
+      'MT_CLIPBOARD_FAILED'
+    ])
   })
 
   it('toolError 生成结构化错误与中文文案', () => {
@@ -25,6 +30,9 @@ describe('errors', () => {
 
   it('errorMessage 未知码回退原码', () => {
     expect(errorMessage('MT_CIDR_INVALID')).toBe('子网 / IP 输入无效')
+    expect(errorMessage('MT_CAPTURE_FAILED')).toBe('屏幕截图失败')
+    expect(errorMessage('MT_RULER_INVALID')).toBe('测量参数无效')
+    expect(errorMessage('MT_CLIPBOARD_FAILED')).toBe('复制到剪贴板失败')
     expect(errorMessage('UNKNOWN')).toBe('UNKNOWN')
   })
 })

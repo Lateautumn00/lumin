@@ -16,3 +16,12 @@ export { buildImageEncodeArgs, classifyFfmpegFailure } from './ffmpeg'
 export type { FfmpegImageFailure } from './ffmpeg'
 export { writeAtomic } from './atomic'
 export type { AtomicFs } from './atomic'
+export { captureDisplay, selectDisplay } from './screen'
+export type {
+  CaptureSourceInfo,
+  CapturedThumbnail,
+  ScreenCaptureDeps,
+  ScreenCaptureResult,
+  ScreenDisplayInfo,
+  ScreenDisplayOption
+} from './screen'
