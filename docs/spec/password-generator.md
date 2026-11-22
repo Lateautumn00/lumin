@@ -1,19 +1,19 @@
 # 密码生成器（password-generator）字段级功能清单
 
-> 版本：v0.1.0 · 定稿日期：2026-11-20（R8）· 工具 id：`password-generator` · 里程碑 M31
+> 版本：v0.2.0 · 定稿日期：2026-11-20（R8）· 工具 id：`password-generator` · 里程碑 M31（M55 ④ 增口令短语）
 > 本文件为该里程碑验收附件；实现与本文件不一致时以本文件为准，变更须走 R8 流程。
 
 ## 1. 范围与边界
 
 **做**：强随机密码生成（长度 4–128、四类字符集任意组合、排除易混淆与自定义排除字符、熵与强度分档）；UUID v4 批量生成（1–50）；随机字符串（四档预设字符集、长度 1–256、批量 1–20）与闭区间随机整数（跨度 ≤ 1,000,000）。
 
-**不做**：密码强度词典/泄露库校验、密码保存与管理、口令短语（passphrase）生成、UUID v1/v3/v5/ULID、随机数分布统计、历史记录持久化、联网。
+**不做**：密码强度词典/泄露库校验、密码保存与管理、UUID v1/v3/v5/ULID、随机数分布统计、历史记录持久化、联网（口令短语已由 M55 追加节解冻实现）。
 
 **形态**：**纯 renderer、零 IPC、零主进程逻辑、零新增运行时第三方依赖**；仅复用 vue / naive-ui / `@lucide/vue` / `@lumin/shared`（`StructuredError`）。随机源统一为 Web Crypto `crypto.getRandomValues`（拒绝采样消除模偏差），全部计算为同步纯函数（<1ms），无任务队列。
 
 ## 2. 页面字段清单
 
-单页 + 3 个页签（`NTabs` 仅作切换器，内容 `v-if` 渲染，标签走 `#tab` 插槽——与 text-toolbox 同范式）。
+单页 + 4 个页签（M55 增「口令短语」；`NTabs` 仅作切换器，内容 `v-if` 渲染，标签走 `#tab` 插槽——与 text-toolbox 同范式）。
 
 ### 2.1 Tab1 密码
 
@@ -48,8 +48,8 @@
 
 | 状态   | 实现                                                                                                                  |
 | ------ | --------------------------------------------------------------------------------------------------------------------- |
-| 空态   | 三个页签均有默认值（16 位密码 / 1 条 UUID / 5 条随机字符串 + 1 个随机整数），打开即出结果，无白屏                     |
-| 加载态 | **不适用**（全部同步纯函数 <1ms；spec 登记豁免，与 text-toolbox 同口径）                                              |
+| 空态   | 四个页签均有默认值（16 位密码 / 1 条 UUID / 5 条随机字符串 + 1 个随机整数 / 4 词口令），打开即出结果，无白屏                     |
+| 加载态 | 口令短语首次进入时动态加载词表，显示「词表加载中…」；其余页签为同步纯函数 <1ms，豁免                                               |
 | 报错态 | 各页签独立 `role="alert"` 行内结构化错误（错误码 + 中文文案），其余页签与页面不阻塞；复制失败 → `PG_CLIPBOARD_FAILED` |
 
 ## 3. 纯函数契约（`src/password.ts`，≥80% 覆盖）
@@ -85,7 +85,7 @@
 5. `apps/desktop/src/renderer/src/layout/AppSidebar.vue`：iconMap 新增 `'key-round': KeyRound`。
 6. 根 `vitest.config.ts`：新增 `packages/tools/password-generator/src/**/*.ts` 80% 阈值。
 
-清单：`id: password-generator`、`name: 密码生成器`、`description`、`icon: key-round`、`category: misc`、`order: 90`、`version: 0.1.0`。
+清单：`id: password-generator`、`name: 密码生成器`、`description`、`icon: key-round`、`category: misc`、`order: 90`、`version: 0.2.0`（M55 口令短语升级）。
 
 ## 6. R5 体积口径
 
@@ -95,10 +95,11 @@
 
 - 单测：`password.test.ts`（字符池构建/排除、拒绝采样含模偏差丢弃、熵与强度边界、密码确定性生成与校验失败、UUID v4 版本位与变体位、随机字符串/整数边界）、`errors.test.ts`、`manifest.test.ts`；本包覆盖率 ≥80%。
 - e2e `apps/desktop/e2e/password-generator-smoke.spec.ts` 4 用例：
-  1. 页面加载 → 3 页签可见 → 默认 16 位密码 + 强度/熵展示；
+  1. 页面加载 → 4 页签可见 → 默认 16 位密码 + 强度/熵展示；
   2. 长度 24 + 仅大写 → `^[A-Z]{24}$`；全部取消 → `PG_INVALID_OPTIONS` 并恢复小写；
   3. UUID 页签 → 默认 1 条且符合 v4 正则 → 数量改 3 条；
   4. 随机页签 → 默认 5 条长度 32 + 随机整数可见 → 下界大于上界报 `PG_INVALID_OPTIONS` 并恢复。
+  M55 增第 5 条：口令短语默认 4 词连字符 → 6 词 + 空格分隔 → 数量 2 条。
 - R2 八类映射记录于 `docs/smoke/password-generator.md`。
 - `pnpm gate` / `pnpm coverage` / `pnpm build` / e2e 全绿。
 
@@ -106,7 +107,7 @@
 
 ## M55 追加节（2026-11-22 R8 登记：plan Q56 / §4.55）
 
-> 状态：待实施。原 spec 冻结项「passphrase 口令短语」解冻（Q56 拍板）。
+> 状态：已实施（2026-11-22）。原 spec 冻结项「passphrase 口令短语」解冻（Q56 拍板）。
 
 - **字段级清单（新增第 4 页签「口令短语」）**
   1. 词数：3–10（默认 4），步进 1
@@ -115,5 +116,5 @@
   4. 数量：1–20（默认 1，沿用既有数量字段语义）
   5. 熵展示：`log2(7776) × 词数` ≈ 12.9 bit/词（如 4 词 ≈ 51.7 bit）；强度徽标沿用既有档位
   6. 复制单条/复制全部（TSV），与既有页签一致；无新错误码
-- **实现**：EFF long 词表 7776 词落 `src/eff-words.json`（包内资产，非依赖），`words.ts` 动态 `import()` 独立 chunk（pinyin-pro 先例，首次使用才加载）；随机源复用既有 Web Crypto + 拒绝采样（词索引均匀）
-- **验收**：词表完整性（7776 条、全小写 ASCII、无重复）+ 生成纯函数（词数/分隔符/大小写/数字后缀/熵公式/边界拒绝采样）单测本包 ≥80%；e2e 新增「4 词默认 → 改 6 词 + 空格分隔 → 结果可见且含 6 段」用例；chunk：工具 + 词表合计 <60KB gzip 且单列 raw/gzip 记入 `docs/smoke/password-generator.md` M55 增量节（R5 运行时资产口径）；零新增依赖
+- **实现**：EFF long 词表 7776 词落 `src/eff-words.json`（包内资产，非依赖；含 4 个连字符复合词），`words.ts` 动态 `import()` 独立 chunk（pinyin-pro 先例，首次进入页签才加载）；导出 `loadEffWords / passphraseEntropyBits / generatePassphrase` 与 `PASSPHRASE_*` / `EFF_*` 常量；随机源复用既有 Web Crypto + 拒绝采样（词索引均匀），数字后缀走 `randomIntBelow(100)` 补零
+- **验收**：`words.test.ts` 10 例（词表 7776 条唯一且 `^[a-z]+(?:-[a-z]+)*$`、熵公式、默认 4 词确定性输出、首词大写、2 位数字补零、五种分隔符、多条数量、词数/数量/词表/自定义分隔符非法分支、词表不被修改）；本包 47 例全绿且覆盖 ≥80%；e2e 新增「4 词默认 → 6 词 + 空格分隔 → 数量 2 条」；chunk：工具 + 词表合计 <60KB gzip 且单列 raw/gzip 记入 `docs/smoke/password-generator.md` M55 增量节（R5 运行时资产口径）；零新增依赖

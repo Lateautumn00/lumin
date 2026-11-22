@@ -15,6 +15,6 @@ describe('password-generator manifest', () => {
     expect(manifest.icon).toBe('key-round')
     expect(manifest.category).toBe('misc')
     expect(manifest.order).toBe(90)
-    expect(manifest.version).toBe('0.1.0')
+    expect(manifest.version).toBe('0.2.0')
   })
 })
