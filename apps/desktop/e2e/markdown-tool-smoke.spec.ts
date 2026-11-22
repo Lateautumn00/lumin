@@ -2,7 +2,7 @@
  * @file markdown-tool（Markdown 工具）e2e 冒烟：真实 Electron 驱动页面交互
  * @author cuilanchao
  * @date 2026-11-21
- * @description 覆盖：三页签与 Markdown 预览、JSON→TS 生成与报错恢复、YAML 三模式与报错、导出 HTML 与重名递增。
+ * @description 覆盖：三页签与 Markdown 预览、JSON→TS 生成与报错恢复、JSON Schema 模式、YAML 三模式与报错、导出 HTML 与重名递增。
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -82,6 +82,38 @@ test.describe('markdown-tool（Markdown 工具）冒烟', () => {
       await input.fill('{"ok":true}')
       await expect(page.getByTestId('ts-error')).toHaveCount(0)
       await expect(output).toHaveValue(/ok: boolean/)
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('JSON→TS：json-schema 输出 draft-07/$defs，切回 interface 恢复', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, 'Markdown 工具')
+      await page.getByText('JSON→TS', { exact: true }).click()
+
+      const input = page.locator('[data-testid="ts-input"] textarea')
+      const output = page.locator('[data-testid="ts-output"] textarea')
+      const style = page.getByTestId('ts-style')
+      const fileName = page.getByPlaceholder('文件名')
+
+      await input.fill('{"id":1,"user":{"name":"a"}}')
+      await expect(output).toHaveValue(/export interface Root/)
+      await expect(fileName).toHaveValue('types')
+
+      await style.getByText('json-schema', { exact: true }).click()
+      await expect(output).toHaveValue(/"\$schema": "http:\/\/json-schema.org\/draft-07\/schema#"/)
+      await expect(output).toHaveValue(/"type": "object"/)
+      await expect(output).toHaveValue(/"\$ref": "#\/\$defs\/RootUser"/)
+      await expect(output).toHaveValue(/"\$defs"/)
+      await expect(page.getByText('导出 .json', { exact: false })).toBeVisible()
+      await expect(fileName).toHaveValue('schema')
+
+      await style.getByText('interface', { exact: true }).click()
+      await expect(output).toHaveValue(/export interface Root/)
+      await expect(fileName).toHaveValue('types')
     } finally {
       await app.close()
     }

@@ -10,9 +10,9 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'markdown-tool',
   name: 'Markdown 工具',
-  description: 'Markdown 预览与 HTML 转换、JSON 转 TypeScript 类型、YAML 格式化与互转',
+  description: 'Markdown 预览与 HTML 转换、JSON 转 TypeScript 类型或 JSON Schema、YAML 格式化与互转',
   icon: 'file-code',
   category: 'document',
   order: 80,
-  version: '0.1.0'
+  version: '0.2.0'
 })

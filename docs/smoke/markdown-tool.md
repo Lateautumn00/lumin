@@ -43,3 +43,35 @@
 - YAML 使用 js-yaml `load`/`dump`，不注册自定义 schema；格式化会移除注释、展开锚点（页内已提示）。
 - JSON→TS 不生成字面量类型（字符串/数字统一为 `string`/`number`）；嵌套命名按路径派生，冲突自动追加序号。
 - 纯函数为同步计算，2MB 输入的单次耗时会随内容增长（Markdown 页签已 150ms 防抖；JSON/YAML 页签按输入变更即时计算）。
+
+## 5. M55 ⑤ JSON Schema 增量（2026-11-22）
+
+### 5.1 冒烟记录
+
+| #   | 冒烟项            | 方式                                                    | 结果                                                                                                       |
+| --- | ----------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| 1   | 单测              | `pnpm exec vitest run packages/tools/markdown-tool`     | ✅ 73 tests / 9 files（新增 `json-schema.test.ts` 9 例）                                                   |
+| 2   | 覆盖率（R1 ≥80%） | `pnpm coverage`                                         | ✅ 通过；全仓 93.69 / 86.15 / 92.19 / 95.57（语句/分支/函数/行）                                            |
+| 3   | 质量门禁          | `pnpm gate`（lint→typecheck→test→audit→boundary）       | ✅ 2526 passed / 1 skipped；audit 2 moderate（无 high/critical）；边界 0 违规                               |
+| 4   | e2e 冒烟（R3）    | `playwright test e2e/markdown-tool-smoke.spec.ts`       | ⏳ 已新增第 3 条「json-schema → draft-07/$defs → 切回 interface」；本机沙箱无法启动 Electron，待 CI/本机验证 |
+| 5   | 构建              | `pnpm --filter @lumin/desktop build`                    | ✅ 正常产出                                                                                                 |
+| 6   | chunk 体积（R5）  | 构建产物实测                                            | ✅ `markdown-tool-*.js` **57,159 B gzip < 200KB**                                                          |
+
+### 5.2 R2 八类（JSON Schema 增量适用性）
+
+| 类别             | 适用性 / 验证                                                                                     | 级别     |
+| ---------------- | ------------------------------------------------------------------------------------------------- | -------- |
+| 1. 中文/空格路径 | 导出路径逻辑未改；JSON Schema 仅影响文本生成                                                       | 静态审查 |
+| 2. 文件被占用    | 沿用既有 `MD_SAVE_FAILED` + errno detail（导出 `.json` 同 `.ts` 通道）                              | 既有单测 |
+| 3. 加密文件      | 不涉及文件输入                                                                                     | —        |
+| 4. 超大文件      | JSON 输入上限 2MB → `MD_INPUT_TOO_LONG`；嵌套 >64 层 → `MD_JSON_INVALID`                           | 单测     |
+| 5. 任务取消      | 同步纯计算，无长任务                                                                               | —        |
+| 6. 并发溢出      | 无队列；连续导出沿用重名递增                                                                       | 既有单测 |
+| 7. 磁盘满        | 沿用 `MD_SAVE_FAILED`                                                                             | 既有单测 |
+| 8. 断电恢复      | 导出沿用原子写                                                                                     | 既有实现 |
+
+### 5.3 人工目视（待补录）
+
+- [ ] 切 `json-schema` 后根名标签变「根标题」、文件名自动 `schema`、按钮变「导出 .json」
+- [ ] 嵌套对象输出 `$defs/$ref`，数组 items 取首元素，整数/小数/null 类型符合预期
+- [ ] 切回 `interface` 文件名回 `types`、导出扩展名回 `.ts`
