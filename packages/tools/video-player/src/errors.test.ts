@@ -1,0 +1,40 @@
+import { describe, expect, it } from 'vitest'
+import { errorMessage, isRetryable, toolError } from './errors'
+
+describe('toolError', () => {
+  it('缺省 detail 时不带字段', () => {
+    expect(toolError('VP_NOT_FOUND')).toEqual({
+      code: 'VP_NOT_FOUND',
+      message: '文件不存在或无法访问'
+    })
+  })
+
+  it('detail 为空串时不带字段', () => {
+    expect(toolError('VP_RESOLVE_FAILED', '')).toEqual({
+      code: 'VP_RESOLVE_FAILED',
+      message: '无法解析视频文件'
+    })
+  })
+
+  it('带 detail 时原样保留', () => {
+    expect(toolError('VP_UNSUPPORTED_FORMAT', 'mkv')).toEqual({
+      code: 'VP_UNSUPPORTED_FORMAT',
+      message: '不支持该视频格式，请先用「音视频处理」转换',
+      detail: 'mkv'
+    })
+  })
+})
+
+describe('errorMessage / isRetryable', () => {
+  it('已知码取文案，未知码回退原码', () => {
+    expect(errorMessage('VP_PLAYBACK_FAILED')).toBe('视频解码或播放失败，文件可能已损坏')
+    expect(errorMessage('SOMETHING_ELSE')).toBe('SOMETHING_ELSE')
+  })
+
+  it('解析/播放失败可重试', () => {
+    expect(isRetryable('VP_RESOLVE_FAILED')).toBe(true)
+    expect(isRetryable('VP_PLAYBACK_FAILED')).toBe(true)
+    expect(isRetryable('VP_NOT_FOUND')).toBe(false)
+    expect(isRetryable('UNKNOWN')).toBe(false)
+  })
+})

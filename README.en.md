@@ -37,6 +37,9 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 | OCR text           | Offline PP-OCR over single or multiple images, per-image editable preview, copy and per-file/merged TXT export                                                                                        |
 | Image watermark    | Batch text/image watermarks on multiple images (9-grid, opacity, rotation, tiling); originals untouched                                                                                               |
 | Image stitching    | Stitch multiple images into vertical/horizontal long images or a grid, or split one long image by fixed height / part count (spacing, margin, background adjustable)                                  |
+| File preview       | Preview text / Markdown / HTML / JSON / CSV / PDF / images / Office locally (Office via LibreOffice → PDF); PDF rendered page by page, Markdown/HTML in a sandboxed frame                            |
+| Text editor        | Plain-text editing with UTF-8/UTF-16/GBK detection & saving, CRLF/LF, line numbers and current-line highlight, read-only and 5 MiB guard, external-change conflict detection                           |
+| Video player       | Play local mp4/webm/ogv/ogg natively (browser codecs, speed and fullscreen; no transcoding, no file copies)                                                                                            |
 | Video downloader   | Bilibili/Douyin/YouTube presets (online, local parsing only; respect platform terms and copyright)                                                                                                    |
 | Theme              | Follow system / light / dark, applied app-wide via design tokens with no per-tool overrides                                                                                                           |
 
@@ -110,6 +113,7 @@ Released under the [MIT license](LICENSE). Bundled or on-demand components keep 
 | pdf.js / pdf-lib             | PDF parsing/generation | Apache-2.0 / MIT                         |
 | PP-OCR models + ONNX Runtime | Offline OCR            | Apache-2.0 / MIT                         |
 | mathjs                       | Expression evaluation  | Apache-2.0                               |
+| CodeMirror 6 / iconv-lite    | Text editor            | MIT                                      |
 
 See each project's release page for full notices.
 

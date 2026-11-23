@@ -7,6 +7,7 @@ import { registerMain as duplicateFinderRegisterMain } from '@lumin/tool-duplica
 import { registerMain as exampleRegisterMain } from '@lumin/tool-example/node'
 import { registerMain as examSplitRegisterMain } from '@lumin/tool-exam-split/node'
 import { registerMain as fileHasherRegisterMain } from '@lumin/tool-file-hasher/node'
+import { registerMain as filePreviewRegisterMain } from '@lumin/tool-file-preview/node'
 import { registerMain as fileRenamerRegisterMain } from '@lumin/tool-file-renamer/node'
 import { registerMain as folderCompareRegisterMain } from '@lumin/tool-folder-compare/node'
 import { registerMain as fsCleanerRegisterMain } from '@lumin/tool-fs-cleaner/node'
@@ -23,7 +24,9 @@ import { registerMain as pdfImagesRegisterMain } from '@lumin/tool-pdf-images/no
 import { registerMain as pdfToolkitRegisterMain } from '@lumin/tool-pdf-toolkit/node'
 import { registerMain as qrCodeRegisterMain } from '@lumin/tool-qr-code/node'
 import { registerMain as systemInfoRegisterMain } from '@lumin/tool-system-info/node'
+import { registerMain as textEditorRegisterMain } from '@lumin/tool-text-editor/node'
 import { registerMain as videoDownloadRegisterMain } from '@lumin/tool-video-download/node'
+import { registerMain as videoPlayerRegisterMain } from '@lumin/tool-video-player/node'
 import { registerMain as zipToolRegisterMain } from '@lumin/tool-zip-tool/node'
 
 export const toolMains: Readonly<Record<string, RegisterMain>> = {
@@ -35,6 +38,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   example: exampleRegisterMain,
   'exam-split': examSplitRegisterMain,
   'file-hasher': fileHasherRegisterMain,
+  'file-preview': filePreviewRegisterMain,
   'file-renamer': fileRenamerRegisterMain,
   'folder-compare': folderCompareRegisterMain,
   'fs-cleaner': fsCleanerRegisterMain,
@@ -51,6 +55,8 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'pdf-toolkit': pdfToolkitRegisterMain,
   'qr-code': qrCodeRegisterMain,
   'system-info': systemInfoRegisterMain,
+  'text-editor': textEditorRegisterMain,
   'video-download': videoDownloadRegisterMain,
+  'video-player': videoPlayerRegisterMain,
   'zip-tool': zipToolRegisterMain
 }
