@@ -1,3 +1,4 @@
+import { classifyConvertFailure } from '@lumin/node-kit/office'
 import {
   errnoCode as sharedErrnoCode,
   isStructuredError as sharedIsStructuredError,
@@ -56,6 +57,11 @@ export function toolError(code: Docx2pdfErrorCode, detail?: string): StructuredE
 
 export function isRetryable(code: string): boolean {
   return RETRYABLE.has(code as Docx2pdfErrorCode)
+}
+
+/** 通用转换失败归类 → 本工具错误码（源文件无法加载 / 其余转换失败） */
+export function convertFailureCode(stderr: string): Docx2pdfErrorCode {
+  return classifyConvertFailure(stderr) === 'load' ? 'INPUT_LOAD_FAILED' : 'CONVERT_FAILED'
 }
 
 /** 判断抛出物是否已是结构化错误（委托 `@lumin/shared` 单一真相源，导出 API 不变） */

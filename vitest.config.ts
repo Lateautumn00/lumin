@@ -256,6 +256,24 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
+        'packages/tools/file-preview/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
+        'packages/tools/text-editor/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
+        'packages/tools/video-player/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
         'packages/tools/system-info/src/**/*.ts': {
           lines: 80,
           functions: 80,

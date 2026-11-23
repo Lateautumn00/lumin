@@ -16,6 +16,10 @@ const workspaceAlias = [
     find: /^@lumin\/node-kit\/pdf$/,
     replacement: r('../../packages/node-kit/src/pdf/index.ts')
   },
+  {
+    find: /^@lumin\/node-kit\/office$/,
+    replacement: r('../../packages/node-kit/src/office/index.ts')
+  },
   { find: /^@lumin\/ui\/(.+)$/, replacement: r('../../packages/ui/src/$1') },
   {
     find: /^@lumin\/tool-docx2pdf\/manifest$/,
@@ -252,6 +256,42 @@ const workspaceAlias = [
   {
     find: /^@lumin\/tool-markdown-tool\/renderer\/(.+)$/,
     replacement: r('../../packages/tools/markdown-tool/src/renderer/$1')
+  },
+  {
+    find: /^@lumin\/tool-file-preview\/manifest$/,
+    replacement: r('../../packages/tools/file-preview/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-file-preview\/node$/,
+    replacement: r('../../packages/tools/file-preview/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-file-preview\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/file-preview/src/renderer/$1')
+  },
+  {
+    find: /^@lumin\/tool-video-player\/manifest$/,
+    replacement: r('../../packages/tools/video-player/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-video-player\/node$/,
+    replacement: r('../../packages/tools/video-player/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-video-player\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/video-player/src/renderer/$1')
+  },
+  {
+    find: /^@lumin\/tool-text-editor\/manifest$/,
+    replacement: r('../../packages/tools/text-editor/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-text-editor\/node$/,
+    replacement: r('../../packages/tools/text-editor/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-text-editor\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/text-editor/src/renderer/$1')
   },
   {
     find: /^@lumin\/tool-life-calculator\/manifest$/,

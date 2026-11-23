@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./markdown": {
+      "types": "./src/markdown.ts",
+      "default": "./src/markdown.ts"
+    },
     "./*": {
       "types": "./src/*",
       "default": "./src/*"
@@ -15,6 +19,7 @@
   "dependencies": {
     "@lucide/vue": "1.72.0",
     "@lumin/plugin-api": "workspace:*",
+    "marked": "18.2.1",
     "naive-ui": "2.45.3",
     "vue": "3.5.45"
   }

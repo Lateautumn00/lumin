@@ -37,6 +37,9 @@
 | 图片文字识别  | 单张或批量本地图片 OCR（离线 PP-OCR），逐张可编辑预览，复制、逐张或合并导出 TXT                                                         |
 | 图片批量水印  | 多选图片批量叠加文字/图片水印（九宫格/透明度/旋转/平铺），原图不修改                                                                    |
 | 图片拼接      | 多张图片拼成纵向/横向长图或网格拼图，或按固定高度/份数分割长图（间距/外边距/背景色可调）                                                |
+| 文件预览      | 本地预览文本 / Markdown / HTML / JSON / CSV / PDF / 图片 / Office（经 LibreOffice 转 PDF）；PDF 逐页渲染，Markdown/HTML 走 sandbox 隔离预览 |
+| 文本编辑器    | 纯文本编辑：UTF-8/UTF-16/GBK 编码识别与保存、CRLF/LF、行号与当前行高亮、只读与 5MiB 大文件保护、外部修改冲突检测                        |
+| 视频播放器    | 本地播放 mp4/webm/ogv/ogg（浏览器原生解码，倍速与全屏，不转码、不复制文件）                                                              |
 | 视频下载      | B 站/抖音/YouTube 等站点下载（联网、仅本地解析，请遵守平台条款与版权）                                                                  |
 | 外观主题      | 跟随系统 / 浅色 / 深色切换，全工具统一生效（tokens 单源，无逐工具适配）                                                                 |
 
@@ -113,6 +116,7 @@ pnpm update:serve             # 本地更新源 http://127.0.0.1:8787（更新�
 | pdf.js / pdf-lib           | PDF 解析与生成 | Apache-2.0 / MIT              |
 | PP-OCR 模型 + ONNX Runtime | 离线 OCR       | Apache-2.0 / MIT              |
 | mathjs                     | 表达式求值     | Apache-2.0                    |
+| CodeMirror 6 / iconv-lite  | 文本编辑器     | MIT                           |
 
 第三方组件的版权与许可声明以其发布页为准。
 

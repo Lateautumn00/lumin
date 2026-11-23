@@ -6,6 +6,7 @@ import { SpawnError, type RunProcessOptions, type RunProcessResult } from '@lumi
 import type { IpcHandler, MainPluginContext, TaskHandler } from '@lumin/plugin-api'
 import type { TaskUpdate } from '@lumin/shared'
 import type { DownloadOptions } from './download'
+import { toolError } from './errors'
 import { manifest } from './manifest'
 import { createNodeDeps, registerWith, type Docx2pdfDeps } from './node'
 
@@ -410,6 +411,117 @@ describe('docx2pdf registerMain', () => {
       })
     })
 
+    it('临时目录创建抛结构化错误 → 原样上抛', async () => {
+      const harness = createHarness({
+        run: fakeConvertRun(),
+        makeDir: async () => {
+          throw toolError('OUTPUT_WRITE_FAILED')
+        }
+      })
+      const input = makeInput(harness)
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
+        code: 'OUTPUT_WRITE_FAILED'
+      })
+    })
+
+    it('临时目录创建抛普通错误 → detail 回退 String(err)', async () => {
+      const harness = createHarness({
+        run: fakeConvertRun(),
+        makeDir: async () => {
+          throw new Error('boom')
+        }
+      })
+      const input = makeInput(harness)
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
+        code: 'OUTPUT_WRITE_FAILED',
+        detail: 'Error: boom'
+      })
+    })
+
+    it('产物落位抛结构化错误 → 原样上抛', async () => {
+      const harness = createHarness({ run: fakeConvertRun() })
+      harness.deps.move = {
+        ...harness.deps.move,
+        rename: async () => {
+          throw toolError('OUTPUT_WRITE_FAILED')
+        }
+      }
+      const input = makeInput(harness)
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
+        code: 'OUTPUT_WRITE_FAILED'
+      })
+    })
+
+    it('产物落位抛普通错误 → detail 回退 String(err)', async () => {
+      const harness = createHarness({ run: fakeConvertRun() })
+      harness.deps.move = {
+        ...harness.deps.move,
+        rename: async () => {
+          throw new Error('boom')
+        }
+      }
+      const input = makeInput(harness)
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
+        code: 'OUTPUT_WRITE_FAILED',
+        detail: 'Error: boom'
+      })
+    })
+
+    it('run 抛普通错误 → 归一为 INTERNAL 且不吞消息', async () => {
+      const harness = createHarness({
+        run: async () => {
+          throw new Error('boom')
+        }
+      })
+      const input = makeInput(harness)
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
+        code: 'INTERNAL',
+        message: 'boom'
+      })
+    })
+
+    it('run 回报 aborted → 任务中止', async () => {
+      const harness = createHarness({ run: async () => okResult({ aborted: true }) })
+      const input = makeInput(harness)
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toThrow('aborted')
+    })
+
+    it('makeDir 期间信号中止 → 任务中止（run 前守卫）', async () => {
+      const controller = new AbortController()
+      const harness = createHarness({
+        run: fakeConvertRun(),
+        makeDir: async () => {
+          controller.abort()
+        }
+      })
+      const input = makeInput(harness)
+      await expect(
+        runTask(harness, 'convert', { inputPaths: [input] }, { signal: controller.signal })
+      ).rejects.toThrow('aborted')
+    })
+
+    it('转换期间信号中止 → 任务中止且不记为批次失败', async () => {
+      const controller = new AbortController()
+      const harness = createHarness({
+        run: async () => {
+          controller.abort()
+          throw new Error('aborted')
+        }
+      })
+      const input = makeInput(harness)
+      await expect(
+        runTask(harness, 'convert', { inputPaths: [input] }, { signal: controller.signal })
+      ).rejects.toThrow('aborted')
+    })
+
+    it('同名输出 99 个后缀全占用 → OUTPUT_MISSING', async () => {
+      const harness = createHarness({ fileExists: () => true })
+      const input = makeInput(harness)
+      await expect(runTask(harness, 'convert', { inputPaths: [input] })).rejects.toMatchObject({
+        code: 'OUTPUT_MISSING'
+      })
+    })
+
     it('工作目录清理失败仅记日志，不吞结果（spec §7.4）', async () => {
       const harness = createHarness({
         run: fakeConvertRun(),
@@ -658,6 +770,77 @@ describe('docx2pdf registerMain', () => {
       })
     })
 
+    it('msiexec spawn 失败 → INSTALL_FAILED', async () => {
+      const harness = createHarness()
+      harness.deps.download = fakeDownload
+      harness.deps.run = async () => {
+        throw new SpawnError('spawn ENOENT', 'msiexec')
+      }
+      await expect(runTask(harness, 'install', {})).rejects.toMatchObject({
+        code: 'INSTALL_FAILED',
+        detail: 'msiexec'
+      })
+    })
+
+    it('msiexec 抛普通错误 → 原样上抛', async () => {
+      const harness = createHarness()
+      harness.deps.download = fakeDownload
+      harness.deps.run = async () => {
+        throw new Error('boom')
+      }
+      await expect(runTask(harness, 'install', {})).rejects.toThrow('boom')
+    })
+
+    it('msiexec 回报 aborted → 任务中止', async () => {
+      const harness = createHarness()
+      harness.deps.download = fakeDownload
+      harness.deps.run = async () => okResult({ aborted: true })
+      await expect(runTask(harness, 'install', {})).rejects.toThrow('aborted')
+    })
+
+    it('msiexec 超时 → INSTALL_FAILED', async () => {
+      const harness = createHarness()
+      harness.deps.download = fakeDownload
+      harness.deps.run = async () => okResult({ timedOut: true, code: null })
+      await expect(runTask(harness, 'install', {})).rejects.toMatchObject({
+        code: 'INSTALL_FAILED',
+        detail: '超时 600 秒'
+      })
+    })
+
+    it('下载期间信号中止 → 任务中止（安装前守卫）', async () => {
+      const controller = new AbortController()
+      const harness = createHarness()
+      harness.deps.download = async (options) => {
+        const path = await fakeDownload(options)
+        controller.abort()
+        return path
+      }
+      harness.deps.run = fakeMsiexec(harness, true)
+      await expect(
+        runTask(harness, 'install', {}, { signal: controller.signal })
+      ).rejects.toThrow('aborted')
+    })
+
+    it('下载进度按 B/KiB/MiB/GiB 格式化', async () => {
+      const harness = createHarness()
+      harness.deps.download = async (options) => {
+        options.onProgress?.(2 ** 30, 2 ** 20)
+        options.onProgress?.(2 ** 20, 2048)
+        options.onProgress?.(2048, 10)
+        return fakeDownload(options)
+      }
+      harness.deps.run = fakeMsiexec(harness, true)
+      const updates: TaskUpdate[] = []
+      await runTask(harness, 'install', {}, { updates })
+      const messages = updates
+        .filter((update) => update.kind === 'progress' && update.stage === 'download')
+        .map((update) => (update.kind === 'progress' ? update.message : ''))
+      expect(messages).toContain('1.0 GiB / 1.0 MiB')
+      expect(messages).toContain('1.0 MiB / 2.0 KiB')
+      expect(messages).toContain('2.0 KiB / 10 B')
+    })
+
     it('非对象 payload → INVALID_PAYLOAD', async () => {
       const harness = createHarness()
       await expect(runTask(harness, 'install', 'bad')).rejects.toMatchObject({
@@ -685,6 +868,16 @@ describe('docx2pdf registerMain', () => {
       await expect(runTask(failed, 'install', {})).rejects.toMatchObject({
         code: 'INSTALL_FAILED',
         detail: 'ENOSPC'
+      })
+
+      const plain = createHarness({
+        makeDir: async () => {
+          throw new Error('boom')
+        }
+      })
+      await expect(runTask(plain, 'install', {})).rejects.toMatchObject({
+        code: 'INSTALL_FAILED',
+        detail: 'Error: boom'
       })
     })
 

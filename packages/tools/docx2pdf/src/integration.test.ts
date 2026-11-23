@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 import type { MainPluginContext, TaskHandler } from '@lumin/plugin-api'
-import { locateSoffice } from './locate'
+import { locateSoffice } from '@lumin/node-kit/office'
 import { manifest } from './manifest'
 import { createNodeDeps, registerWith } from './node'
 

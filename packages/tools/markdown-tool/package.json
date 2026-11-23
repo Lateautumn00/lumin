@@ -25,8 +25,8 @@
     "@lumin/node-kit": "workspace:*",
     "@lumin/plugin-api": "workspace:*",
     "@lumin/shared": "workspace:*",
+    "@lumin/ui": "workspace:*",
     "js-yaml": "5.5.0",
-    "marked": "18.2.1",
     "naive-ui": "2.45.3",
     "vue": "3.5.45",
     "zod": "4.6.7"

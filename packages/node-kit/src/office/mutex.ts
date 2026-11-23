@@ -1,7 +1,8 @@
 /**
- * FIFO 互斥锁（convert / install 各一把，spec §4 串行约束）：
- * - 先进先出排队；等锁期间可被外部 abort（抛错不占用队列位）
- * - 持有者释放后自动交接下一个等待者
+ * soffice 单实例串行锁（AGENTS §6：soffice 必须串行）。
+ *
+ * 工具运行在同一主进程内，若各工具各持一把锁则无法真正串行；因此 createMutex 与
+ * soffice 专用单例统一上提至 node-kit，供 docx2pdf / file-preview 共享。
  */
 export interface Mutex {
   /** 获取锁；signal abort 则以 aborted=true 拒绝 */
@@ -63,3 +64,6 @@ export function createMutex(): Mutex {
     }
   }
 }
+
+/** 全局 soffice 串行锁（模块级单例，跨工具共享） */
+export const sofficeMutex: Mutex = createMutex()

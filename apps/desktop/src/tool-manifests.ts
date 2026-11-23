@@ -8,6 +8,7 @@ import { manifest as duplicateFinderManifest } from '@lumin/tool-duplicate-finde
 import { manifest as exampleManifest } from '@lumin/tool-example/manifest'
 import { manifest as examSplitManifest } from '@lumin/tool-exam-split/manifest'
 import { manifest as fileHasherManifest } from '@lumin/tool-file-hasher/manifest'
+import { manifest as filePreviewManifest } from '@lumin/tool-file-preview/manifest'
 import { manifest as fileRenamerManifest } from '@lumin/tool-file-renamer/manifest'
 import { manifest as folderCompareManifest } from '@lumin/tool-folder-compare/manifest'
 import { manifest as fsCleanerManifest } from '@lumin/tool-fs-cleaner/manifest'
@@ -27,10 +28,12 @@ import { manifest as pdfToolkitManifest } from '@lumin/tool-pdf-toolkit/manifest
 import { manifest as qrCodeManifest } from '@lumin/tool-qr-code/manifest'
 import { manifest as systemInfoManifest } from '@lumin/tool-system-info/manifest'
 import { manifest as textDiffManifest } from '@lumin/tool-text-diff/manifest'
+import { manifest as textEditorManifest } from '@lumin/tool-text-editor/manifest'
 import { manifest as textToolboxManifest } from '@lumin/tool-text-toolbox/manifest'
 import { manifest as timeToolboxManifest } from '@lumin/tool-time-toolbox/manifest'
 import { manifest as unitConverterManifest } from '@lumin/tool-unit-converter/manifest'
 import { manifest as videoDownloadManifest } from '@lumin/tool-video-download/manifest'
+import { manifest as videoPlayerManifest } from '@lumin/tool-video-player/manifest'
 import { manifest as zipToolManifest } from '@lumin/tool-zip-tool/manifest'
 
 /** 壳内唯一工具清单（Q14）：新增工具 = 新包 + 此处 1 行 + tool-mains 1 行（如有主进程）+ renderer 薄壳 1 行 */
@@ -49,9 +52,11 @@ export const toolManifests: readonly ToolManifest[] = [
   pdfToolkitManifest,
   fileRenamerManifest,
   textToolboxManifest,
+  textEditorManifest,
   markdownToolManifest,
   textDiffManifest,
   videoDownloadManifest,
+  videoPlayerManifest,
   fileHasherManifest,
   mediaConvertManifest,
   qrCodeManifest,
@@ -67,5 +72,6 @@ export const toolManifests: readonly ToolManifest[] = [
   devToolboxManifest,
   miscToolboxManifest,
   systemInfoManifest,
-  exampleManifest
+  exampleManifest,
+  filePreviewManifest
 ]

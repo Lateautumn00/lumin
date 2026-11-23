@@ -87,3 +87,11 @@ describe('createMutex', () => {
     expect(order).toEqual(['a', 'b', 'c'])
   })
 })
+
+describe('sofficeMutex 单例', () => {
+  it('同一模块实例（跨工具共享）', async () => {
+    const a = await import('./mutex')
+    const b = await import('./mutex')
+    expect(a.sofficeMutex).toBe(b.sofficeMutex)
+  })
+})

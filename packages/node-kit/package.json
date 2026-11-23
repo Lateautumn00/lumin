@@ -11,6 +11,10 @@
     "./pdf": {
       "types": "./src/pdf/index.ts",
       "default": "./src/pdf/index.ts"
+    },
+    "./office": {
+      "types": "./src/office/index.ts",
+      "default": "./src/office/index.ts"
     }
   },
   "scripts": {

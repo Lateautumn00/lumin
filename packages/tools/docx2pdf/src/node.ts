@@ -8,26 +8,28 @@ import {
   type RunProcessOptions,
   type RunProcessResult
 } from '@lumin/node-kit'
-import type { MainPluginContext, RegisterMain, TaskHandlerContext } from '@lumin/plugin-api'
-import { makeError } from '@lumin/shared'
-import { batchProgressMessage, dedupeInputPaths, toBatchFailure } from './batch'
 import {
   buildConvertArgs,
   convertDetail,
-  convertFailureCode,
+  createMutex,
+  locateSoffice,
   moveFile,
+  parseRegistryInstallPath,
   pickSofficeCommand,
   precheckInput,
+  probeSofficeDir,
   producedPdfPath,
+  sofficeMutex,
   taskWorkDir,
   verifyPdfOutput,
   type MoveFs
-} from './convert'
+} from '@lumin/node-kit/office'
+import type { MainPluginContext, RegisterMain, TaskHandlerContext } from '@lumin/plugin-api'
+import { makeError } from '@lumin/shared'
+import { batchProgressMessage, dedupeInputPaths, toBatchFailure } from './batch'
 import { downloadMsi, type DownloadOptions } from './download'
-import { toolError, errnoCode, isStructuredError } from './errors'
+import { convertFailureCode, toolError, errnoCode, isStructuredError } from './errors'
 import { OFFICE_INPUT_HINT } from './formats'
-import { locateSoffice, parseRegistryInstallPath, probeSofficeDir } from './locate'
-import { createMutex } from './mutex'
 import { resolveOutputPath } from './naming'
 import {
   convertPayloadSchema,
@@ -73,7 +75,7 @@ function spawnDetail(err: SpawnError): string {
 export function registerWith(ctx: MainPluginContext, deps: Docx2pdfDeps): void {
   const portableProgramDir = join(ctx.paths.userData, 'libreoffice-portable', 'program')
   const installWorkDir = join(ctx.paths.temp, 'lumin-docx2pdf-install')
-  const convertMutex = createMutex()
+  const convertMutex = sofficeMutex
   const installMutex = createMutex()
 
   async function currentStatus(): Promise<StatusResult> {
@@ -87,7 +89,7 @@ export function registerWith(ctx: MainPluginContext, deps: Docx2pdfDeps): void {
     return {
       source: locate.source,
       ...(locate.path !== undefined ? { path: locate.path } : {}),
-      customInvalid: locate.customInvalid ?? false,
+      customInvalid: locate.customInvalid === true,
       customPath
     }
   }
@@ -115,8 +117,13 @@ export function registerWith(ctx: MainPluginContext, deps: Docx2pdfDeps): void {
     emit: TaskHandlerContext<unknown>['emit']
   }): Promise<string> {
     const { inputPath, command, workDir, index, total, signal, emit } = args
-    if (signal.aborted) throw new Error('aborted')
-    await precheckInput(inputPath, deps)
+    const precheck = await precheckInput(inputPath, deps)
+    if (!precheck.ok) {
+      throw toolError(
+        precheck.kind === 'locked' ? 'INPUT_LOCKED' : 'INPUT_NOT_FOUND',
+        precheck.detail
+      )
+    }
 
     const outputPath = resolveOutputPath(inputPath, deps.fileExists)
     if (outputPath === null) throw toolError('OUTPUT_MISSING', '同名输出已存在 99 个')
@@ -206,18 +213,17 @@ export function registerWith(ctx: MainPluginContext, deps: Docx2pdfDeps): void {
         queryRegistry: deps.queryRegistry,
         exists: deps.fileExists
       })
-      if (locate.source === 'none' || locate.path === undefined) {
+      if (locate.path === undefined) {
         throw toolError('SOFFICE_NOT_FOUND')
       }
       const command = pickSofficeCommand(locate.path)
+      if (command === null) throw toolError('SPAWN_FAILED', locate.path)
 
-      const taskDir = taskWorkDir(ctx.paths.temp, taskId)
+      const taskDir = taskWorkDir(ctx.paths.temp, taskId, 'lumin-docx2pdf')
       try {
         const outputs: BatchOutput[] = []
         const failures: BatchFailure[] = []
-        for (let index = 0; index < inputs.length; index += 1) {
-          const inputPath = inputs[index]
-          if (inputPath === undefined) continue
+        for (const [index, inputPath] of inputs.entries()) {
           if (signal.aborted) throw new Error('aborted')
           try {
             const outputPath = await convertOne({
