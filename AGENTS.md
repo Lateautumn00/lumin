@@ -175,6 +175,7 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 - 各工具开工前先出**字段级功能清单**（按钮集/输入项/错误分支），作为该里程碑验收附件
 - 禁止验收模糊化：「能用/差不多/正常」不算验收，必须可复现断言
 - 视频下载免责文案**已定稿**（2026-11-18，用户拍板三重呈现：工具首次弹窗 + 页内 banner + 关于页声明；正文见 `docs/opencode/plan.md` §4.5，修改须重走 R8）
+- 壳级 UX 决策（2026-11-23，plan Q60）：**无原生菜单栏**（`Menu.setApplicationMenu(null)`，dev 经 `before-input-event` 保留 F12/Ctrl+Shift+I/F5/Ctrl+R）；**启动默认工具 = 日历**（`tool-manifests.ts` 的 `DEFAULT_TOOL_ID`）；修改须重走 R8
 
 ---
 

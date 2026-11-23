@@ -143,3 +143,19 @@ pnpm --filter @lumin/desktop exec playwright test update-smoke
 - **打包产物实测** ✅：直接启动 `release/win-unpacked/Lumin.exe`（Playwright `_electron`），`window.lumin.invoke('image-toolbox:probe')` 对 400×300 png 返回 `{format:'png',width:400,height:300,animated:false}`，`appVersion=0.9.0` —— 证明 `resources/binaries/download/ffmpeg.exe` 定位与新探测链路在打包态可用
 - 单元测试 866 全绿；coverage 93.22/84.84/90.83/95.79；lint / typecheck / boundary 全绿
 - OCR（onnxruntime CPU EP）在打包版所用文件集（仅 win32/x64 库）下不受影响：CPU EP 只加载 `onnxruntime.dll`，DirectML/dxcompiler 仍随包保留未裁剪
+
+---
+
+## 8. 原生菜单移除 + 启动默认日历（Q60，2026-11-23）
+
+| 验证项                                 | 方法                                                   | 结果                                                       |
+| -------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------- |
+| 启动默认显示日历（原计算器）          | e2e `ipc-smoke` 启动用例（heading=日历）+ 启动实测     | ✅ 双通道断言通过                                          |
+| 无原生菜单栏（生产 / 开发）           | e2e `Menu.getApplicationMenu()` 为 null + dev 分支实测 | ✅ 两分支均为 null                                         |
+| dev 快捷键 F12 开/关 DevTools         | 真实 OS 按键注入（Win32 keybd_event）                  | ✅ 开、关均生效                                            |
+| dev 快捷键 F5 刷新                    | 真实 OS 按键注入 + 页面 marker 消失                    | ✅ 生效                                                    |
+| 复制粘贴加速器 Ctrl+A/C/V（可编辑区） | e2e `text-editor-smoke` 新增加速器用例                 | ✅ 复制入剪贴板 + 粘贴内容翻倍                             |
+| 非可编辑区选中 Ctrl+C                 | 实测（日历页选中标题 → 复制）                          | ✅ 剪贴板=所选文本；**回退方案（before-input-event 映射）未启用** |
+| 门禁                                  | `pnpm gate`（lint / typecheck / test / audit / 依赖边界） | ✅ 全绿                                                   |
+
+技术备注：Electron `before-input-event` 仅对真实 OS 键盘路径触发，Playwright CDP 合成按键不经过该机制（实测探针计数为 0），故 dev 快捷键验证采用 Win32 注入真实按键；DevTools 独立窗口会持有 Chromium 键盘焦点，二次按键前需点击主窗内容区归还焦点（验证方法限制，非产品缺陷）。

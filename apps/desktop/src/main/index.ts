@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, session } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, nativeTheme, safeStorage, session } from 'electron'
 import log from 'electron-log'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -22,6 +22,8 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1120,
     height: 740,
+    minWidth: 720,
+    minHeight: 520,
     show: false,
     backgroundColor: windowBackgroundColor,
     webPreferences: {
@@ -38,6 +40,23 @@ function createWindow(): void {
   mainWindow.webContents.on('will-navigate', (event) => {
     event.preventDefault()
   })
+
+  // 开发模式保留 DevTools / 刷新快捷键（原生菜单已移除，Q60）；生产包无此监听
+  if (process.env['ELECTRON_RENDERER_URL'] !== undefined) {
+    const contents = mainWindow.webContents
+    contents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return
+      const key = input.key.toLowerCase()
+      if (input.key === 'F12' || (input.control && input.shift && key === 'i')) {
+        event.preventDefault()
+        contents.toggleDevTools()
+      } else if (input.key === 'F5' || (input.control && key === 'r')) {
+        event.preventDefault()
+        contents.reload()
+      }
+    })
+  }
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -140,6 +159,8 @@ async function bootstrap(): Promise<void> {
   }
   logger.info(`已加载工具：${result.loaded.map((manifest) => manifest.id).join(', ')}`)
 
+  // 移除 Electron 默认原生菜单栏（Q60）；dev 快捷键见 createWindow 内 before-input-event
+  Menu.setApplicationMenu(null)
   applyCsp()
   createWindow()
 

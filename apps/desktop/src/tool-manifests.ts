@@ -77,3 +77,6 @@ export const toolManifests: readonly ToolManifest[] = [
   exampleManifest,
   filePreviewManifest
 ]
+
+/** 启动默认工具 id（Q60：打开程序默认显示日历；工具名仅允许出现在本清单文件） */
+export const DEFAULT_TOOL_ID = 'calendar'

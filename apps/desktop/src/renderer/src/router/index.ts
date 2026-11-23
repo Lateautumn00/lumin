@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
-import { toolManifests } from '../../../tool-manifests'
+import { DEFAULT_TOOL_ID, toolManifests } from '../../../tool-manifests'
 import AboutView from '../layout/AboutView.vue'
 import AppShell from '../layout/AppShell.vue'
 import SettingsView from '../layout/SettingsView.vue'
@@ -16,8 +16,8 @@ const toolRoutes: RouteRecordRaw[] = toolManifests.map((manifest) => {
   }
 })
 
-const firstTool = toolManifests[0]
-const firstToolPath = firstTool !== undefined ? `/tools/${firstTool.id}` : '/settings'
+const defaultTool = toolManifests.find((tool) => tool.id === DEFAULT_TOOL_ID) ?? toolManifests[0]
+const firstToolPath = defaultTool !== undefined ? `/tools/${defaultTool.id}` : '/settings'
 
 export const router = createRouter({
   history: createWebHashHistory(),

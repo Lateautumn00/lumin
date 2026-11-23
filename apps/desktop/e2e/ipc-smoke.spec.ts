@@ -27,7 +27,11 @@ test.describe('IPC 冒烟（R3）', () => {
     const page = await app.firstWindow()
     await expect(page.getByRole('button', { name: /计算与转换/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /其他/ })).toBeVisible()
-    await expect(page.getByRole('heading', { name: '计算器' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '日历' })).toBeVisible()
+
+    // 原生菜单栏已移除（Q60）
+    const menu = await app.evaluate(({ Menu }) => Menu.getApplicationMenu())
+    expect(menu).toBeNull()
 
     // example 置 hidden：侧边栏不展示，但 IPC 通道保留（直连 invoke 验证）
     await expect(page.getByText('示例工具')).toHaveCount(0)

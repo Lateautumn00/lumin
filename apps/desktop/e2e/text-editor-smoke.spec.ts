@@ -376,4 +376,39 @@ test.describe('text-editor（文本编辑器）冒烟', () => {
       await app.close()
     }
   })
+
+  test('加速器：移除原生菜单后 Ctrl+A/C/V 复制粘贴仍可用', async () => {
+    const { app, page } = await launch()
+    const workDir = freshDir('lumin-te-e2e-accel')
+    try {
+      const file = path.join(workDir, '加速器.txt')
+      fs.writeFileSync(file, 'hello lumin', 'utf8')
+
+      await clickSidebarTool(page, '文本编辑器')
+      await page.locator('input[type="file"]').setInputFiles(file)
+      const content = page.locator('.cm-content')
+      await expect(content).toBeVisible()
+      await content.click()
+
+      // Ctrl+A 全选 → Ctrl+C 复制（原生菜单移除后的回归验证）
+      await page.keyboard.press('Control+a')
+      await page.keyboard.press('Control+c')
+      await page.waitForTimeout(100)
+      const copied = await app.evaluate(({ clipboard }) => clipboard.readText())
+      expect(copied).toContain('hello lumin')
+
+      // 折叠光标到末尾 → Ctrl+V 粘贴，内容翻倍
+      await page.keyboard.press('End')
+      await page.keyboard.press('Control+v')
+      await expect(content).toContainText('hello luminhello lumin')
+
+      // 放弃更改清除脏状态，避免 beforeunload 拦截窗口关闭（app.close 挂起）
+      await clickSidebarTool(page, '计算器')
+      await expect(page.getByText('有未保存的更改', { exact: true })).toBeVisible()
+      await page.getByRole('button', { name: '放弃更改', exact: true }).click()
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
 })
