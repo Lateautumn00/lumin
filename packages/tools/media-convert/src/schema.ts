@@ -6,6 +6,13 @@
  *              process 按 mode discriminated union（transcode/trim/extract-audio/audio-convert/compress）
  */
 import { z } from 'zod'
+import {
+  AUDIO_FORMATS,
+  VIDEO_CODECS,
+  VIDEO_CONTAINERS,
+  containerCodecError,
+  resolutionError
+} from './compat'
 
 /** 视频扩展名白名单（小写；大小写不敏感匹配，spec §1.1） */
 export const VIDEO_EXTENSIONS = [
@@ -141,15 +148,58 @@ export type AudioStream = z.infer<typeof audioStreamSchema>
 
 // —— 四 Tab 参数（spec §2） ——
 
-/** 质量档（转码 / 压缩共用） */
+/** 转码质量档（转码 / 压缩共用） */
 export const qualityLevelSchema = z.enum(['high', 'medium', 'low'])
 export type QualityLevel = z.infer<typeof qualityLevelSchema>
 
-/** 转码参数：容器 + 质量档 */
-export const transcodeOptionsSchema = z.object({
-  format: z.enum(['mp4', 'webm', 'mkv']),
-  quality: qualityLevelSchema
-})
+/** 音频码率档（有损格式；无损格式忽略） */
+const audioBitrateSchema = z.union([z.literal(128), z.literal(192), z.literal(320)])
+
+/** 分辨率：原始 / 高度上限（只缩不放）/ 自定义宽高（偶数、16–7680） */
+export const resolutionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('original') }),
+  z.object({
+    kind: z.literal('maxHeight'),
+    height: z.union([z.literal(480), z.literal(720), z.literal(1080)])
+  }),
+  z.object({
+    kind: z.literal('custom'),
+    width: z.number().int().min(16).max(7680),
+    height: z.number().int().min(16).max(7680)
+  })
+])
+
+/** 格式转换参数：容器 + 方式 + 编码器 + 质量/分辨率/帧率/码率/去音轨 */
+export const transcodeOptionsSchema = z
+  .object({
+    format: z.enum(VIDEO_CONTAINERS),
+    mode: z.enum(['encode', 'remux']),
+    quality: qualityLevelSchema,
+    codec: z.enum(VIDEO_CODECS),
+    resolution: resolutionSchema,
+    fps: z.union([z.literal(0), z.literal(24), z.literal(25), z.literal(30), z.literal(60)]),
+    videoBitrateKbps: z.number().int().min(0).max(50000),
+    audioBitrateKbps: z.union([
+      z.literal(64),
+      z.literal(96),
+      z.literal(128),
+      z.literal(160),
+      z.literal(192),
+      z.literal(256),
+      z.literal(320)
+    ]),
+    removeAudio: z.boolean()
+  })
+  .superRefine((value, ctx) => {
+    // remux 不做编码，编码器/分辨率与产物无关，跳过组合校验
+    if (value.mode === 'remux') return
+    const codecError = containerCodecError(value.format, value.codec)
+    if (codecError !== null) ctx.addIssue({ code: 'custom', message: codecError, path: ['codec'] })
+    const resError = resolutionError(value.resolution)
+    if (resError !== null) {
+      ctx.addIssue({ code: 'custom', message: resError, path: ['resolution'] })
+    }
+  })
 
 /** 截取参数：起止秒 + 快速流复制开关（区间合法性由 `trimRangeError` 校验） */
 export const trimOptionsSchema = z.object({
@@ -161,11 +211,16 @@ export const trimOptionsSchema = z.object({
 /** 提取音频参数：格式 + 码率（wav/flac 无损忽略码率） */
 export const extractAudioOptionsSchema = z.object({
   format: z.enum(['mp3', 'm4a', 'wav', 'flac', 'ogg']),
-  bitrate: z.union([z.literal(128), z.literal(192), z.literal(320)])
+  bitrate: audioBitrateSchema
 })
 
-/** 音频互转参数：与提取音频同形（目标格式 + 码率），语义差异仅在输入口径 */
-export const audioConvertOptionsSchema = extractAudioOptionsSchema
+/** 音频互转参数：目标格式（7 种）+ 码率 + 采样率 + 声道（0 = 保持原始） */
+export const audioConvertOptionsSchema = z.object({
+  format: z.enum(AUDIO_FORMATS),
+  bitrate: audioBitrateSchema,
+  sampleRate: z.union([z.literal(0), z.literal(44100), z.literal(48000)]),
+  channels: z.union([z.literal(0), z.literal(1), z.literal(2)])
+})
 
 /** 压缩参数：质量档 + 分辨率上限（0 = 原尺寸） */
 export const compressOptionsSchema = z.object({
@@ -174,6 +229,7 @@ export const compressOptionsSchema = z.object({
 })
 
 export type TranscodeOptions = z.infer<typeof transcodeOptionsSchema>
+export type Resolution = z.infer<typeof resolutionSchema>
 export type TrimOptions = z.infer<typeof trimOptionsSchema>
 export type ExtractAudioOptions = z.infer<typeof extractAudioOptionsSchema>
 export type AudioConvertOptions = z.infer<typeof audioConvertOptionsSchema>

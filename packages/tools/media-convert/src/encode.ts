@@ -5,11 +5,14 @@
  * @description 四模式参数映射 + 失败分类；统一前置 `-y -v error -progress pipe:1 -nostats`
  */
 import { CORRUPT_HINTS } from './media'
+import { needsFaststart, type AudioFormat, type VideoContainer } from './compat'
 import type {
   AudioConvertOptions,
   CompressOptions,
   ExtractAudioOptions,
   QualityLevel,
+  Resolution,
+  TranscodeOptions,
   TrimOptions
 } from './schema'
 import type { MediaConvertErrorCode } from './errors'
@@ -18,20 +21,20 @@ import type { MediaConvertErrorCode } from './errors'
 export const COMMON_PREFIX = ['-y', '-v', 'error', '-progress', 'pipe:1', '-nostats'] as const
 
 /** 容器 → 视频目标扩展名（与格式一致） */
-export type VideoFormat = 'mp4' | 'webm' | 'mkv'
+export type VideoFormat = VideoContainer
 
-/** 转码质量档 → 视频/音频编码参数（mp4/mkv） */
-const MP4_QUALITY: Record<QualityLevel, { crf: number; audio: string }> = {
-  high: { crf: 18, audio: '256k' },
-  medium: { crf: 23, audio: '192k' },
-  low: { crf: 28, audio: '128k' }
+/** H.264 / H.265 质量档 → CRF */
+const VIDEO_CRF: Record<QualityLevel, number> = {
+  high: 18,
+  medium: 23,
+  low: 28
 }
 
-/** 转码质量档 → VP9/Opus 参数（webm） */
-const WEBM_QUALITY: Record<QualityLevel, { crf: number; audio: string }> = {
-  high: { crf: 28, audio: '160k' },
-  medium: { crf: 32, audio: '128k' },
-  low: { crf: 36, audio: '96k' }
+/** VP9 质量档 → CRF */
+const VP9_CRF: Record<QualityLevel, number> = {
+  high: 28,
+  medium: 32,
+  low: 36
 }
 
 /** 压缩质量档 → CRF + preset + 音频码率 */
@@ -39,6 +42,17 @@ const COMPRESS_QUALITY: Record<QualityLevel, { crf: number; preset: string; audi
   high: { crf: 20, preset: 'medium', audio: '192k' },
   medium: { crf: 26, preset: 'veryfast', audio: '128k' },
   low: { crf: 32, preset: 'veryfast', audio: '96k' }
+}
+
+/** 目标音频格式 → 编码器 */
+const AUDIO_CODEC: Record<AudioFormat, string> = {
+  mp3: 'libmp3lame',
+  m4a: 'aac',
+  wav: 'pcm_s16le',
+  flac: 'flac',
+  ogg: 'libvorbis',
+  aac: 'aac',
+  opus: 'libopus'
 }
 
 /**
@@ -50,56 +64,97 @@ function secondsArg(seconds: number): string {
 }
 
 /**
- * 转码参数：mp4/mkv = H.264+AAC；webm = VP9+Opus
- * @param format 目标容器
- * @param quality 质量档
+ * 分辨率 → `-vf scale`（原始返回空；高度上限只缩不放）
+ * @param resolution 分辨率参数
+ */
+function resolutionArgs(resolution: Resolution): string[] {
+  if (resolution.kind === 'original') return []
+  if (resolution.kind === 'custom') {
+    return ['-vf', `scale=${String(resolution.width ?? 0)}:${String(resolution.height ?? 0)}`]
+  }
+  const height = resolution.height ?? 0
+  const width = Math.round((height * 16) / 9)
+  return [
+    '-vf',
+    `scale=w='min(iw,${String(width)})':h='min(ih,${String(height)})':force_original_aspect_ratio=decrease:force_divisible_by=2`
+  ]
+}
+
+/**
+ * 视频编码参数（webm 固定 VP9；其余按编码器 + CRF，码率 >0 时覆盖 CRF）
+ * @param options 格式转换参数
+ */
+function videoEncodeArgs(options: TranscodeOptions): string[] {
+  if (options.format === 'webm') {
+    const rate =
+      options.videoBitrateKbps > 0
+        ? ['-b:v', `${String(options.videoBitrateKbps)}k`]
+        : ['-crf', String(VP9_CRF[options.quality]), '-b:v', '0']
+    return ['-c:v', 'libvpx-vp9', ...rate]
+  }
+  const encoder = options.codec === 'h265' ? 'libx265' : 'libx264'
+  const rate =
+    options.videoBitrateKbps > 0
+      ? ['-b:v', `${String(options.videoBitrateKbps)}k`]
+      : ['-crf', String(VIDEO_CRF[options.quality])]
+  return ['-c:v', encoder, '-preset', 'medium', ...rate]
+}
+
+/**
+ * 容器 → 音频编码（webm = Opus；avi = MP3；其余 AAC）
+ * @param container 目标容器
+ */
+function containerAudioCodec(container: VideoContainer): string {
+  if (container === 'webm') return 'libopus'
+  if (container === 'avi') return 'libmp3lame'
+  return 'aac'
+}
+
+/**
+ * 视频容器尾部参数（mp4/m4v/mov 加 faststart）
+ * @param container 目标容器
+ */
+function faststartArgs(container: VideoContainer): string[] {
+  return needsFaststart(container) ? ['-movflags', '+faststart'] : []
+}
+
+/**
+ * 格式转换参数（重编码或 remux）
+ * @param options 格式转换参数
  * @param input 输入路径
  * @param output 输出路径
  */
 export function buildTranscodeArgs(
-  format: VideoFormat,
-  quality: QualityLevel,
+  options: TranscodeOptions,
   input: string,
   output: string
 ): string[] {
-  if (format === 'webm') {
-    const preset = WEBM_QUALITY[quality]
-    return [
-      ...COMMON_PREFIX,
-      '-i',
-      input,
-      '-c:v',
-      'libvpx-vp9',
-      '-crf',
-      String(preset.crf),
-      '-b:v',
-      '0',
-      '-c:a',
-      'libopus',
-      '-b:a',
-      preset.audio,
-      output
-    ]
-  }
-  const preset = MP4_QUALITY[quality]
-  const tail = format === 'mkv' ? [] : ['-movflags', '+faststart']
+  if (options.mode === 'remux') return buildRemuxArgs(options.format, input, output)
+  const audio = options.removeAudio
+    ? ['-an']
+    : ['-c:a', containerAudioCodec(options.format), '-b:a', `${String(options.audioBitrateKbps)}k`]
+  const fps = options.fps > 0 ? ['-r', String(options.fps)] : []
   return [
     ...COMMON_PREFIX,
     '-i',
     input,
-    '-c:v',
-    'libx264',
-    '-preset',
-    'medium',
-    '-crf',
-    String(preset.crf),
-    '-c:a',
-    'aac',
-    '-b:a',
-    preset.audio,
-    ...tail,
+    ...videoEncodeArgs(options),
+    ...resolutionArgs(options.resolution),
+    ...fps,
+    ...audio,
+    ...faststartArgs(options.format),
     output
   ]
+}
+
+/**
+ * 换封装参数（`-c copy`，不重编码）
+ * @param container 目标容器
+ * @param input 输入路径
+ * @param output 输出路径
+ */
+export function buildRemuxArgs(container: VideoContainer, input: string, output: string): string[] {
+  return [...COMMON_PREFIX, '-i', input, '-c', 'copy', ...faststartArgs(container), output]
 }
 
 /**
@@ -138,20 +193,14 @@ export function buildTrimArgs(options: TrimOptions, input: string, output: strin
 }
 
 /**
- * 目标音频格式 → 编码参数（提取音频与音频互转共用）
- * @param options 目标格式 + 码率
+ * 目标音频格式 → 编码参数（提取音频与音频互转共用；wav/flac 无损忽略码率）
+ * @param format 目标格式
+ * @param bitrate 码率 kbps
  */
-function audioEncodeArgs(options: ExtractAudioOptions | AudioConvertOptions): string[] {
-  const codec: Record<ExtractAudioOptions['format'], string> = {
-    mp3: 'libmp3lame',
-    m4a: 'aac',
-    wav: 'pcm_s16le',
-    flac: 'flac',
-    ogg: 'libvorbis'
-  }
-  const lossless = options.format === 'wav' || options.format === 'flac'
-  const bitrate = lossless ? [] : ['-b:a', `${options.bitrate}k`]
-  return ['-c:a', codec[options.format], ...bitrate]
+function audioCodecArgs(format: AudioFormat, bitrate: number): string[] {
+  const lossless = format === 'wav' || format === 'flac'
+  const rate = lossless ? [] : ['-b:a', `${String(bitrate)}k`]
+  return ['-c:a', AUDIO_CODEC[format], ...rate]
 }
 
 /**
@@ -165,12 +214,19 @@ export function buildExtractAudioArgs(
   input: string,
   output: string
 ): string[] {
-  return [...COMMON_PREFIX, '-i', input, '-vn', ...audioEncodeArgs(options), output]
+  return [
+    ...COMMON_PREFIX,
+    '-i',
+    input,
+    '-vn',
+    ...audioCodecArgs(options.format, options.bitrate),
+    output
+  ]
 }
 
 /**
- * 音频互转参数（仅音频输入；丢弃封面等附加视频轨）
- * @param options 目标格式 + 码率
+ * 音频互转参数（仅音频输入；丢弃封面等附加视频轨；0 = 保持原始采样率/声道）
+ * @param options 目标格式 + 码率 + 采样率 + 声道
  * @param input 输入路径
  * @param output 输出路径
  */
@@ -179,7 +235,18 @@ export function buildAudioConvertArgs(
   input: string,
   output: string
 ): string[] {
-  return [...COMMON_PREFIX, '-i', input, '-vn', ...audioEncodeArgs(options), output]
+  const sampleRate = options.sampleRate > 0 ? ['-ar', String(options.sampleRate)] : []
+  const channels = options.channels > 0 ? ['-ac', String(options.channels)] : []
+  return [
+    ...COMMON_PREFIX,
+    '-i',
+    input,
+    '-vn',
+    ...audioCodecArgs(options.format, options.bitrate),
+    ...sampleRate,
+    ...channels,
+    output
+  ]
 }
 
 /**
@@ -232,6 +299,13 @@ export function classifyFfmpegFailure(stderr: string): MediaConvertErrorCode {
   if (/No space left on device|not enough space/i.test(stderr)) return 'MC_OUTPUT_WRITE_FAILED'
   if (/Permission denied|Access is denied|Read-only file system/i.test(stderr)) {
     return 'MC_OUTPUT_WRITE_FAILED'
+  }
+  if (
+    /Could not find tag for codec|not currently supported in container|Unsupported codec|codec not supported|Could not write header/i.test(
+      stderr
+    )
+  ) {
+    return 'MC_CONTAINER_INCOMPATIBLE'
   }
   if (/No such file or directory|could not open/i.test(stderr)) return 'MC_FILE_UNSUPPORTED'
   if (CORRUPT_HINTS.test(stderr)) return 'MC_FILE_CORRUPT'

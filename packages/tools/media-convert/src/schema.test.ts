@@ -51,13 +51,27 @@ describe('probe schema', () => {
 })
 
 describe('process discriminated union', () => {
+  /** 格式转换默认参数（就近覆盖） */
+  const transcode = (overrides: Record<string, unknown> = {}) => ({
+    format: 'webm',
+    mode: 'encode',
+    quality: 'high',
+    codec: 'h264',
+    resolution: { kind: 'original' },
+    fps: 0,
+    videoBitrateKbps: 0,
+    audioBitrateKbps: 192,
+    removeAudio: false,
+    ...overrides
+  })
+
   it('五模式合法入参均通过', () => {
     const base = { files: ['a.mp4'], outputDir: 'C:\\out' }
     expect(
       processPayloadSchema.safeParse({
         ...base,
         mode: 'transcode',
-        options: { format: 'webm', quality: 'high' }
+        options: transcode()
       }).success
     ).toBe(true)
     expect(
@@ -78,7 +92,7 @@ describe('process discriminated union', () => {
       processPayloadSchema.safeParse({
         ...base,
         mode: 'audio-convert',
-        options: { format: 'mp3', bitrate: 192 }
+        options: { format: 'mp3', bitrate: 192, sampleRate: 0, channels: 0 }
       }).success
     ).toBe(true)
     expect(
@@ -86,6 +100,72 @@ describe('process discriminated union', () => {
         ...base,
         mode: 'compress',
         options: { level: 'medium', maxHeight: 720 }
+      }).success
+    ).toBe(true)
+  })
+
+  it('八容器 / 七音频格式均被接受', () => {
+    const base = { files: ['a.mp4'], outputDir: 'C:\\out' }
+    for (const format of ['mp4', 'mkv', 'webm', 'mov', 'avi', 'flv', 'ts', 'm4v']) {
+      const codec =
+        format === 'webm' || format === 'avi' || format === 'flv' || format === 'ts'
+          ? 'h264'
+          : 'h265'
+      expect(
+        processPayloadSchema.safeParse({
+          ...base,
+          mode: 'transcode',
+          options: transcode({ format, codec })
+        }).success
+      ).toBe(true)
+    }
+    for (const format of ['mp3', 'm4a', 'wav', 'flac', 'ogg', 'aac', 'opus']) {
+      expect(
+        processPayloadSchema.safeParse({
+          ...base,
+          mode: 'audio-convert',
+          options: { format, bitrate: 192, sampleRate: 48000, channels: 2 }
+        }).success
+      ).toBe(true)
+    }
+  })
+
+  it('非法组合被拒（webm+H.265 / 奇数自定义分辨率 / 非法音频格式）', () => {
+    const base = { files: ['a.mp4'], outputDir: 'C:\\out' }
+    expect(
+      processPayloadSchema.safeParse({
+        ...base,
+        mode: 'transcode',
+        options: transcode({ format: 'webm', codec: 'h265' })
+      }).success
+    ).toBe(false)
+    expect(
+      processPayloadSchema.safeParse({
+        ...base,
+        mode: 'transcode',
+        options: transcode({
+          format: 'mp4',
+          codec: 'h264',
+          resolution: { kind: 'custom', width: 641, height: 360 }
+        })
+      }).success
+    ).toBe(false)
+    expect(
+      processPayloadSchema.safeParse({
+        ...base,
+        mode: 'audio-convert',
+        options: { format: 'wma', bitrate: 192, sampleRate: 0, channels: 0 }
+      }).success
+    ).toBe(false)
+  })
+
+  it('remux 模式跳过编码器组合校验', () => {
+    const base = { files: ['a.mp4'], outputDir: 'C:\\out' }
+    expect(
+      processPayloadSchema.safeParse({
+        ...base,
+        mode: 'transcode',
+        options: transcode({ format: 'avi', codec: 'h265', mode: 'remux' })
       }).success
     ).toBe(true)
   })

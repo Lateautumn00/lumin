@@ -1,10 +1,10 @@
 # 音视频处理（media-convert）冒烟记录
 
-> 版本：v0.2.0 · 日期：2026-11-19（M14）/ 2026-11-21（M50 音频互转）· 环境：Windows 11 x64 / Electron（本地构建）
+> 版本：v0.3.0 · 日期：2026-11-19（M14）/ 2026-11-21（M50 音频互转）/ 2026-11-23（M57 格式转换增强）· 环境：Windows 11 x64 / Electron（本地构建）
 > 依据：AGENTS §7.3（R2 八类全覆盖）+ §8（R5 chunk）+ §5.3（三态）。
-> 自动化：单测 `pnpm vitest run --project @lumin/tool-media-convert`（**77/77**）；e2e `apps/desktop/e2e/media-convert-smoke.spec.ts`（**8 用例**，`beforeAll` 检测 `binaries/download/ffmpeg.exe`，缺失时整组 skip）。
+> 自动化：单测 `pnpm vitest run --project @lumin/tool-media-convert`（**103/103**）；e2e `apps/desktop/e2e/media-convert-smoke.spec.ts`（**12 用例**，`beforeAll` 检测 `binaries/download/ffmpeg.exe`，缺失时整组 skip）。
 >
-> **M50 复跑（2026-11-21）**：本机 `binaries/download/ffmpeg.exe` 已就绪，e2e 8 用例**全部真实执行并通过（8/8，29.1s）**，含新增「音频互转 wav → mp3/flac」。M14 首次交付时的「ffmpeg 缺失 → e2e 全 skip」记录已被本次结果覆盖；下表仍保留未真实执行的 R2 类别（占用/加密/VHD 磁盘满/强杀）待手工补录。
+> **M57 复跑（2026-11-23）**：本机 `binaries/download/ffmpeg.exe`（6.1.1 essentials）就绪，e2e **12/12 真实执行并通过**，含新增「8 容器格式矩阵」「remux 直通与不兼容」「H.265/自定义分辨率/帧率/码率/去音轨」「aac/opus 采样率声道」四组用例。下表仍保留未真实执行的 R2 类别（占用/加密/VHD 磁盘满/强杀）待手工补录。
 
 ## 1. R2 八类异常
 
@@ -31,38 +31,48 @@
 
 ## 3. 功能与交互（自动化已覆盖部分）
 
-| 项             | 自动化断言                                                                   | 结果                                                   |
-| -------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------ |
-| 转码参数       | mp4/mkv → H.264+AAC（medium 预设，`+faststart`）；webm → VP9+Opus            | 通过（`encode.test.ts`）                               |
-| 截取参数       | `-ss/-to` + 精确重编码；`fastCopy` → `-c copy`                               | 通过（`encode.test.ts`）                               |
-| 提取音频       | 5 格式 codec 映射；wav/flac 忽略码率；无音频轨 → `MC_NO_STREAM`              | 通过（`encode.test.ts` / `node.test.ts`）              |
-| 音频互转       | 复用提取音频参数；`-vn` 丢弃封面；视频输入 → `MC_FILE_UNSUPPORTED`           | 通过（`encode.test.ts` / `node.test.ts` / e2e 用例 5） |
-| 压缩参数       | 三档 CRF/preset/码率；maxHeight 0 不加 `-vf`，其余 `scale=min(...)`          | 通过（`encode.test.ts`）                               |
-| 命名模板       | `{stem}.{ext}` / `.cut_HHMMSS-HHMMSS.mp4` / `.audio.{ext}` / `.c{level}.mp4` | 通过（`naming.test.ts`）                               |
-| 冲突重命名     | 目标目录已有同名 → `demo (1).webm`（Windows 大小写不敏感）                   | 通过（`node.test.ts`）                                 |
-| 进度解析与节流 | `out_time_us/ms`（微秒）+ `progress=end`；首次/±1%/200ms/100% 推送           | 通过（`media.test.ts` / `node.test.ts`）               |
-| 截取区间校验   | 结束≤开始 → 批次级 `MC_PARAM_INVALID`；起点超出源时长 → 单文件失败           | 通过（`node.test.ts`）                                 |
-| 超时           | 单文件 30 分钟 → `MC_TIMEOUT`（可重试）                                      | 通过（`node.test.ts`）                                 |
+| 项             | 自动化断言                                                                    | 结果                                                         |
+| -------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 格式矩阵       | 8 容器（mp4/mkv/webm/mov/avi/flv/ts/m4v）各出一条可复读产物，时长差 ≤1s       | 通过（e2e「格式矩阵」；`encode.test.ts` / `compat.test.ts`） |
+| 编码器与 remux | H.265→libx265；webm 固定 VP9+Opus；avi 固定 MP3；remux `-c copy` + `.remux`   | 通过（`encode.test.ts` / `naming.test.ts` / e2e remux）      |
+| remux 兼容     | mp4→mkv/mov/ts/mp4 直通；mp4(h264/aac)→avi → `MC_CONTAINER_INCOMPATIBLE`      | 通过（`compat.test.ts` / e2e remux）                         |
+| 高级参数       | 自定义 640×360、720p 不放大、帧率 30、视频码率 2000k、去音轨无音频流          | 通过（`encode.test.ts` / e2e 高级参数）                      |
+| 音频扩展       | aac/opus 编码；采样率 44100/48000；单/立体声；无损忽略码率                    | 通过（`encode.test.ts` / `schema.test.ts` / e2e 音频扩展）   |
+| 容器组合校验   | webm/avi/flv/ts + H.265 → `MC_PARAM_INVALID`；奇数自定义分辨率拒绝            | 通过（`compat.test.ts` / `schema.test.ts`）                  |
+| 截取参数       | `-ss/-to` + 精确重编码；`fastCopy` → `-c copy`                                | 通过（`encode.test.ts`）                                     |
+| 提取音频       | 5 格式 codec 映射；wav/flac 忽略码率；无音频轨 → `MC_NO_STREAM`               | 通过（`encode.test.ts` / `node.test.ts`）                    |
+| 音频互转       | 7 格式映射；`-vn` 丢弃封面；视频输入 → `MC_FILE_UNSUPPORTED`                  | 通过（`encode.test.ts` / `node.test.ts` / e2e）              |
+| 压缩参数       | 三档 CRF/preset/码率；maxHeight 0 不加 `-vf`，其余 `scale=min(...)`           | 通过（`encode.test.ts`）                                     |
+| 命名模板       | `{stem}.{ext}` / `.remux.{ext}` / `.cut_*` / `.audio.{ext}` / `.c{level}.mp4` | 通过（`naming.test.ts`）                                     |
+| 冲突重命名     | 目标目录已有同名 → `demo (1).webm`（Windows 大小写不敏感）                    | 通过（`node.test.ts`）                                       |
+| 进度解析与节流 | `out_time_us/ms`（微秒）+ `progress=end`；首次/±1%/200ms/100% 推送            | 通过（`media.test.ts` / `node.test.ts`）                     |
+| 截取区间校验   | 结束≤开始 → 批次级 `MC_PARAM_INVALID`；起点超出源时长 → 单文件失败            | 通过（`node.test.ts`）                                       |
+| 超时           | 单文件 30 分钟 → `MC_TIMEOUT`（可重试）                                       | 通过（`node.test.ts`）                                       |
 
 ## 4. chunk 实测（R5）
 
-| 产物                                        | raw      | gzip     | 口径说明                                              |
-| ------------------------------------------- | -------- | -------- | ----------------------------------------------------- |
-| `renderer/assets/media-convert-CBt5i4P-.js` | 38,569 B | 10,106 B | M50 实测（含「音频互转」页签），工具 chunk 基线 200KB |
-| 历史 `media-convert-B0LUgUi6.js`（M14）     | 37,526 B | 9,962 B  | 四 Tab 版本，改动 +1,043 B raw / +144 B gzip          |
+| 产物                                      | raw      | gzip     | 口径说明                                                          |
+| ----------------------------------------- | -------- | -------- | ----------------------------------------------------------------- |
+| `renderer/assets/media-convert-*.js`      | 63,462 B | 14,268 B | M57 实测（五 Tab + 8 容器/remux/高级参数），工具 chunk 基线 200KB |
+| `renderer/assets/Switch-*.js`（独占依赖） | 15,963 B | 4,009 B  | 新增 `NSwitch`（去音轨）；若其他工具已用则为共享 vendor，口径内计 |
+| `renderer/assets/RadioButton-*.js`        | 1,872 B  | 766 B    | 新增 `NRadioButton`（转换方式）                                   |
+| 历史 `media-convert-CBt5i4P-.js`（M50）   | 38,569 B | 10,106 B | 五 Tab 版本，M57 改动 +24,893 B raw / +4,162 B gzip               |
 
-结论：工具 chunk **10,106 B gzip（≈9.9KB）**，远低于 200KB 基线；无新增第三方依赖（复用 `binaries/download/ffmpeg.exe`，fetcher 固定 URL + SHA256 校验，不入 git）。
+结论：工具增量（chunk + 独占 Switch/RadioButton）**≈19.0KB gzip**，远低于 200KB 基线；零新增第三方依赖（复用 `binaries/download/ffmpeg.exe`，fetcher 固定 URL + SHA256 校验，不入 git），主进程逻辑不进入 renderer。
 
 ## 5. 补测指引
 
 1. `node scripts/fetch-binaries.mjs --group download`（确认 `binaries/download/ffmpeg.exe` 存在且 SHA256 校验通过）
 2. `pnpm build`
-3. `pnpm --filter @lumin/desktop exec playwright test media-convert-smoke.spec.ts`（8 用例，M50 实测 8/8 通过）
+3. `pnpm --filter @lumin/desktop exec playwright test media-convert-smoke.spec.ts`（12 用例，M57 实测 12/12 通过）
 4. 手工补录：R2 第 2、3、7、8 类按上表样本执行并回填「实测结论」列（第 1、5 类已由 e2e 覆盖；第 4、6 类由单测覆盖）
 
 ## 6. 已知限制
 
 - 任务内串行处理（不做单任务并发）；单批 1–50 文件、单文件 ≤ 4GB、单段截取 ≤ 24h。
+- H.265（libx265）编码较慢且老设备兼容性较差，UI 已标注；默认仍为 H.264。
+- remux 仅换封装、不修复不兼容轨道：源编码不在目标容器白名单（spec §5.2）时该文件失败，不自动回退重编码。
+- 自定义分辨率仅重编码生效；remux 下分辨率/帧率/码率/去音轨控件联动禁用。
 - 无原子写：取消/强杀会保留已生成文件与可能的半成品（spec §4 已声明）。
 - 截取「快速复制」按关键帧对齐，起止时间可能不精确（UI 已提示）。
-- probe 依赖 `ffmpeg -i` stderr 文本，异常封装格式可能无法识别时长（退化为 0，按入参区间处理）。
+- probe 依赖 `ffmpeg -i` stderr 文本，异常封装格式可能无法识别时长（退化为 0，按入参区间处理）；未知编码保守判为 remux 不兼容。

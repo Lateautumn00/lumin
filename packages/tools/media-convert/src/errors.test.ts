@@ -27,6 +27,7 @@ describe('错误码与文案', () => {
     expect(isRetryable('MC_FILE_CORRUPT')).toBe(true)
     expect(isRetryable('MC_TIMEOUT')).toBe(true)
     expect(isRetryable('MC_FILE_UNSUPPORTED')).toBe(false)
+    expect(isRetryable('MC_CONTAINER_INCOMPATIBLE')).toBe(false)
     expect(isRetryable('MC_CANCELLED')).toBe(false)
   })
 })
