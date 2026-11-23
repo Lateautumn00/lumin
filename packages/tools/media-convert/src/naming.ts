@@ -22,12 +22,18 @@ export function stemOf(fileName: string): string {
 }
 
 /**
- * 转码命名：`{stem}.{ext}`
+ * 格式转换命名：重编码 `{stem}.{ext}`；remux 加 `.remux` 中缀防同名覆盖
  * @param inputName 输入文件名
  * @param ext 目标扩展名
+ * @param mode 转换方式（默认重编码）
  */
-export function buildTranscodeName(inputName: string, ext: string): string {
-  return `${stemOf(inputName)}.${ext}`
+export function buildTranscodeName(
+  inputName: string,
+  ext: string,
+  mode: 'encode' | 'remux' = 'encode'
+): string {
+  const stem = stemOf(inputName)
+  return mode === 'remux' ? `${stem}.remux.${ext}` : `${stem}.${ext}`
 }
 
 /**

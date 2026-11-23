@@ -25,6 +25,11 @@ describe('五模式命名', () => {
     expect(buildCompressName('demo.mov', 'medium')).toBe('demo.cmedium.mp4')
   })
 
+  it('remux 加 .remux 中缀防同名覆盖', () => {
+    expect(buildTranscodeName('demo.mp4', 'mkv', 'remux')).toBe('demo.remux.mkv')
+    expect(buildTranscodeName('demo.mp4', 'mp4', 'remux')).toBe('demo.remux.mp4')
+  })
+
   it('截取带时间标签', () => {
     expect(buildTrimName('demo.mp4', 10, 30)).toBe('demo.cut_000010-000030.mp4')
     expect(buildTrimName('demo.mp4', 0.5, 2.4)).toBe('demo.cut_000001-000002.mp4')

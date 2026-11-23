@@ -24,6 +24,10 @@
       "types": "./src/encode.ts",
       "default": "./src/encode.ts"
     },
+    "./compat": {
+      "types": "./src/compat.ts",
+      "default": "./src/compat.ts"
+    },
     "./media": {
       "types": "./src/media.ts",
       "default": "./src/media.ts"

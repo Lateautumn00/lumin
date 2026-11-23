@@ -31,6 +31,7 @@ import {
   type ProbeItem
 } from './schema'
 import { errnoCode, toolError } from './errors'
+import { remuxError } from './compat'
 import {
   buildAudioConvertArgs,
   buildCompressArgs,
@@ -228,7 +229,7 @@ function outputNameOf(
 ): string {
   switch (payload.mode) {
     case 'transcode':
-      return buildTranscodeName(inputName, payload.options.format)
+      return buildTranscodeName(inputName, payload.options.format, payload.options.mode)
     case 'trim':
       return buildTrimName(inputName, startSec, endSec)
     case 'extract-audio':
@@ -249,7 +250,7 @@ function outputNameOf(
 function buildArgsOf(payload: ProcessPayload, input: string, output: string): string[] {
   switch (payload.mode) {
     case 'transcode':
-      return buildTranscodeArgs(payload.options.format, payload.options.quality, input, output)
+      return buildTranscodeArgs(payload.options, input, output)
     case 'trim':
       return buildTrimArgs(payload.options, input, output)
     case 'extract-audio':
@@ -381,6 +382,16 @@ async function processOne(
   } else {
     if (!isVideoExtension(inputExt)) throw toolError('MC_NO_STREAM')
     if (info.video === null) throw toolError('MC_NO_STREAM')
+  }
+
+  // remux 兼容预检：源编码须可直通目标容器，否则单文件失败（批次继续，spec §5.1）
+  if (payload.mode === 'transcode' && payload.options.mode === 'remux') {
+    const reason = remuxError(
+      payload.options.format,
+      info.video?.codec ?? null,
+      info.audio?.codec ?? null
+    )
+    if (reason !== null) throw toolError('MC_CONTAINER_INCOMPATIBLE', reason)
   }
 
   const startSec = payload.mode === 'trim' ? payload.options.startSec : 0

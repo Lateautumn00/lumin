@@ -1,9 +1,22 @@
 <script setup lang="ts">
-// 音视频处理主视图（M14：转码/截取/提取音频/压缩四 Tab；M50：新增音频互转）
-// 作者：cuilanchao · 修改时间：2026-11-19
+// 音视频处理主视图（M14：格式转换/截取/提取音频/压缩四 Tab；M50 音频互转；M57 格式转换增强）
+// 作者：cuilanchao · 修改时间：2026-11-23
 // 三态强制（空态拖拽引导/加载进度可取消/报错码 + 详情）、tokens、@lucide/vue（spec §3）
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { NButton, NCheckbox, NEmpty, NInput, NSpace, NTabPane, NTabs, NText } from 'naive-ui'
+import {
+  NButton,
+  NCheckbox,
+  NEmpty,
+  NInput,
+  NInputNumber,
+  NRadioButton,
+  NRadioGroup,
+  NSpace,
+  NSwitch,
+  NTabPane,
+  NTabs,
+  NText
+} from 'naive-ui'
 import { Film, FolderOpen, RotateCcw, X } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
@@ -11,20 +24,53 @@ import TaskProgress from '@lumin/ui/TaskProgress.vue'
 import { config, process, probe, revealPath, saveOutputDir } from './client'
 import { errorMessage, isRetryable } from '../errors'
 import { formatClock, parseTimecode } from '../media'
+import { canRemux, codecSelectable, type AudioFormat, type VideoContainer } from '../compat'
 import type { VideoStream, AudioStream } from '../schema'
 import type { OutputItem, ProcessFailure, ProcessPayload } from '../schema'
 
 /** Tab 标识（spec §2） */
 type TabId = 'transcode' | 'trim' | 'extract-audio' | 'audio-convert' | 'compress'
 
-/** 质量档中文标签（转码 / 压缩共用，spec §2） */
+/** 质量档中文标签（格式转换 / 压缩共用，spec §2） */
 const QUALITY_OPTIONS = [
   { label: '高（体积大）', value: 'high' },
   { label: '中（推荐）', value: 'medium' },
   { label: '低（体积小）', value: 'low' }
 ] as const
 
-/** 视频输入 accept（spec §1.1；截取/转码/压缩仅视频） */
+/** 视频目标容器（spec §2.1） */
+const CONTAINER_OPTIONS: Array<{ label: string; value: VideoContainer }> = [
+  { label: 'MP4', value: 'mp4' },
+  { label: 'MKV', value: 'mkv' },
+  { label: 'WebM', value: 'webm' },
+  { label: 'MOV', value: 'mov' },
+  { label: 'AVI', value: 'avi' },
+  { label: 'FLV', value: 'flv' },
+  { label: 'TS', value: 'ts' },
+  { label: 'M4V', value: 'm4v' }
+]
+
+/** 提取音频目标格式（5 种） */
+const EXTRACT_FORMATS = [
+  { label: 'MP3', value: 'mp3' },
+  { label: 'M4A（AAC）', value: 'm4a' },
+  { label: 'WAV（无损）', value: 'wav' },
+  { label: 'FLAC（无损）', value: 'flac' },
+  { label: 'OGG（Vorbis）', value: 'ogg' }
+] as const
+
+/** 音频互转目标格式（7 种） */
+const CONVERT_FORMATS: Array<{ label: string; value: AudioFormat }> = [
+  { label: 'MP3', value: 'mp3' },
+  { label: 'M4A（AAC）', value: 'm4a' },
+  { label: 'WAV（无损）', value: 'wav' },
+  { label: 'FLAC（无损）', value: 'flac' },
+  { label: 'OGG（Vorbis）', value: 'ogg' },
+  { label: 'AAC', value: 'aac' },
+  { label: 'Opus', value: 'opus' }
+]
+
+/** 视频输入 accept（spec §1.1；截取/格式转换/压缩仅视频） */
 const VIDEO_ACCEPT = '.mp4,.m4v,.mov,.mkv,.webm,.avi,.flv,.wmv,.ts,.mpg,.mpeg,.3gp'
 /** 全部输入 accept（提取音频 Tab 同时接受音频） */
 const ALL_ACCEPT = `${VIDEO_ACCEPT},.mp3,.wav,.flac,.aac,.m4a,.ogg,.opus,.wma,.aiff`
@@ -39,18 +85,57 @@ const accept = computed(() => {
 
 // —— Tab 与参数（spec §2 默认值） ——
 const tab = ref<TabId>('transcode')
-const transcodeFormat = ref<'mp4' | 'webm' | 'mkv'>('mp4')
+const transcodeFormat = ref<VideoContainer>('mp4')
+const transcodeMode = ref<'encode' | 'remux'>('encode')
+const transcodeCodec = ref<'h264' | 'h265'>('h264')
 const transcodeQuality = ref<'high' | 'medium' | 'low'>('medium')
+type ResolutionKind = 'original' | 'maxHeight' | 'custom'
+const resolutionKind = ref<ResolutionKind>('original')
+const resolutionHeight = ref<480 | 720 | 1080>(720)
+const customWidth = ref<number | null>(null)
+const customHeight = ref<number | null>(null)
+const transcodeFps = ref<0 | 24 | 25 | 30 | 60>(0)
+const videoBitrate = ref<number | null>(0)
+const transcodeAudioBitrate = ref<64 | 96 | 128 | 160 | 192 | 256 | 320>(192)
+const removeAudio = ref(false)
 const trimStart = ref('')
 const trimEnd = ref('')
 const trimFastCopy = ref(false)
-const audioFormat = ref<'mp3' | 'm4a' | 'wav' | 'flac' | 'ogg'>('mp3')
+const extractFormat = ref<'mp3' | 'm4a' | 'wav' | 'flac' | 'ogg'>('mp3')
+const extractBitrate = ref(192)
+const audioFormat = ref<AudioFormat>('mp3')
 const audioBitrate = ref(192)
+const audioSampleRate = ref<0 | 44100 | 48000>(0)
+const audioChannels = ref<0 | 1 | 2>(0)
 const compressLevel = ref<'high' | 'medium' | 'low'>('medium')
 const compressMaxHeight = ref(0)
 
 /** 无损音频格式：码率控件置灰（spec §2.3） */
+const extractIsLossless = computed(
+  () => extractFormat.value === 'wav' || extractFormat.value === 'flac'
+)
 const audioIsLossless = computed(() => audioFormat.value === 'wav' || audioFormat.value === 'flac')
+
+/** 是否仅换封装（remux）：相关编码控件联动禁用 */
+const isRemux = computed(() => transcodeMode.value === 'remux')
+/** 容器是否暴露编码器选择（H.264 / H.265） */
+const showCodec = computed(() => codecSelectable(transcodeFormat.value))
+/** 分辨率下拉的合成值（原始 / 480 / 720 / 1080 / custom） */
+const resolutionValue = computed<string>({
+  get: () => {
+    if (resolutionKind.value === 'original') return 'original'
+    if (resolutionKind.value === 'custom') return 'custom'
+    return String(resolutionHeight.value)
+  },
+  set: (value) => {
+    if (value === 'original') resolutionKind.value = 'original'
+    else if (value === 'custom') resolutionKind.value = 'custom'
+    else {
+      resolutionKind.value = 'maxHeight'
+      resolutionHeight.value = Number(value) as 480 | 720 | 1080
+    }
+  }
+})
 
 // —— 文件列表与探测 ——
 interface FileRow {
@@ -69,6 +154,16 @@ const probing = ref(false)
 const outputDir = ref('')
 /** 拖拽/探测非法文件行内提示（自动清除） */
 const invalidHint = ref('')
+
+/** remux 下与目标容器不兼容的文件（行内提示并禁用开始，spec §2.1） */
+const remuxIncompatible = computed(() =>
+  !isRemux.value
+    ? []
+    : rows.value.filter(
+        (row) =>
+          !canRemux(transcodeFormat.value, row.video?.codec ?? null, row.audio?.codec ?? null)
+      )
+)
 
 // —— 任务与结果 ——
 const phase = ref<'idle' | 'running'>('idle')
@@ -213,11 +308,43 @@ function resolveTrimRange(): { startSec: number; endSec: number } | null {
 function buildPayload(files: string[]): ProcessPayload | null {
   const dir = outputDir.value.trim()
   if (tab.value === 'transcode') {
+    const resolution =
+      resolutionKind.value === 'custom'
+        ? {
+            kind: 'custom' as const,
+            width: customWidth.value ?? 0,
+            height: customHeight.value ?? 0
+          }
+        : resolutionKind.value === 'maxHeight'
+          ? { kind: 'maxHeight' as const, height: resolutionHeight.value }
+          : { kind: 'original' as const }
+    if (
+      resolution.kind === 'custom' &&
+      (resolution.width < 16 ||
+        resolution.width > 7680 ||
+        resolution.height < 16 ||
+        resolution.height > 7680 ||
+        resolution.width % 2 !== 0 ||
+        resolution.height % 2 !== 0)
+    ) {
+      showError({ code: 'MC_PARAM_INVALID', message: '自定义分辨率需为 16–7680 的偶数' })
+      return null
+    }
     return {
       mode: 'transcode',
       files,
       outputDir: dir,
-      options: { format: transcodeFormat.value, quality: transcodeQuality.value }
+      options: {
+        format: transcodeFormat.value,
+        mode: transcodeMode.value,
+        quality: transcodeQuality.value,
+        codec: transcodeCodec.value,
+        resolution,
+        fps: transcodeFps.value,
+        videoBitrateKbps: videoBitrate.value ?? 0,
+        audioBitrateKbps: transcodeAudioBitrate.value,
+        removeAudio: removeAudio.value
+      }
     }
   }
   if (tab.value === 'trim') {
@@ -235,7 +362,7 @@ function buildPayload(files: string[]): ProcessPayload | null {
       mode: 'extract-audio',
       files,
       outputDir: dir,
-      options: { format: audioFormat.value, bitrate: audioBitrate.value as 128 | 192 | 320 }
+      options: { format: extractFormat.value, bitrate: extractBitrate.value as 128 | 192 | 320 }
     }
   }
   if (tab.value === 'audio-convert') {
@@ -243,7 +370,12 @@ function buildPayload(files: string[]): ProcessPayload | null {
       mode: 'audio-convert',
       files,
       outputDir: dir,
-      options: { format: audioFormat.value, bitrate: audioBitrate.value as 128 | 192 | 320 }
+      options: {
+        format: audioFormat.value,
+        bitrate: audioBitrate.value as 128 | 192 | 320,
+        sampleRate: audioSampleRate.value,
+        channels: audioChannels.value
+      }
     }
   }
   return {
@@ -342,7 +474,7 @@ onUnmounted(detach)
     <div>
       <h1 class="text-base font-semibold">音视频处理</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        转码、音频互转、截取片段、提取音频与压缩（基于 ffmpeg）
+        视频/音频格式转换、截取片段、提取音频与压缩（基于 ffmpeg）
       </p>
     </div>
 
@@ -350,7 +482,7 @@ onUnmounted(detach)
     <!-- 标签必须走 #tab 插槽：当前 naive-ui 构建下自闭合 pane 的 tab 文本不会渲染 -->
     <NTabs v-model:value="tab" type="line">
       <NTabPane name="transcode">
-        <template #tab>转码</template>
+        <template #tab>格式转换</template>
       </NTabPane>
       <NTabPane name="trim">
         <template #tab>截取</template>
@@ -429,16 +561,37 @@ onUnmounted(detach)
             :disabled="phase === 'running'"
             class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
           >
-            <option value="mp4">MP4（H.264 + AAC）</option>
-            <option value="webm">WebM（VP9 + Opus）</option>
-            <option value="mkv">MKV（H.264 + AAC）</option>
+            <option v-for="opt in CONTAINER_OPTIONS" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+          <NText v-if="transcodeFormat === 'webm'" depth="3" class="text-xs">
+            固定 VP9 + Opus
+          </NText>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">转换方式</NText>
+          <NRadioGroup v-model:value="transcodeMode" :disabled="phase === 'running'" size="small">
+            <NRadioButton value="encode">重新编码</NRadioButton>
+            <NRadioButton value="remux">仅换封装（快速）</NRadioButton>
+          </NRadioGroup>
+        </div>
+        <div v-if="showCodec" class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">编码器</NText>
+          <select
+            v-model="transcodeCodec"
+            :disabled="phase === 'running' || isRemux"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+          >
+            <option value="h264">H.264（兼容性好）</option>
+            <option value="h265">H.265（体积更小，兼容性较差且较慢）</option>
           </select>
         </div>
         <div class="flex items-center gap-3">
           <NText depth="2" class="w-20 text-sm">质量</NText>
           <select
             v-model="transcodeQuality"
-            :disabled="phase === 'running'"
+            :disabled="phase === 'running' || isRemux"
             class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
           >
             <option v-for="opt in QUALITY_OPTIONS" :key="opt.value" :value="opt.value">
@@ -446,6 +599,96 @@ onUnmounted(detach)
             </option>
           </select>
         </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">分辨率</NText>
+          <select
+            v-model="resolutionValue"
+            :disabled="phase === 'running' || isRemux"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+          >
+            <option value="original">原始</option>
+            <option value="1080">1080p</option>
+            <option value="720">720p</option>
+            <option value="480">480p</option>
+            <option value="custom">自定义</option>
+          </select>
+          <template v-if="resolutionKind === 'custom'">
+            <NInputNumber
+              v-model:value="customWidth"
+              :min="16"
+              :max="7680"
+              :step="2"
+              :disabled="phase === 'running' || isRemux"
+              placeholder="宽"
+              class="w-28"
+            />
+            <NText depth="3" class="text-xs">×</NText>
+            <NInputNumber
+              v-model:value="customHeight"
+              :min="16"
+              :max="7680"
+              :step="2"
+              :disabled="phase === 'running' || isRemux"
+              placeholder="高"
+              class="w-28"
+            />
+            <NText depth="3" class="text-xs">偶数</NText>
+          </template>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">帧率</NText>
+          <select
+            v-model.number="transcodeFps"
+            :disabled="phase === 'running' || isRemux"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+          >
+            <option :value="0">原始</option>
+            <option :value="24">24 fps</option>
+            <option :value="25">25 fps</option>
+            <option :value="30">30 fps</option>
+            <option :value="60">60 fps</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">视频码率</NText>
+          <NInputNumber
+            v-model:value="videoBitrate"
+            :min="0"
+            :max="50000"
+            :step="100"
+            :disabled="phase === 'running' || isRemux"
+            class="w-32"
+          />
+          <NText depth="3" class="text-xs">kbps，0 = 按质量档</NText>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">音频码率</NText>
+          <select
+            v-model.number="transcodeAudioBitrate"
+            :disabled="phase === 'running' || isRemux || removeAudio"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+          >
+            <option :value="64">64 kbps</option>
+            <option :value="96">96 kbps</option>
+            <option :value="128">128 kbps</option>
+            <option :value="160">160 kbps</option>
+            <option :value="192">192 kbps</option>
+            <option :value="256">256 kbps</option>
+            <option :value="320">320 kbps</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">去音轨</NText>
+          <NSwitch v-model:value="removeAudio" :disabled="phase === 'running' || isRemux" />
+          <NText depth="3" class="text-xs">输出无音频（remux 不适用）</NText>
+        </div>
+        <NText v-if="isRemux && remuxIncompatible.length > 0" type="warning" class="text-xs">
+          {{ remuxIncompatible.length }} 个文件编码与
+          {{ transcodeFormat.toUpperCase() }} 不兼容，请改用重新编码
+        </NText>
+        <NText v-if="isRemux" depth="3" class="text-xs">
+          仅换封装不重新编码，速度最快，仅改变容器格式
+        </NText>
       </template>
 
       <template v-else-if="tab === 'trim'">
@@ -470,7 +713,35 @@ onUnmounted(detach)
         </NCheckbox>
       </template>
 
-      <template v-else-if="tab === 'extract-audio' || tab === 'audio-convert'">
+      <template v-else-if="tab === 'extract-audio'">
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">目标格式</NText>
+          <select
+            v-model="extractFormat"
+            :disabled="phase === 'running'"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+          >
+            <option v-for="opt in EXTRACT_FORMATS" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">码率</NText>
+          <select
+            v-model.number="extractBitrate"
+            :disabled="phase === 'running' || extractIsLossless"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+          >
+            <option :value="128">128 kbps</option>
+            <option :value="192">192 kbps</option>
+            <option :value="320">320 kbps</option>
+          </select>
+          <NText v-if="extractIsLossless" depth="3" class="text-xs">无损格式忽略码率</NText>
+        </div>
+      </template>
+
+      <template v-else-if="tab === 'audio-convert'">
         <div class="flex items-center gap-3">
           <NText depth="2" class="w-20 text-sm">目标格式</NText>
           <select
@@ -478,11 +749,9 @@ onUnmounted(detach)
             :disabled="phase === 'running'"
             class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
           >
-            <option value="mp3">MP3</option>
-            <option value="m4a">M4A（AAC）</option>
-            <option value="wav">WAV（无损）</option>
-            <option value="flac">FLAC（无损）</option>
-            <option value="ogg">OGG（Vorbis）</option>
+            <option v-for="opt in CONVERT_FORMATS" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
           </select>
         </div>
         <div class="flex items-center gap-3">
@@ -497,6 +766,30 @@ onUnmounted(detach)
             <option :value="320">320 kbps</option>
           </select>
           <NText v-if="audioIsLossless" depth="3" class="text-xs">无损格式忽略码率</NText>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">采样率</NText>
+          <select
+            v-model.number="audioSampleRate"
+            :disabled="phase === 'running'"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+          >
+            <option :value="0">原始</option>
+            <option :value="44100">44100 Hz</option>
+            <option :value="48000">48000 Hz</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">声道</NText>
+          <select
+            v-model.number="audioChannels"
+            :disabled="phase === 'running'"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+          >
+            <option :value="0">原始</option>
+            <option :value="1">单声道</option>
+            <option :value="2">立体声</option>
+          </select>
         </div>
       </template>
 
@@ -547,7 +840,9 @@ onUnmounted(detach)
     <NSpace>
       <NButton
         type="primary"
-        :disabled="phase !== 'idle' || rows.length === 0"
+        :disabled="
+          phase !== 'idle' || rows.length === 0 || (isRemux && remuxIncompatible.length > 0)
+        "
         @click="runProcess()"
       >
         开始处理

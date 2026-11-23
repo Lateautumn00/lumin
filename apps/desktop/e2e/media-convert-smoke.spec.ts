@@ -156,6 +156,46 @@ function makeSampleVideo(file: string): Promise<void> {
   ])
 }
 
+/** 生成指定尺寸的测试视频（H.264 + AAC） */
+function makeSizedVideo(file: string, size: string, seconds = 3): Promise<void> {
+  return makeMedia([
+    '-f',
+    'lavfi',
+    '-i',
+    `testsrc=size=${size}:rate=25:duration=${String(seconds)}`,
+    '-f',
+    'lavfi',
+    '-i',
+    `sine=frequency=440:duration=${String(seconds)}`,
+    '-c:v',
+    'libx264',
+    '-preset',
+    'ultrafast',
+    '-pix_fmt',
+    'yuv420p',
+    '-c:a',
+    'aac',
+    '-shortest',
+    file
+  ])
+}
+
+/** 格式转换完整参数（默认 mp4 重编码；e2e 只覆盖必要项） */
+function transcodeOptions(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    format: 'mp4',
+    mode: 'encode',
+    quality: 'medium',
+    codec: 'h264',
+    resolution: { kind: 'original' },
+    fps: 0,
+    videoBitrateKbps: 0,
+    audioBitrateKbps: 192,
+    removeAudio: false,
+    ...overrides
+  }
+}
+
 test.describe('media-convert（音视频处理）冒烟', () => {
   test.beforeAll(async () => {
     test.skip(!fs.existsSync(ffmpeg), '缺少 ffmpeg（先跑 node scripts/fetch-binaries.mjs）')
@@ -173,7 +213,7 @@ test.describe('media-convert（音视频处理）冒烟', () => {
       await expect(page.getByRole('heading', { name: '音视频处理' })).toBeVisible()
       // 五 Tab 标签可见（naive-ui 自闭合 pane 渲染回归）
       for (const [name, label] of [
-        ['transcode', '转码'],
+        ['transcode', '格式转换'],
         ['trim', '截取'],
         ['extract-audio', '提取音频'],
         ['audio-convert', '音频互转'],
@@ -225,7 +265,7 @@ test.describe('media-convert（音视频处理）冒烟', () => {
         mode: 'transcode',
         files: [input],
         outputDir: outDir,
-        options: { format: 'webm', quality: 'low' }
+        options: transcodeOptions({ format: 'webm', quality: 'low' })
       })
       expect(result.failures).toEqual([])
       const output = firstOf(result.outputs).output
@@ -336,7 +376,7 @@ test.describe('media-convert（音视频处理）冒烟', () => {
         mode: 'audio-convert',
         files: [input],
         outputDir: outDir,
-        options: { format: 'mp3', bitrate: 192 }
+        options: { format: 'mp3', bitrate: 192, sampleRate: 0, channels: 0 }
       })
       expect(mp3.failures).toEqual([])
       const mp3Out = firstOf(mp3.outputs).output
@@ -349,7 +389,7 @@ test.describe('media-convert（音视频处理）冒烟', () => {
         mode: 'audio-convert',
         files: [input],
         outputDir: outDir,
-        options: { format: 'flac', bitrate: 320 }
+        options: { format: 'flac', bitrate: 320, sampleRate: 0, channels: 0 }
       })
       expect(flac.failures).toEqual([])
       const flacOut = firstOf(flac.outputs).output
@@ -425,7 +465,7 @@ test.describe('media-convert（音视频处理）冒烟', () => {
         mode: 'transcode',
         files: [good, corrupt],
         outputDir: outDir,
-        options: { format: 'mkv', quality: 'low' }
+        options: transcodeOptions({ format: 'mkv', quality: 'low' })
       })
       expect(result.outputs).toHaveLength(1)
       expect(fs.existsSync(firstOf(result.outputs).output)).toBe(true)
@@ -503,10 +543,209 @@ test.describe('media-convert（音视频处理）冒烟', () => {
           mode: 'transcode',
           files: [input],
           outputDir: outDir,
-          options: { format: 'webm', quality: 'high' }
+          options: transcodeOptions({ format: 'webm', quality: 'high' })
         }
       )
       expect(code).toBe('CANCELLED')
+    } finally {
+      fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('格式矩阵：8 容器各出一条可复读产物（spec §5.1）', async () => {
+    test.setTimeout(420_000)
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const inDir = path.join(os.tmpdir(), 'lumin-mc-e2e-matrix')
+    const outDir = path.join(inDir, 'out')
+    fs.rmSync(inDir, { recursive: true, force: true })
+    fs.mkdirSync(inDir, { recursive: true })
+    try {
+      const input = path.join(inDir, '矩阵 样例.mp4')
+      await makeSampleVideo(input)
+      const containers = ['mp4', 'mkv', 'webm', 'mov', 'avi', 'flv', 'ts', 'm4v'] as const
+      for (const format of containers) {
+        const result = await runProcess(page, {
+          mode: 'transcode',
+          files: [input],
+          outputDir: outDir,
+          options: transcodeOptions({ format, quality: 'low' })
+        })
+        expect(result.failures).toEqual([])
+        const output = firstOf(result.outputs).output
+        expect(output).toBe(path.join(outDir, `矩阵 样例.${format}`))
+        expect(fs.existsSync(output)).toBe(true)
+        const duration = durationOf(await readMedia(output))
+        expect(duration).toBeGreaterThan(2.4)
+        expect(duration).toBeLessThan(3.8)
+      }
+    } finally {
+      fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('remux：mp4 → mkv/mov/ts/mp4 直通；不兼容 avi → MC_CONTAINER_INCOMPATIBLE（spec §5.2）', async () => {
+    test.setTimeout(240_000)
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const inDir = path.join(os.tmpdir(), 'lumin-mc-e2e-remux')
+    const outDir = path.join(inDir, 'out')
+    fs.rmSync(inDir, { recursive: true, force: true })
+    fs.mkdirSync(inDir, { recursive: true })
+    try {
+      const input = path.join(inDir, '换封装 样例.mp4')
+      await makeSampleVideo(input)
+      for (const format of ['mkv', 'mov', 'ts', 'mp4'] as const) {
+        const result = await runProcess(page, {
+          mode: 'transcode',
+          files: [input],
+          outputDir: outDir,
+          options: transcodeOptions({ format, mode: 'remux' })
+        })
+        expect(result.failures).toEqual([])
+        const output = firstOf(result.outputs).output
+        expect(output).toBe(path.join(outDir, `换封装 样例.remux.${format}`))
+        // 流复制：源 h264 视频流保持原编码
+        expect(await readMedia(output)).toContain('Video: h264')
+      }
+      // AVI 不支持 AAC 音频轨 → 单文件不兼容失败
+      const incompatible = await runProcess(page, {
+        mode: 'transcode',
+        files: [input],
+        outputDir: outDir,
+        options: transcodeOptions({ format: 'avi', mode: 'remux' })
+      })
+      expect(incompatible.outputs).toHaveLength(0)
+      expect(firstOf(incompatible.failures).code).toBe('MC_CONTAINER_INCOMPATIBLE')
+    } finally {
+      fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('H.265 / 自定义分辨率 / 帧率 / 码率 / 去音轨（spec §5.2）', async () => {
+    test.setTimeout(420_000)
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const inDir = path.join(os.tmpdir(), 'lumin-mc-e2e-advanced')
+    const outDir = path.join(inDir, 'out')
+    fs.rmSync(inDir, { recursive: true, force: true })
+    fs.mkdirSync(inDir, { recursive: true })
+    try {
+      const hd = path.join(inDir, '高清 样例.mp4')
+      await makeSizedVideo(hd, '1280x720')
+
+      const h265 = await runProcess(page, {
+        mode: 'transcode',
+        files: [hd],
+        outputDir: outDir,
+        options: transcodeOptions({ format: 'mp4', codec: 'h265', quality: 'low' })
+      })
+      expect(h265.failures).toEqual([])
+      expect(await readMedia(firstOf(h265.outputs).output)).toContain('Video: hevc')
+
+      const custom = await runProcess(page, {
+        mode: 'transcode',
+        files: [hd],
+        outputDir: outDir,
+        options: transcodeOptions({
+          quality: 'low',
+          resolution: { kind: 'custom', width: 640, height: 360 },
+          fps: 30
+        })
+      })
+      expect(custom.failures).toEqual([])
+      const customStderr = await readMedia(firstOf(custom.outputs).output)
+      expect(customStderr).toContain('640x360')
+      expect(customStderr).toContain('30 fps')
+
+      // 小分辨率选 720p 上限不得放大
+      const small = path.join(inDir, '小图 样例.mp4')
+      await makeSizedVideo(small, '320x180')
+      const noUpscale = await runProcess(page, {
+        mode: 'transcode',
+        files: [small],
+        outputDir: outDir,
+        options: transcodeOptions({
+          quality: 'low',
+          resolution: { kind: 'maxHeight', height: 720 }
+        })
+      })
+      expect(noUpscale.failures).toEqual([])
+      expect(await readMedia(firstOf(noUpscale.outputs).output)).toContain('320x180')
+
+      // 码率 2000k 产物应显著大于纯 CRF 产物
+      const crf = await runProcess(page, {
+        mode: 'transcode',
+        files: [hd],
+        outputDir: outDir,
+        options: transcodeOptions({ quality: 'low' })
+      })
+      const bitrate = await runProcess(page, {
+        mode: 'transcode',
+        files: [hd],
+        outputDir: outDir,
+        options: transcodeOptions({ quality: 'low', videoBitrateKbps: 2000 })
+      })
+      expect(crf.failures).toEqual([])
+      expect(bitrate.failures).toEqual([])
+      const crfSize = fs.statSync(firstOf(crf.outputs).output).size
+      const bitrateSize = fs.statSync(firstOf(bitrate.outputs).output).size
+      expect(bitrateSize).toBeGreaterThan(crfSize)
+
+      // 去音轨
+      const muted = await runProcess(page, {
+        mode: 'transcode',
+        files: [hd],
+        outputDir: outDir,
+        options: transcodeOptions({ quality: 'low', removeAudio: true })
+      })
+      expect(muted.failures).toEqual([])
+      expect(await readMedia(firstOf(muted.outputs).output)).not.toContain(': Audio:')
+    } finally {
+      fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('音频扩展：aac / opus + 采样率 / 声道（spec §5.3）', async () => {
+    test.setTimeout(180_000)
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const inDir = path.join(os.tmpdir(), 'lumin-mc-e2e-audioext')
+    const outDir = path.join(inDir, 'out')
+    fs.rmSync(inDir, { recursive: true, force: true })
+    fs.mkdirSync(inDir, { recursive: true })
+    try {
+      const input = path.join(inDir, '音频 扩展.wav')
+      await makeMedia(['-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', input])
+
+      const aac = await runProcess(page, {
+        mode: 'audio-convert',
+        files: [input],
+        outputDir: outDir,
+        options: { format: 'aac', bitrate: 192, sampleRate: 44100, channels: 1 }
+      })
+      expect(aac.failures).toEqual([])
+      const aacStderr = await readMedia(firstOf(aac.outputs).output)
+      expect(aacStderr).toContain(': Audio: aac')
+      expect(aacStderr).toContain('44100 Hz')
+      expect(aacStderr).toContain('mono')
+      expect(aacStderr).not.toContain(': Video:')
+
+      const opus = await runProcess(page, {
+        mode: 'audio-convert',
+        files: [input],
+        outputDir: outDir,
+        options: { format: 'opus', bitrate: 128, sampleRate: 48000, channels: 2 }
+      })
+      expect(opus.failures).toEqual([])
+      const opusStderr = await readMedia(firstOf(opus.outputs).output)
+      expect(opusStderr).toContain(': Audio: opus')
+      expect(opusStderr).toContain('48000 Hz')
+      expect(opusStderr).toContain('stereo')
     } finally {
       fs.rmSync(inDir, { recursive: true, force: true })
       await app.close()

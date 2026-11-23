@@ -19,7 +19,7 @@ import type {
 import type { StructuredError, TaskUpdate } from '@lumin/shared'
 import { manifest } from './manifest'
 import { registerWith, type MediaConvertDeps } from './node'
-import { MAX_FILE_BYTES } from './schema'
+import { MAX_FILE_BYTES, type TranscodeOptions } from './schema'
 
 const okResult = (overrides: Partial<RunProcessResult> = {}): RunProcessResult => ({
   code: 0,
@@ -41,6 +41,22 @@ function probeStderr(duration = '00:00:03.20', withAudio = true): string {
   ]
   if (withAudio) lines.push('  Stream #0:1[0x2](und): Audio: aac (LC), 44100 Hz, stereo, fltp')
   return lines.join('\n')
+}
+
+/** 格式转换完整参数（默认 mp4 重编码，测试就近覆盖） */
+function transcode(overrides: Partial<TranscodeOptions> = {}): TranscodeOptions {
+  return {
+    format: 'mp4',
+    mode: 'encode',
+    quality: 'medium',
+    codec: 'h264',
+    resolution: { kind: 'original' },
+    fps: 0,
+    videoBitrateKbps: 0,
+    audioBitrateKbps: 192,
+    removeAudio: false,
+    ...overrides
+  }
 }
 
 interface HarnessOptions {
@@ -341,7 +357,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [input],
       outputDir,
-      options: { format: 'webm', quality: 'medium' }
+      options: transcode({ format: 'webm', quality: 'medium' })
     })
     const done = result as { outputs: Array<{ output: string; durationSec: number }>; failures: [] }
     expect(done.failures).toEqual([])
@@ -351,6 +367,77 @@ describe('process', () => {
     const encode = findEncodeCall(harness)
     expect(encode?.args?.join(' ')).toContain('libvpx-vp9')
     expect(updates.some((u) => u.kind === 'progress' && u.current === 100)).toBe(true)
+  })
+
+  it('remux 换封装：命名加 .remux 且流复制', async () => {
+    const harness = createHarness()
+    const input = makeInput(join(harness.root, 'in'), 'demo.mp4')
+    const outputDir = join(harness.root, 'out')
+    const { result } = await runTask(harness, {
+      mode: 'transcode',
+      files: [input],
+      outputDir,
+      options: transcode({ format: 'mkv', mode: 'remux' })
+    })
+    const done = result as { outputs: Array<{ output: string }>; failures: [] }
+    expect(done.failures).toEqual([])
+    expect(done.outputs[0]?.output).toBe(join(outputDir, 'demo.remux.mkv'))
+    expect(findEncodeCall(harness)?.args?.join(' ')).toContain('-c copy')
+  })
+
+  it('remux 源编码不兼容 → 单文件 MC_CONTAINER_INCOMPATIBLE，批次继续', async () => {
+    const vp9Stderr = [
+      '  Duration: 00:00:03.20, start: 0.0',
+      '  Stream #0:0: Video: vp9, yuv420p, 640x360, 25 fps',
+      '  Stream #0:1: Audio: opus, 48000 Hz, stereo'
+    ].join('\n')
+    const harness = createHarness({ probeResponses: [vp9Stderr, probeStderr()] })
+    const dir = join(harness.root, 'in')
+    const webm = makeInput(dir, 'a webm.webm')
+    const mp4 = makeInput(dir, 'b.mp4')
+    const { result } = await runTask(harness, {
+      mode: 'transcode',
+      files: [webm, mp4],
+      outputDir: join(harness.root, 'out'),
+      options: transcode({ format: 'mp4', mode: 'remux' })
+    })
+    const done = result as {
+      outputs: Array<{ output: string }>
+      failures: Array<{ input: string; code: string }>
+    }
+    expect(done.failures).toHaveLength(1)
+    expect(done.failures[0]?.input).toBe(webm)
+    expect(done.failures[0]?.code).toBe('MC_CONTAINER_INCOMPATIBLE')
+    expect(done.outputs).toHaveLength(1)
+  })
+
+  it('H.265 编码使用 libx265', async () => {
+    const harness = createHarness()
+    const input = makeInput(join(harness.root, 'in'), 'demo.mp4')
+    const { result } = await runTask(harness, {
+      mode: 'transcode',
+      files: [input],
+      outputDir: join(harness.root, 'out'),
+      options: transcode({ format: 'mkv', codec: 'h265' })
+    })
+    expect((result as { failures: unknown[] }).failures).toEqual([])
+    expect(findEncodeCall(harness)?.args?.join(' ')).toContain('libx265')
+  })
+
+  it('ffmpeg 容器拒绝 → MC_CONTAINER_INCOMPATIBLE', async () => {
+    const harness = createHarness({
+      ffmpegCode: 1,
+      ffmpegStderr: 'Could not find tag for codec h264 in stream #0'
+    })
+    const input = makeInput(join(harness.root, 'in'), 'demo.mp4')
+    const { result } = await runTask(harness, {
+      mode: 'transcode',
+      files: [input],
+      outputDir: join(harness.root, 'out'),
+      options: transcode({ format: 'avi' })
+    })
+    const done = result as { failures: Array<{ code: string }> }
+    expect(done.failures[0]?.code).toBe('MC_CONTAINER_INCOMPATIBLE')
   })
 
   it('批量部分失败：正常项与失败项分别汇总', async () => {
@@ -394,7 +481,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [input],
       outputDir: join(harness.root, 'out'),
-      options: { format: 'mp4', quality: 'medium' }
+      options: transcode({ format: 'mp4', quality: 'medium' })
     })
     const done = result as { failures: Array<{ code: string }> }
     expect(done.failures[0]?.code).toBe('MC_NO_STREAM')
@@ -407,7 +494,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [input],
       outputDir: join(harness.root, 'out'),
-      options: { format: 'mp4', quality: 'medium' }
+      options: transcode({ format: 'mp4', quality: 'medium' })
     })
     const done = result as { outputs: unknown[]; failures: unknown[] }
     expect(done.outputs).toEqual([])
@@ -421,7 +508,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [inputA],
       outputDir: join(timeoutHarness.root, 'out'),
-      options: { format: 'mp4', quality: 'low' }
+      options: transcode({ format: 'mp4', quality: 'low' })
     })
     expect((timed.result as { failures: Array<{ code: string }> }).failures[0]?.code).toBe(
       'MC_TIMEOUT'
@@ -436,7 +523,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [inputB],
       outputDir: join(fullHarness.root, 'out'),
-      options: { format: 'mp4', quality: 'low' }
+      options: transcode({ format: 'mp4', quality: 'low' })
     })
     expect((full.result as { failures: Array<{ code: string }> }).failures[0]?.code).toBe(
       'MC_OUTPUT_WRITE_FAILED'
@@ -452,7 +539,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [input],
       outputDir: blocker,
-      options: { format: 'mp4', quality: 'low' }
+      options: transcode({ format: 'mp4', quality: 'low' })
     })
     expect(error?.code).toBe('MC_OUTPUT_WRITE_FAILED')
   })
@@ -480,7 +567,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [input],
       outputDir,
-      options: { format: 'webm', quality: 'medium' }
+      options: transcode({ format: 'webm', quality: 'medium' })
     })
     const done = result as { outputs: Array<{ output: string }> }
     expect(done.outputs[0]?.output).toBe(join(outputDir, 'demo (1).webm'))
@@ -554,7 +641,7 @@ describe('process', () => {
       mode: 'audio-convert',
       files: [input],
       outputDir,
-      options: { format: 'flac', bitrate: 320 }
+      options: { format: 'flac', bitrate: 320, sampleRate: 0, channels: 0 }
     })
     const done = result as { outputs: Array<{ output: string }>; failures: [] }
     expect(done.failures).toEqual([])
@@ -571,7 +658,7 @@ describe('process', () => {
       mode: 'audio-convert',
       files: [input],
       outputDir: join(harness.root, 'out'),
-      options: { format: 'mp3', bitrate: 192 }
+      options: { format: 'mp3', bitrate: 192, sampleRate: 0, channels: 0 }
     })
     const done = result as { failures: Array<{ code: string }> }
     expect(done.failures[0]?.code).toBe('MC_FILE_UNSUPPORTED')
@@ -602,7 +689,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [inputA],
       outputDir: join(trans.root, 'out'),
-      options: { format: 'mkv', quality: 'high' }
+      options: transcode({ format: 'mkv', quality: 'high' })
     })
     const done = transcoded.result as { outputs: Array<{ output: string; durationSec: number }> }
     expect(done.outputs[0]?.output).toBe(join(trans.root, 'out', 'demo.mkv'))
@@ -635,7 +722,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [noExt, asDir],
       outputDir: join(harness.root, 'out'),
-      options: { format: 'mp4', quality: 'low' }
+      options: transcode({ format: 'mp4', quality: 'low' })
     })
     const done = result as { outputs: unknown[]; failures: Array<{ code: string }> }
     expect(done.outputs).toHaveLength(0)
@@ -652,7 +739,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [missing],
       outputDir: join(harness.root, 'out'),
-      options: { format: 'mp4', quality: 'low' }
+      options: transcode({ format: 'mp4', quality: 'low' })
     })
     const done = result as { failures: Array<{ code: string; message: string }> }
     expect(done.failures[0]?.code).toBe('MC_FILE_CORRUPT')
@@ -666,7 +753,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [input],
       outputDir: join(harness.root, 'out'),
-      options: { format: 'mp4', quality: 'low' }
+      options: transcode({ format: 'mp4', quality: 'low' })
     })
     const done = result as { failures: Array<{ code: string; message: string }> }
     expect(done.failures[0]?.code).toBe('MC_FILE_CORRUPT')
@@ -684,7 +771,7 @@ describe('process', () => {
         mode: 'transcode',
         files: [input],
         outputDir: join(harness.root, 'out'),
-        options: { format: 'mp4', quality: 'low' }
+        options: transcode({ format: 'mp4', quality: 'low' })
       },
       { signal: controller.signal }
     )
@@ -704,7 +791,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [input],
       outputDir: join(harness.root, 'out'),
-      options: { format: 'mp4', quality: 'low' }
+      options: transcode({ format: 'mp4', quality: 'low' })
     })
     const progress = updates.filter((update) => update.kind === 'progress')
     expect(progress.some((update) => update.current === 100)).toBe(true)
@@ -718,7 +805,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [inputA],
       outputDir: join(errorHarness.root, 'out'),
-      options: { format: 'mp4', quality: 'low' }
+      options: transcode({ format: 'mp4', quality: 'low' })
     })
     expect(failed.error?.code).toBe('MC_FILE_CORRUPT')
 
@@ -728,7 +815,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [inputB],
       outputDir: join(rawHarness.root, 'out'),
-      options: { format: 'mp4', quality: 'low' }
+      options: transcode({ format: 'mp4', quality: 'low' })
     })
     expect(raw.error).toBe('raw failure')
   })
@@ -743,7 +830,7 @@ describe('process', () => {
       mode: 'transcode',
       files: [input],
       outputDir: join(noEngine.root, 'out'),
-      options: { format: 'mp4', quality: 'medium' }
+      options: transcode({ format: 'mp4', quality: 'medium' })
     })
     expect(missing.error?.code).toBe('MC_ENGINE_MISSING')
   })
