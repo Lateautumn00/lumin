@@ -22,13 +22,7 @@ import OcrPanel from './OcrPanel.vue'
 import ErrorCard from './ErrorCard.vue'
 import ResultCard from './ResultCard.vue'
 import { createOcrWorkspace, OCR_WORKSPACE } from './ocr-workspace'
-import {
-  cancelTask,
-  revealPath,
-  submitCrop,
-  submitSplit,
-  type SubmitResult
-} from './client'
+import { cancelTask, revealPath, submitCrop, submitSplit, type SubmitResult } from './client'
 
 type Op = 'split' | 'crop'
 type Phase = 'idle' | 'running' | 'error'
@@ -393,7 +387,7 @@ onUnmounted(detach)
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col gap-3 p-4">
+  <div class="flex h-full min-h-0 flex-col gap-3">
     <!-- Tab 栏（spec §2/§10.2：双 Tab 均激活，互不挤占） -->
     <div
       class="flex shrink-0 gap-2 border-b border-[var(--lumin-color-border)] pb-3"
@@ -485,9 +479,7 @@ onUnmounted(detach)
           <NRadioButton v-for="item in OPS" :key="item.id" :value="item.id" :label="item.label" />
         </NRadioGroup>
 
-        <NText depth="3" class="text-xs">
-          合并、删页、旋转、重排等请使用「PDF 工具集」。
-        </NText>
+        <NText depth="3" class="text-xs"> 合并、删页、旋转、重排等请使用「PDF 工具集」。 </NText>
 
         <!-- 字段区（spec §3.2 两操作字段矩阵）：label 包裹输入建立 a11y 关联（NInput 无 id prop） -->
         <label class="flex flex-col gap-2">

@@ -73,13 +73,13 @@ function onChange(event: Event): void {
 
 <template>
   <div
-    class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[var(--lumin-radius-lg)] border-2 border-dashed px-6 py-8 text-center transition-colors"
+    class="group relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[var(--lumin-radius-lg)] border-2 border-dashed px-6 py-10 text-center transition-all duration-200 sm:px-8 sm:py-12"
     :class="
       disabled
         ? 'cursor-not-allowed border-[var(--lumin-color-border)] opacity-60'
         : dragging
-          ? 'border-[var(--lumin-color-primary)]'
-          : 'border-[var(--lumin-color-border)] hover:border-[var(--lumin-color-primary)]'
+          ? 'border-[var(--lumin-color-primary)] bg-[var(--lumin-color-primary-soft)] shadow-[var(--lumin-shadow-md)]'
+          : 'border-[var(--lumin-color-border)] hover:border-[var(--lumin-color-primary)] hover:bg-[var(--lumin-color-surface-hover)] hover:shadow-[var(--lumin-shadow-sm)]'
     "
     role="button"
     tabindex="0"
@@ -91,13 +91,20 @@ function onChange(event: Event): void {
     @dragleave.self="dragging = false"
     @drop.prevent="onDrop"
   >
-    <FileUp
-      :size="28"
-      class="text-[var(--lumin-color-text-secondary)]"
-      :class="dragging ? 'text-[var(--lumin-color-primary)]' : ''"
+    <span
+      class="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--lumin-color-surface-muted)] text-[var(--lumin-color-text-secondary)] transition-colors"
+      :class="
+        disabled
+          ? ''
+          : dragging
+            ? 'bg-[var(--lumin-color-surface)] text-[var(--lumin-color-primary)]'
+            : 'group-hover:text-[var(--lumin-color-primary)]'
+      "
       aria-hidden="true"
-    />
-    <p class="text-sm text-[var(--lumin-color-text-secondary)]">{{ hint }}</p>
+    >
+      <FileUp :size="24" />
+    </span>
+    <p class="text-sm font-medium text-[var(--lumin-color-text)]">{{ hint }}</p>
     <p v-if="accept !== ''" class="text-xs text-[var(--lumin-color-text-secondary)]">
       支持 {{ accept }}
     </p>

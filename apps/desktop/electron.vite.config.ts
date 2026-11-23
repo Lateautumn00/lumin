@@ -310,6 +310,14 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/time-toolbox/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-calendar\/manifest$/,
+    replacement: r('../../packages/tools/calendar/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-calendar\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/calendar/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-password-generator\/manifest$/,
     replacement: r('../../packages/tools/password-generator/src/manifest.ts')
   },

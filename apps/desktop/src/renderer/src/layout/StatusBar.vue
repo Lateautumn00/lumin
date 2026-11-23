@@ -17,9 +17,17 @@ onMounted(() => {
 
 <template>
   <footer
-    class="flex h-8 shrink-0 items-center justify-between border-t border-[var(--lumin-color-border)] px-4 text-xs text-[var(--lumin-color-text-secondary)]"
+    class="flex h-8 shrink-0 items-center justify-between gap-3 border-t border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] px-4 text-[11px] text-[var(--lumin-color-text-tertiary)]"
   >
-    <span>{{ t('shell.status.offline') }}</span>
-    <span v-if="info">v{{ info.appVersion }} · Electron {{ info.electronVersion }}</span>
+    <span class="flex min-w-0 items-center gap-1.5">
+      <span
+        class="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--lumin-color-success)]"
+        aria-hidden="true"
+      />
+      <span class="truncate">{{ t('shell.status.offline') }}</span>
+    </span>
+    <span v-if="info" class="shrink-0 truncate tabular-nums">
+      v{{ info.appVersion }} · Electron {{ info.electronVersion }}
+    </span>
   </footer>
 </template>

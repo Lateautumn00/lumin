@@ -2,6 +2,16 @@
 @source '../../../../../../packages/tools';
 @source '../../../../../../packages/ui';
 
+/*
+ * Tailwind 主题桥接：将设计 tokens 暴露为 font-sans / font-mono 等工具类，
+ * 业务侧仍以 --lumin-* 变量为唯一数据源（R4 单源）。
+ */
+@theme inline {
+  --font-sans: var(--lumin-font-sans);
+  --font-mono: var(--lumin-font-mono);
+  --font-display: var(--lumin-font-display);
+}
+
 html,
 body,
 #app {
@@ -9,46 +19,245 @@ body,
   margin: 0;
 }
 
-body {
-  background: var(--lumin-color-bg);
-}
-
+/*
+ * 说明：--lumin-color-bg / --lumin-color-text 的亮暗取值被 e2e 精确断言，
+ * 调整需同步 apps/desktop/e2e/theme-smoke.spec.ts。
+ */
 :root {
   color-scheme: light;
-  --lumin-color-primary: #6366f1;
-  --lumin-color-primary-hover: #818cf8;
+
+  /* 品牌色：冷静的靛蓝主色 + 暖金点缀，突出“光”与工具属性 */
+  --lumin-color-primary: #4f46e5;
+  --lumin-color-primary-hover: #6366f1;
   --lumin-color-primary-soft: #eef2ff;
+  --lumin-color-primary-contrast: #ffffff;
+  --lumin-color-accent: #b45309;
+  --lumin-color-accent-soft: #fef3c7;
+  --lumin-color-brand-contrast: #ffffff;
+  --lumin-color-scrim: rgb(2 6 23 / 45%);
+
+  /* 中性色：偏冷的石板灰，层次分明 */
   --lumin-color-bg: #f8fafc;
+  --lumin-color-bg-elevated: #ffffff;
   --lumin-color-surface: #ffffff;
+  --lumin-color-surface-muted: #f1f5f9;
+  --lumin-color-surface-hover: #f1f5f9;
   --lumin-color-border: #e2e8f0;
+  --lumin-color-border-strong: #cbd5e1;
   --lumin-color-text: #0f172a;
   --lumin-color-text-secondary: #64748b;
+  --lumin-color-text-tertiary: #94a3b8;
+
+  /* 语义色 */
   --lumin-color-danger: #ef4444;
   --lumin-color-error: #ef4444;
   --lumin-color-warning: #f59e0b;
   --lumin-color-success: #10b981;
-  --lumin-radius-md: 8px;
-  --lumin-radius-lg: 12px;
+
+  /* 圆角阶梯 */
+  --lumin-radius-xs: 6px;
+  --lumin-radius-sm: 8px;
+  --lumin-radius-md: 10px;
+  --lumin-radius-lg: 14px;
+  --lumin-radius-xl: 20px;
+
+  /* 间距阶梯 */
+  --lumin-space-2: 8px;
   --lumin-space-3: 12px;
   --lumin-space-4: 16px;
   --lumin-space-5: 24px;
+  --lumin-space-6: 32px;
+
+  /* 字体：离线优先，仅使用系统自带字体（Windows 10/11 均有兜底） */
+  --lumin-font-sans:
+    'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC',
+    system-ui, sans-serif;
+  --lumin-font-display:
+    'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui,
+    sans-serif;
+  --lumin-font-mono: 'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace;
+
+  /* 字号阶梯 */
+  --lumin-font-size-xs: 12px;
   --lumin-font-size-sm: 13px;
   --lumin-font-size-md: 14px;
   --lumin-font-size-lg: 16px;
+  --lumin-font-size-xl: 20px;
+  --lumin-font-size-2xl: 26px;
+
+  /* 阴影：低饱和、短扩散，避免“发灰” */
+  --lumin-shadow-sm: 0 1px 2px rgb(15 23 42 / 6%);
+  --lumin-shadow-md: 0 8px 20px -10px rgb(15 23 42 / 18%), 0 2px 6px -2px rgb(15 23 42 / 8%);
+  --lumin-shadow-lg: 0 28px 56px -28px rgb(15 23 42 / 28%);
+
+  /* 动效 */
+  --lumin-duration-fast: 120ms;
+  --lumin-duration-base: 180ms;
+  --lumin-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* 壳布局尺寸 */
+  --lumin-sidebar-width: 248px;
+  --lumin-sidebar-rail-width: 76px;
+  --lumin-topbar-height: 52px;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
+
   --lumin-color-primary: #818cf8;
   --lumin-color-primary-hover: #a5b4fc;
   --lumin-color-primary-soft: #1e1b4b;
+  --lumin-color-primary-contrast: #0b1220;
+  --lumin-color-accent: #fbbf24;
+  --lumin-color-accent-soft: #422006;
+  --lumin-color-brand-contrast: #ffffff;
+  --lumin-color-scrim: rgb(2 6 23 / 62%);
+
   --lumin-color-bg: #0b1220;
+  --lumin-color-bg-elevated: #0e1626;
   --lumin-color-surface: #111a2c;
+  --lumin-color-surface-muted: #0e1626;
+  --lumin-color-surface-hover: #16213a;
   --lumin-color-border: #243044;
+  --lumin-color-border-strong: #334155;
   --lumin-color-text: #e2e8f0;
   --lumin-color-text-secondary: #94a3b8;
+  --lumin-color-text-tertiary: #64748b;
+
   --lumin-color-danger: #f87171;
   --lumin-color-error: #f87171;
   --lumin-color-warning: #fbbf24;
   --lumin-color-success: #34d399;
+
+  --lumin-shadow-sm: 0 1px 2px rgb(0 0 0 / 35%);
+  --lumin-shadow-md: 0 10px 24px -12px rgb(0 0 0 / 55%), 0 2px 8px -2px rgb(0 0 0 / 40%);
+  --lumin-shadow-lg: 0 32px 64px -32px rgb(0 0 0 / 70%);
+}
+
+body {
+  background: var(--lumin-color-bg);
+  color: var(--lumin-color-text);
+  font-family: var(--lumin-font-sans);
+  font-size: var(--lumin-font-size-md);
+  line-height: 1.55;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--lumin-font-display);
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: var(--lumin-color-primary-soft);
+  color: var(--lumin-color-text);
+}
+
+/* 键盘焦点可见，鼠标点击不出现描边 */
+:where(a, button, [role='button'], [tabindex]):focus-visible {
+  outline: 2px solid var(--lumin-color-primary);
+  outline-offset: 2px;
+  border-radius: var(--lumin-radius-sm);
+}
+
+/* 细滚动条：贴合桌面工具的高信息密度 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--lumin-color-border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--lumin-color-border-strong);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--lumin-color-text-tertiary);
+}
+
+/* 应用壳氛围光：低对比径向渐变，避免纯色平铺 */
+.lumin-atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 420px at 8% -10%, var(--lumin-color-primary-soft), transparent 65%),
+    radial-gradient(620px 280px at 100% 0%, var(--lumin-color-accent-soft), transparent 58%);
+  opacity: 0.5;
+}
+
+/* 侧栏表面：自上而下的极轻渐变，拉开与内容区的层次 */
+.lumin-sidebar-surface {
+  background: linear-gradient(
+    180deg,
+    var(--lumin-color-surface) 0%,
+    var(--lumin-color-surface-muted) 100%
+  );
+}
+
+/* 窄屏抽屉：左侧滑入/滑出（仅 compact 模式挂载，桌面初始挂载不触发） */
+.lumin-drawer-enter-active,
+.lumin-drawer-leave-active {
+  transition: transform var(--lumin-duration-base) var(--lumin-ease-standard);
+}
+
+.lumin-drawer-enter-from,
+.lumin-drawer-leave-to {
+  transform: translateX(-100%);
+}
+
+/* 抽屉遮罩：淡入淡出 */
+.lumin-scrim-enter-active,
+.lumin-scrim-leave-active {
+  transition: opacity var(--lumin-duration-base) var(--lumin-ease-standard);
+}
+
+.lumin-scrim-enter-from,
+.lumin-scrim-leave-to {
+  opacity: 0;
+}
+
+/* 品牌标记：主色 → 暖金的“光”意象 */
+.lumin-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--lumin-radius-sm);
+  color: var(--lumin-color-brand-contrast);
+  background: linear-gradient(
+    135deg,
+    var(--lumin-color-primary) 0%,
+    var(--lumin-color-accent) 145%
+  );
+  box-shadow: var(--lumin-shadow-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -140,7 +140,7 @@ async function toggleFullscreen(): Promise<void> {
 </script>
 
 <template>
-  <section class="flex h-full flex-col gap-4 p-4">
+  <section class="flex h-full min-h-0 flex-col gap-4">
     <header
       v-if="video !== null"
       class="flex items-start justify-between gap-4 border-b border-[var(--lumin-color-border)] pb-3"
@@ -167,8 +167,12 @@ async function toggleFullscreen(): Promise<void> {
     </div>
 
     <div v-else-if="phase === 'loading'" class="flex flex-1 flex-col gap-3" aria-busy="true">
-      <div class="h-8 w-1/3 animate-pulse rounded-[var(--lumin-radius-md)] bg-[var(--lumin-color-border)]" />
-      <div class="flex-1 animate-pulse rounded-[var(--lumin-radius-lg)] bg-[var(--lumin-color-border)]" />
+      <div
+        class="h-8 w-1/3 animate-pulse rounded-[var(--lumin-radius-md)] bg-[var(--lumin-color-border)]"
+      />
+      <div
+        class="flex-1 animate-pulse rounded-[var(--lumin-radius-lg)] bg-[var(--lumin-color-border)]"
+      />
       <p class="text-sm text-[var(--lumin-color-text-secondary)]">正在打开视频…</p>
     </div>
 

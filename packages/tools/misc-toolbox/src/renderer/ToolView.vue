@@ -23,12 +23,7 @@ import type { StructuredError } from '@lumin/shared'
 
 import ScreenRulerPanel from './ScreenRulerPanel.vue'
 import { errorMessage } from '../errors'
-import {
-  isIpv6Info,
-  parseAndCompute,
-  type SubnetInfo,
-  type SubnetInfo6
-} from '../ip'
+import { isIpv6Info, parseAndCompute, type SubnetInfo, type SubnetInfo6 } from '../ip'
 import {
   MAX_LAPS,
   TICK_INTERVAL_MS,
@@ -450,7 +445,7 @@ onUnmounted(() => {
           <NText depth="2" class="text-sm">CIDR</NText>
           <NInput
             v-model:value="cidrInput"
-            placeholder="输入 CIDR，如 192.168.1.0/24 或 2001:db8::/32"
+            placeholder="如 192.168.1.0/24 或 ::/32"
             aria-label="CIDR 输入"
             @keyup.enter="runSubnet"
           />
@@ -498,8 +493,8 @@ onUnmounted(() => {
       </template>
 
       <NText v-else-if="subnetError === null" depth="3" class="text-sm">
-        输入 IPv4 / IPv6 CIDR（如 192.168.1.0/24 或 2001:db8::/32）后点击「计算」或按回车；IPv4 也支持
-        192.168.1.10/255.255.255.0 的掩码写法。
+        输入 IPv4 / IPv6 CIDR（如 192.168.1.0/24 或 2001:db8::/32）后点击「计算」或按回车；IPv4
+        也支持 192.168.1.10/255.255.255.0 的掩码写法。
       </NText>
     </div>
 

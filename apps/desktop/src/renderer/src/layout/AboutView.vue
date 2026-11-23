@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { NButton, NModal, NSpace, NTable, NText } from 'naive-ui'
+import { NButton, NModal, NTable, NText } from 'naive-ui'
 import { toStructuredError } from '@lumin/shared'
 import type { AppInfo } from '@lumin/plugin-api'
 import { t } from '../i18n/zh-CN'
@@ -127,66 +127,103 @@ async function openLogDir(): Promise<void> {
 </script>
 
 <template>
-  <div class="flex max-w-md flex-col gap-4">
-    <h1 class="text-base font-semibold">{{ t('shell.about.title') }}</h1>
-    <NTable v-if="info" :bordered="false" size="small">
-      <tbody>
-        <tr>
-          <td class="w-28 text-[var(--lumin-color-text-secondary)]">应用版本</td>
-          <td>{{ info.appVersion }}</td>
-        </tr>
-        <tr>
-          <td class="text-[var(--lumin-color-text-secondary)]">Electron</td>
-          <td>{{ info.electronVersion }}</td>
-        </tr>
-        <tr>
-          <td class="text-[var(--lumin-color-text-secondary)]">Chrome</td>
-          <td>{{ info.chromeVersion }}</td>
-        </tr>
-        <tr>
-          <td class="text-[var(--lumin-color-text-secondary)]">Node</td>
-          <td>{{ info.nodeVersion }}</td>
-        </tr>
-        <tr>
-          <td class="text-[var(--lumin-color-text-secondary)]">平台</td>
-          <td>{{ info.platform }}</td>
-        </tr>
-        <tr>
-          <td class="text-[var(--lumin-color-text-secondary)]">语言</td>
-          <td>{{ info.locale }}</td>
-        </tr>
-      </tbody>
-    </NTable>
-    <NSpace align="center">
-      <NButton size="small" @click="openLogDir">{{ t('shell.about.openLog') }}</NButton>
-      <NButton size="small" quaternary @click="statementVisible = true">
-        {{ t('shell.about.statement') }}
-      </NButton>
-      <NText v-if="logError" type="error" class="text-xs">
-        {{ t('shell.about.logFailed') }}：{{ logError }}
-      </NText>
-    </NSpace>
-    <NSpace align="center">
-      <NButton
-        size="small"
-        :loading="updateState === 'checking'"
-        :disabled="updateState === 'downloading'"
-        @click="checkUpdate"
+  <div class="mx-auto flex w-full max-w-4xl flex-col gap-6">
+    <header class="flex items-start gap-3">
+      <span class="lumin-brand-mark mt-0.5 h-9 w-9 rounded-[var(--lumin-radius-md)]">
+        <span class="text-base font-semibold">L</span>
+      </span>
+      <div class="flex min-w-0 flex-col gap-1">
+        <p
+          class="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--lumin-color-text-tertiary)]"
+        >
+          LUMIN
+        </p>
+        <h1 class="text-2xl font-semibold tracking-tight">{{ t('shell.about.title') }}</h1>
+        <p class="text-sm text-[var(--lumin-color-text-secondary)]">
+          {{ t('shell.about.subtitle') }}
+        </p>
+      </div>
+    </header>
+
+    <div class="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+      <section
+        class="rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-5 shadow-[var(--lumin-shadow-sm)]"
       >
-        {{ t('shell.about.checkUpdate') }}
-      </NButton>
-      <NButton
-        v-if="updateState === 'downloaded'"
-        size="small"
-        type="primary"
-        @click="installUpdate"
-      >
-        {{ t('shell.about.installNow') }}
-      </NButton>
-      <NText v-if="updateHint" :type="updateHintType" class="text-xs">
-        {{ updateHint }}
-      </NText>
-    </NSpace>
+        <h2 class="text-sm font-semibold">{{ t('shell.about.section.runtime') }}</h2>
+        <NTable v-if="info" :bordered="false" size="small" class="mt-3">
+          <tbody>
+            <tr>
+              <td class="w-28 text-[var(--lumin-color-text-secondary)]">应用版本</td>
+              <td class="tabular-nums">{{ info.appVersion }}</td>
+            </tr>
+            <tr>
+              <td class="text-[var(--lumin-color-text-secondary)]">Electron</td>
+              <td class="tabular-nums">{{ info.electronVersion }}</td>
+            </tr>
+            <tr>
+              <td class="text-[var(--lumin-color-text-secondary)]">Chrome</td>
+              <td class="tabular-nums">{{ info.chromeVersion }}</td>
+            </tr>
+            <tr>
+              <td class="text-[var(--lumin-color-text-secondary)]">Node</td>
+              <td class="tabular-nums">{{ info.nodeVersion }}</td>
+            </tr>
+            <tr>
+              <td class="text-[var(--lumin-color-text-secondary)]">平台</td>
+              <td>{{ info.platform }}</td>
+            </tr>
+            <tr>
+              <td class="text-[var(--lumin-color-text-secondary)]">语言</td>
+              <td>{{ info.locale }}</td>
+            </tr>
+          </tbody>
+        </NTable>
+      </section>
+
+      <div class="flex flex-col gap-4">
+        <section
+          class="rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-5 shadow-[var(--lumin-shadow-sm)]"
+        >
+          <h2 class="text-sm font-semibold">{{ t('shell.about.section.update') }}</h2>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <NButton
+              size="small"
+              :loading="updateState === 'checking'"
+              :disabled="updateState === 'downloading'"
+              @click="checkUpdate"
+            >
+              {{ t('shell.about.checkUpdate') }}
+            </NButton>
+            <NButton
+              v-if="updateState === 'downloaded'"
+              size="small"
+              type="primary"
+              @click="installUpdate"
+            >
+              {{ t('shell.about.installNow') }}
+            </NButton>
+          </div>
+          <NText v-if="updateHint" :type="updateHintType" class="mt-2 block text-xs">
+            {{ updateHint }}
+          </NText>
+        </section>
+
+        <section
+          class="rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-5 shadow-[var(--lumin-shadow-sm)]"
+        >
+          <h2 class="text-sm font-semibold">{{ t('shell.about.section.support') }}</h2>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <NButton size="small" @click="openLogDir">{{ t('shell.about.openLog') }}</NButton>
+            <NButton size="small" quaternary @click="statementVisible = true">
+              {{ t('shell.about.statement') }}
+            </NButton>
+          </div>
+          <NText v-if="logError" type="error" class="mt-2 block text-xs">
+            {{ t('shell.about.logFailed') }}：{{ logError }}
+          </NText>
+        </section>
+      </div>
+    </div>
 
     <NModal
       v-model:show="statementVisible"

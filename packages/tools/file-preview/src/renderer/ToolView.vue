@@ -9,13 +9,16 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { NButton, NInput } from 'naive-ui'
-import { AlertTriangle, ChevronLeft, ChevronRight, Eye, RotateCcw, ZoomIn, ZoomOut } from '@lucide/vue'
 import {
-  parseCsv,
-  toStructuredError,
-  type StructuredError,
-  type TaskEvent
-} from '@lumin/shared'
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  RotateCcw,
+  ZoomIn,
+  ZoomOut
+} from '@lucide/vue'
+import { parseCsv, toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import { buildHtmlDocument, renderMarkdown } from '@lumin/ui/markdown'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
@@ -322,7 +325,11 @@ function asConvertResult(value: unknown): ConvertOfficeResult | null {
 function onTaskEvent(event: TaskEvent): void {
   if (event.taskId !== currentTaskId) return
   if (event.kind === 'progress') {
-    progress.value = { current: event.current, total: event.total, message: event.message ?? '转换中…' }
+    progress.value = {
+      current: event.current,
+      total: event.total,
+      message: event.message ?? '转换中…'
+    }
     return
   }
   if (event.kind === 'log') return
@@ -483,7 +490,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="flex h-full flex-col gap-4 p-4">
+  <section class="flex h-full min-h-0 flex-col gap-4">
     <header
       v-if="info !== null"
       class="flex items-start justify-between gap-4 border-b border-[var(--lumin-color-border)] pb-3"
@@ -519,9 +526,15 @@ onUnmounted(() => {
     </div>
 
     <div v-else-if="phase === 'loading'" class="flex flex-1 flex-col gap-3" aria-busy="true">
-      <div class="h-8 w-1/3 animate-pulse rounded-[var(--lumin-radius-md)] bg-[var(--lumin-color-border)]" />
-      <div class="h-40 animate-pulse rounded-[var(--lumin-radius-lg)] bg-[var(--lumin-color-border)]" />
-      <div class="h-40 animate-pulse rounded-[var(--lumin-radius-lg)] bg-[var(--lumin-color-border)]" />
+      <div
+        class="h-8 w-1/3 animate-pulse rounded-[var(--lumin-radius-md)] bg-[var(--lumin-color-border)]"
+      />
+      <div
+        class="h-40 animate-pulse rounded-[var(--lumin-radius-lg)] bg-[var(--lumin-color-border)]"
+      />
+      <div
+        class="h-40 animate-pulse rounded-[var(--lumin-radius-lg)] bg-[var(--lumin-color-border)]"
+      />
       <p class="text-sm text-[var(--lumin-color-text-secondary)]">正在加载预览…</p>
     </div>
 
@@ -586,15 +599,23 @@ onUnmounted(() => {
         <pre
           v-if="info.kind === 'text' && readResult !== null"
           class="min-h-0 flex-1 overflow-auto rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-3 font-mono text-xs whitespace-pre-wrap break-words text-[var(--lumin-color-text)]"
-        >{{ readResult.text }}</pre>
+          >{{ readResult.text }}</pre>
 
         <!-- Markdown -->
         <template v-else-if="info.kind === 'markdown'">
           <div class="flex items-center gap-2">
-            <NButton size="small" :type="viewMode === 'preview' ? 'primary' : 'default'" @click="viewMode = 'preview'">
+            <NButton
+              size="small"
+              :type="viewMode === 'preview' ? 'primary' : 'default'"
+              @click="viewMode = 'preview'"
+            >
               预览
             </NButton>
-            <NButton size="small" :type="viewMode === 'source' ? 'primary' : 'default'" @click="viewMode = 'source'">
+            <NButton
+              size="small"
+              :type="viewMode === 'source' ? 'primary' : 'default'"
+              @click="viewMode = 'source'"
+            >
               源码
             </NButton>
           </div>
@@ -612,16 +633,24 @@ onUnmounted(() => {
           <pre
             v-else
             class="min-h-0 flex-1 overflow-auto rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-3 font-mono text-xs whitespace-pre-wrap break-words text-[var(--lumin-color-text)]"
-          >{{ markdownSource }}</pre>
+            >{{ markdownSource }}</pre>
         </template>
 
         <!-- HTML -->
         <template v-else-if="info.kind === 'html'">
           <div class="flex items-center gap-2">
-            <NButton size="small" :type="viewMode === 'preview' ? 'primary' : 'default'" @click="viewMode = 'preview'">
+            <NButton
+              size="small"
+              :type="viewMode === 'preview' ? 'primary' : 'default'"
+              @click="viewMode = 'preview'"
+            >
               预览
             </NButton>
-            <NButton size="small" :type="viewMode === 'source' ? 'primary' : 'default'" @click="viewMode = 'source'">
+            <NButton
+              size="small"
+              :type="viewMode === 'source' ? 'primary' : 'default'"
+              @click="viewMode = 'source'"
+            >
               源码
             </NButton>
           </div>
@@ -636,16 +665,24 @@ onUnmounted(() => {
           <pre
             v-else
             class="min-h-0 flex-1 overflow-auto rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-3 font-mono text-xs whitespace-pre-wrap break-words text-[var(--lumin-color-text)]"
-          >{{ htmlSource }}</pre>
+            >{{ htmlSource }}</pre>
         </template>
 
         <!-- JSON -->
         <template v-else-if="info.kind === 'json'">
           <div class="flex items-center gap-2">
-            <NButton size="small" :type="viewMode === 'preview' ? 'primary' : 'default'" @click="viewMode = 'preview'">
+            <NButton
+              size="small"
+              :type="viewMode === 'preview' ? 'primary' : 'default'"
+              @click="viewMode = 'preview'"
+            >
               格式化
             </NButton>
-            <NButton size="small" :type="viewMode === 'source' ? 'primary' : 'default'" @click="viewMode = 'source'">
+            <NButton
+              size="small"
+              :type="viewMode === 'source' ? 'primary' : 'default'"
+              @click="viewMode = 'source'"
+            >
               源码
             </NButton>
           </div>
@@ -654,7 +691,9 @@ onUnmounted(() => {
           </p>
           <pre
             class="min-h-0 flex-1 overflow-auto rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-3 font-mono text-xs whitespace-pre-wrap break-words text-[var(--lumin-color-text)]"
-          >{{ jsonParseError === '' && viewMode === 'preview' ? jsonFormatted : jsonSource }}</pre>
+            >{{
+              jsonParseError === '' && viewMode === 'preview' ? jsonFormatted : jsonSource
+            }}</pre>
         </template>
 
         <!-- CSV -->
@@ -697,7 +736,7 @@ onUnmounted(() => {
           <pre
             v-else
             class="min-h-0 flex-1 overflow-auto rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-3 font-mono text-xs whitespace-pre-wrap break-words text-[var(--lumin-color-text)]"
-          >{{ csvSource }}</pre>
+            >{{ csvSource }}</pre>
         </template>
 
         <!-- 图片 -->
@@ -725,7 +764,9 @@ onUnmounted(() => {
             <NButton size="small" :disabled="page >= pageCount" @click="goPage(page + 1)">
               <template #icon><ChevronRight :size="16" /></template>
             </NButton>
-            <span class="mx-2 text-xs text-[var(--lumin-color-text-secondary)]">{{ Math.round(scale * 100) }}%</span>
+            <span class="mx-2 text-xs text-[var(--lumin-color-text-secondary)]"
+              >{{ Math.round(scale * 100) }}%</span
+            >
             <NButton size="small" :disabled="scale <= MIN_PAGE_SCALE" @click="changeScale(-0.25)">
               <template #icon><ZoomOut :size="16" /></template>
             </NButton>

@@ -28,9 +28,16 @@ export function buildThemeOverrides(read: TokenReader): GlobalThemeOverrides {
       errorColor: token('--lumin-color-error'),
       warningColor: token('--lumin-color-warning'),
       successColor: token('--lumin-color-success'),
+      textColorDisabled: token('--lumin-color-text-tertiary'),
+      boxShadow1: token('--lumin-shadow-sm'),
+      boxShadow2: token('--lumin-shadow-md'),
+      boxShadow3: token('--lumin-shadow-lg'),
       borderRadius: token('--lumin-radius-md'),
+      borderRadiusSmall: token('--lumin-radius-sm'),
       fontSize: token('--lumin-font-size-md'),
-      fontFamily: "'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif"
+      fontWeightStrong: '600',
+      fontFamily: token('--lumin-font-sans'),
+      fontFamilyMono: token('--lumin-font-mono')
     }
   }
 }

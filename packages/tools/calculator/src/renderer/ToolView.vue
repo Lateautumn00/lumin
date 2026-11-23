@@ -20,24 +20,22 @@ interface PadKey {
 const BASIC_KEYS: readonly PadKey[] = [
   { label: 'C', action: 'clear' },
   { label: '', action: 'backspace', icon: Delete },
-  { label: '(', insert: '(' },
-  { label: ')', insert: ')' },
+  { label: '%', insert: '%' },
+  { label: '÷', insert: '/' },
   { label: '7', insert: '7' },
   { label: '8', insert: '8' },
   { label: '9', insert: '9' },
-  { label: '÷', insert: '/' },
+  { label: '×', insert: '*' },
   { label: '4', insert: '4' },
   { label: '5', insert: '5' },
   { label: '6', insert: '6' },
-  { label: '×', insert: '*' },
+  { label: '−', insert: '-' },
   { label: '1', insert: '1' },
   { label: '2', insert: '2' },
   { label: '3', insert: '3' },
-  { label: '−', insert: '-' },
+  { label: '+', insert: '+' },
   { label: '0', insert: '0' },
   { label: '.', insert: '.' },
-  { label: '%', insert: '%' },
-  { label: '+', insert: '+' },
   { label: '=', action: 'equals' }
 ]
 
@@ -51,7 +49,9 @@ const SCIENTIFIC_KEYS: readonly PadKey[] = [
   { label: 'x^y', insert: '^' },
   { label: 'n!', insert: '!' },
   { label: 'π', insert: 'pi' },
-  { label: 'e', insert: 'e' }
+  { label: 'e', insert: 'e' },
+  { label: '(', insert: '(' },
+  { label: ')', insert: ')' }
 ]
 
 const INSERTABLE_RE = /^[0-9a-zA-Z+\-*/^().%! ]$/
@@ -291,17 +291,25 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div v-if="layout === 'scientific'" class="grid grid-cols-4 gap-1.5">
-          <NButton v-for="key in SCIENTIFIC_KEYS" :key="key.label" @click="onPad(key)">
+        <div v-if="layout === 'scientific'" class="grid grid-cols-6 gap-2">
+          <NButton
+            v-for="key in SCIENTIFIC_KEYS"
+            :key="key.label"
+            tertiary
+            class="h-10!"
+            @click="onPad(key)"
+          >
             {{ key.label }}
           </NButton>
         </div>
 
-        <div class="grid grid-cols-4 gap-1.5">
+        <div class="grid grid-cols-4 gap-2">
           <NButton
             v-for="key in BASIC_KEYS"
             :key="key.label || key.action"
             :type="key.action === 'equals' ? 'primary' : 'default'"
+            :secondary="['÷', '×', '−', '+'].includes(key.label)"
+            :class="['h-10!', key.label === '0' ? 'col-span-2' : '']"
             @click="onPad(key)"
           >
             <NIcon v-if="key.icon" :component="key.icon" :size="14" aria-label="退格" />
@@ -310,7 +318,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <aside class="flex w-56 shrink-0 flex-col gap-2">
+      <aside class="hidden w-56 shrink-0 flex-col gap-2 min-[720px]:flex">
         <div class="flex items-center justify-between">
           <span class="text-sm font-medium">历史</span>
           <NPopconfirm @positive-click="store.clear()">

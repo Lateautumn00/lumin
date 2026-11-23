@@ -692,21 +692,25 @@ onUnmounted(detach)
       </template>
 
       <template v-else-if="tab === 'trim'">
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">开始时间</NText>
-          <NInput
-            v-model:value="trimStart"
-            :disabled="phase === 'running'"
-            placeholder="如 0、1:30、01:02:03.5"
-            class="w-48"
-          />
-          <NText depth="2" class="w-20 text-sm">结束时间</NText>
-          <NInput
-            v-model:value="trimEnd"
-            :disabled="phase === 'running'"
-            placeholder="如 90、2:00"
-            class="w-48"
-          />
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-2">
+            <NText depth="2" class="w-20 text-sm">开始时间</NText>
+            <NInput
+              v-model:value="trimStart"
+              :disabled="phase === 'running'"
+              placeholder="如 0、1:30、01:02:03.5"
+              class="w-48"
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <NText depth="2" class="w-20 text-sm">结束时间</NText>
+            <NInput
+              v-model:value="trimEnd"
+              :disabled="phase === 'running'"
+              placeholder="如 90、2:00"
+              class="w-48"
+            />
+          </div>
         </div>
         <NCheckbox v-model:checked="trimFastCopy" :disabled="phase === 'running'">
           快速模式（流复制，起点可能偏移到关键帧）

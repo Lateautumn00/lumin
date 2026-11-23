@@ -425,51 +425,93 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="flex h-full flex-col gap-4 p-4">
+  <section class="flex h-full min-h-0 flex-col gap-4">
     <!-- 空态 -->
     <div
       v-if="phase === 'empty'"
-      class="flex flex-1 flex-col items-center justify-center gap-3"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center"
       data-testid="text-editor-empty"
     >
-      <DropZone accept="" hint="拖拽文本文件到此处，或点击选择" @select="onSelect" @invalid="onInvalid" />
-      <p v-if="invalidHint !== ''" class="text-xs text-[var(--lumin-color-danger)]">
-        {{ invalidHint }}
-      </p>
-      <NButton size="small" @click="newBlank">
-        <template #icon><PencilLine :size="16" /></template>
-        新建空白
-      </NButton>
+      <div class="flex w-full max-w-xl flex-col items-center gap-5">
+        <div class="flex flex-col items-center gap-1 text-center">
+          <h2 class="text-lg font-semibold tracking-tight text-[var(--lumin-color-text)]">
+            文本编辑器
+          </h2>
+          <p class="text-sm text-[var(--lumin-color-text-secondary)]">
+            打开或拖入本地文本文件，自动识别编码
+          </p>
+        </div>
+        <DropZone
+          accept=""
+          hint="拖拽文本文件到此处，或点击选择"
+          @select="onSelect"
+          @invalid="onInvalid"
+        />
+        <p v-if="invalidHint !== ''" class="text-xs text-[var(--lumin-color-danger)]">
+          {{ invalidHint }}
+        </p>
+        <div class="flex flex-wrap items-center justify-center gap-3">
+          <NButton size="small" secondary @click="newBlank">
+            <template #icon><PencilLine :size="16" /></template>
+            新建空白
+          </NButton>
+          <span class="text-xs text-[var(--lumin-color-text-tertiary)]">
+            自动识别编码 · 纯本地读写
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- 加载态 -->
     <div
       v-else-if="phase === 'loading'"
-      class="flex flex-1 flex-col gap-3"
+      class="flex min-h-0 flex-1 flex-col gap-3"
       aria-busy="true"
       data-testid="text-editor-loading"
     >
-      <div class="h-8 w-1/3 animate-pulse rounded-[var(--lumin-radius-md)] bg-[var(--lumin-color-border)]" />
-      <div class="flex-1 animate-pulse rounded-[var(--lumin-radius-lg)] bg-[var(--lumin-color-border)]" />
+      <div
+        class="h-6 w-40 animate-pulse rounded-[var(--lumin-radius-sm)] bg-[var(--lumin-color-border)]"
+      />
+      <div
+        class="flex-1 animate-pulse rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface-muted)]"
+      />
       <p class="text-sm text-[var(--lumin-color-text-secondary)]">正在打开…</p>
     </div>
 
     <!-- 编辑 / 错误态 -->
     <div v-else class="flex min-h-0 flex-1 flex-col gap-3">
-      <header class="flex flex-wrap items-center gap-2 border-b border-[var(--lumin-color-border)] pb-3">
-        <div class="flex min-w-0 items-center gap-2">
-          <span class="truncate text-sm font-medium text-[var(--lumin-color-text)]">
-            {{ displayName }}
-          </span>
+      <header
+        class="flex flex-col gap-3 border-b border-[var(--lumin-color-border)] pb-3 xl:flex-row xl:items-center xl:justify-between"
+      >
+        <div class="flex min-w-0 items-center gap-2.5">
           <span
-            v-if="dirty"
-            class="text-[var(--lumin-color-warning)]"
-            aria-label="有未保存的更改"
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--lumin-radius-sm)] bg-[var(--lumin-color-surface-muted)] text-[var(--lumin-color-text-secondary)]"
+            aria-hidden="true"
           >
-            ●
+            <PencilLine :size="15" />
           </span>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="truncate text-sm font-medium text-[var(--lumin-color-text)]">
+                {{ displayName }}
+              </span>
+              <span
+                v-if="dirty"
+                class="text-[var(--lumin-color-warning)]"
+                aria-label="有未保存的更改"
+              >
+                ●
+              </span>
+            </div>
+            <p
+              class="truncate text-[11px] text-[var(--lumin-color-text-tertiary)]"
+              :title="filePath"
+            >
+              {{ filePath === '' ? '尚未保存到磁盘' : filePath }}
+            </p>
+          </div>
         </div>
-        <div class="ml-auto flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2 xl:justify-end">
           <NButton size="small" :disabled="readOnly || !hasSession || saving" @click="onSave">
             <template #icon><Save :size="16" /></template>
             保存
@@ -490,7 +532,7 @@ onUnmounted(() => {
             v-model:value="encoding"
             :options="ENCODING_OPTIONS"
             size="small"
-            class="w-32"
+            class="w-28"
             aria-label="编码"
           />
           <NSelect
@@ -504,7 +546,7 @@ onUnmounted(() => {
       </header>
 
       <div
-        class="relative min-h-0 flex-1 overflow-hidden rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)]"
+        class="relative min-h-0 flex-1 overflow-hidden rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] shadow-[var(--lumin-shadow-sm)]"
       >
         <div
           ref="editorHost"
@@ -521,7 +563,10 @@ onUnmounted(() => {
           <AlertTriangle :size="28" class="text-[var(--lumin-color-danger)]" aria-hidden="true" />
           <p class="text-sm text-[var(--lumin-color-text)]">{{ errInfo.message }}</p>
           <p class="text-xs text-[var(--lumin-color-text-secondary)]">错误码：{{ errInfo.code }}</p>
-          <p v-if="errorDetail !== ''" class="max-w-full break-all text-xs text-[var(--lumin-color-text-secondary)]">
+          <p
+            v-if="errorDetail !== ''"
+            class="max-w-full break-all text-xs text-[var(--lumin-color-text-secondary)]"
+          >
             详情：{{ errorDetail }}
           </p>
           <div class="mt-1 flex flex-wrap items-center justify-center gap-2">
@@ -540,11 +585,17 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <footer class="flex flex-wrap items-center gap-4 text-xs text-[var(--lumin-color-text-secondary)]">
-        <span>行 {{ cursor.line }}，列 {{ cursor.column }}</span>
-        <span>{{ charCount }} 字符</span>
-        <span>{{ encodingLabel }}</span>
-        <span>{{ eolLabel }}</span>
+      <footer
+        class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--lumin-color-text-tertiary)]"
+      >
+        <span class="tabular-nums">行 {{ cursor.line }}，列 {{ cursor.column }}</span>
+        <span class="tabular-nums">{{ charCount }} 字符</span>
+        <span class="rounded-full bg-[var(--lumin-color-surface-muted)] px-1.5">
+          {{ encodingLabel }}
+        </span>
+        <span class="rounded-full bg-[var(--lumin-color-surface-muted)] px-1.5">
+          {{ eolLabel }}
+        </span>
       </footer>
     </div>
 

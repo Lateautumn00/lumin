@@ -764,11 +764,7 @@ function messageOf(code: string): string {
         <NText depth="2">查找</NText>
         <NInput v-model:value="replaceFind" placeholder="查找内容" class="min-w-40 flex-1" />
         <NText depth="2">替换为</NText>
-        <NInput
-          v-model:value="replaceWith"
-          placeholder="替换内容（正则支持 $1）"
-          class="min-w-40 flex-1"
-        />
+        <NInput v-model:value="replaceWith" placeholder="支持正则 $1" class="min-w-40 flex-1" />
         <NCheckbox v-model:checked="replaceRegex">正则</NCheckbox>
         <NCheckbox v-model:checked="replaceCaseSensitive">区分大小写</NCheckbox>
         <NButton :disabled="busy" @click="runReplace">替换</NButton>

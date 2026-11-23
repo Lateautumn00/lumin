@@ -26,6 +26,7 @@
     "@lumin/plugin-api": "workspace:*",
     "@lumin/shared": "workspace:*",
     "@lumin/tool-calculator": "workspace:*",
+    "@lumin/tool-calendar": "workspace:*",
     "@lumin/tool-color-toolbox": "workspace:*",
     "@lumin/tool-dev-toolbox": "workspace:*",
     "@lumin/tool-disk-analyzer": "workspace:*",

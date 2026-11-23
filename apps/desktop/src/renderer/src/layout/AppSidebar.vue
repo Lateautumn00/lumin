@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Archive,
   Braces,
   Calculator,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -51,6 +52,10 @@ import { toolManifests } from '../../../tool-manifests'
 import { t, type MessageKey } from '../i18n/zh-CN'
 import { groupToolsByCategory } from './sidebar-groups'
 
+const props = withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
+
+const emit = defineEmits<{ navigate: []; expand: [] }>()
+
 const route = useRoute()
 
 const iconMap: Record<string, LucideIcon> = {
@@ -83,6 +88,7 @@ const iconMap: Record<string, LucideIcon> = {
   'folder-cog': FolderCog,
   archive: Archive,
   clock: Clock,
+  'calendar-days': CalendarDays,
   'key-round': KeyRound,
   palette: Palette,
   'piggy-bank': PiggyBank,
@@ -91,6 +97,17 @@ const iconMap: Record<string, LucideIcon> = {
   terminal: Terminal,
   timer: Timer,
   wrench: Wrench
+}
+
+/** 折叠为图标栏时的分类标识 */
+const CATEGORY_ICON: Record<ToolCategory, LucideIcon> = {
+  compute: Calculator,
+  text: PencilLine,
+  image: Image,
+  document: Files,
+  media: Film,
+  file: Archive,
+  misc: Wrench
 }
 
 const CATEGORY_LABEL: Record<ToolCategory, MessageKey> = {
@@ -105,8 +122,24 @@ const CATEGORY_LABEL: Record<ToolCategory, MessageKey> = {
 
 const groups = computed(() => groupToolsByCategory(toolManifests.filter((tool) => !tool.hidden)))
 
-/** 手风琴折叠：默认全部折叠，展开某分类时其余分类自动收起 */
-const openCategory = ref<ToolCategory | null>(null)
+/** 当前路由所属分类（用于自动展开，首次进入不显示“空导航”） */
+function categoryForPath(path: string): ToolCategory | null {
+  for (const group of groups.value) {
+    if (group.tools.some((tool) => `/tools/${tool.id}` === path)) return group.category
+  }
+  return null
+}
+
+/** 手风琴折叠：默认展开当前工具所在分类，展开某分类时其余分类自动收起 */
+const openCategory = ref<ToolCategory | null>(categoryForPath(route.path))
+
+watch(
+  () => route.path,
+  (path) => {
+    const category = categoryForPath(path)
+    if (category !== null) openCategory.value = category
+  }
+)
 
 function isOpen(category: ToolCategory): boolean {
   return openCategory.value === category
@@ -116,53 +149,118 @@ function toggle(category: ToolCategory): void {
   openCategory.value = openCategory.value === category ? null : category
 }
 
+/** 图标栏态：分类按钮作为“展开入口”，避免图标堆叠造成歧义 */
+function onCategoryClick(category: ToolCategory): void {
+  if (props.collapsed) {
+    emit('expand')
+    openCategory.value = category
+    return
+  }
+  toggle(category)
+}
+
+function isCategoryActive(category: ToolCategory): boolean {
+  return categoryForPath(route.path) === category
+}
+
 function iconFor(name: string): LucideIcon {
   return iconMap[name] ?? Wrench
 }
 
+const LINK_BASE =
+  'group relative flex items-center rounded-[var(--lumin-radius-md)] text-sm no-underline transition-colors duration-150'
+
 function linkClass(path: string): string {
-  const base =
-    'flex items-center gap-2 rounded-[var(--lumin-radius-md)] px-3 py-2 text-sm no-underline'
-  return route.path === path
-    ? `${base} bg-[var(--lumin-color-primary)] text-white`
-    : `${base} text-[var(--lumin-color-text-secondary)] hover:bg-[var(--lumin-color-surface)]`
+  const active = route.path === path
+  const layout = props.collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-3 py-2'
+  const tone = active
+    ? 'bg-[var(--lumin-color-primary)] font-medium text-[var(--lumin-color-primary-contrast)] shadow-[var(--lumin-shadow-sm)]'
+    : 'text-[var(--lumin-color-text-secondary)] hover:bg-[var(--lumin-color-surface-hover)] hover:text-[var(--lumin-color-text)]'
+  return `${LINK_BASE} ${layout} ${tone}`
+}
+
+const CATEGORY_BASE =
+  'flex w-full items-center rounded-[var(--lumin-radius-sm)] px-2 py-1.5 text-[11px] font-semibold tracking-wide transition-colors'
+
+function categoryClass(category: ToolCategory): string {
+  const layout = props.collapsed ? 'justify-center px-0' : 'gap-1.5'
+  const tone =
+    props.collapsed && isCategoryActive(category)
+      ? 'bg-[var(--lumin-color-primary-soft)] text-[var(--lumin-color-primary)]'
+      : 'text-[var(--lumin-color-text-tertiary)] hover:bg-[var(--lumin-color-surface-hover)] hover:text-[var(--lumin-color-text-secondary)]'
+  return `${CATEGORY_BASE} ${layout} ${tone}`
 }
 </script>
 
 <template>
-  <nav class="flex h-full flex-col gap-2 overflow-y-auto p-3">
+  <nav class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto px-2.5 py-3">
     <section v-for="group in groups" :key="group.category" class="flex flex-col gap-1">
       <button
         type="button"
-        class="flex items-center gap-1 rounded-[var(--lumin-radius-md)] px-2 py-1 text-xs font-medium text-[var(--lumin-color-text-secondary)] hover:bg-[var(--lumin-color-surface)]"
+        :class="categoryClass(group.category)"
         :aria-expanded="isOpen(group.category)"
-        @click="toggle(group.category)"
+        :title="collapsed ? t(CATEGORY_LABEL[group.category]) : undefined"
+        @click="onCategoryClick(group.category)"
       >
-        <NIcon :component="isOpen(group.category) ? ChevronDown : ChevronRight" :size="14" />
-        <span>{{ t(CATEGORY_LABEL[group.category]) }}</span>
-        <span class="ml-auto opacity-60">{{ group.tools.length }}</span>
+        <NIcon
+          v-if="collapsed"
+          :component="CATEGORY_ICON[group.category]"
+          :size="18"
+          aria-hidden="true"
+        />
+        <template v-else>
+          <NIcon
+            :component="isOpen(group.category) ? ChevronDown : ChevronRight"
+            :size="14"
+            aria-hidden="true"
+          />
+          <span class="min-w-0 truncate">{{ t(CATEGORY_LABEL[group.category]) }}</span>
+          <span
+            class="ml-auto rounded-full bg-[var(--lumin-color-surface-muted)] px-1.5 text-[10px] font-medium tabular-nums text-[var(--lumin-color-text-tertiary)]"
+          >
+            {{ group.tools.length }}
+          </span>
+        </template>
       </button>
-      <div v-show="isOpen(group.category)" class="flex flex-col gap-1">
+      <div v-show="!collapsed && isOpen(group.category)" class="flex flex-col gap-1">
         <RouterLink
           v-for="tool in group.tools"
           :key="tool.id"
           :to="`/tools/${tool.id}`"
           :class="linkClass(`/tools/${tool.id}`)"
+          :title="collapsed ? tool.name : undefined"
+          :aria-label="tool.name"
+          :aria-current="route.path === `/tools/${tool.id}` ? 'page' : undefined"
+          @click="emit('navigate')"
         >
-          <NIcon :component="iconFor(tool.icon)" :size="16" />
-          <span>{{ tool.name }}</span>
+          <NIcon :component="iconFor(tool.icon)" :size="16" aria-hidden="true" />
+          <span :class="collapsed ? 'sr-only' : 'truncate'">{{ tool.name }}</span>
         </RouterLink>
       </div>
     </section>
 
-    <div class="mt-auto flex flex-col gap-1 pt-2">
-      <RouterLink to="/settings" :class="linkClass('/settings')">
-        <NIcon :component="Settings" :size="16" />
-        <span>{{ t('shell.sidebar.settings') }}</span>
+    <div class="mt-auto flex flex-col gap-1 border-t border-[var(--lumin-color-border)] pt-3">
+      <RouterLink
+        to="/settings"
+        :class="linkClass('/settings')"
+        :title="collapsed ? t('shell.sidebar.settings') : undefined"
+        :aria-label="t('shell.sidebar.settings')"
+        :aria-current="route.path === '/settings' ? 'page' : undefined"
+        @click="emit('navigate')"
+      >
+        <NIcon :component="Settings" :size="16" aria-hidden="true" />
+        <span :class="collapsed ? 'sr-only' : 'truncate'">{{ t('shell.sidebar.settings') }}</span>
       </RouterLink>
-      <RouterLink to="/about" :class="linkClass('/about')">
-        <NIcon :component="Info" :size="16" />
-        <span>{{ t('shell.sidebar.about') }}</span>
+      <RouterLink
+        to="/about"
+        :class="linkClass('/about')"
+        :title="collapsed ? t('shell.sidebar.about') : undefined"
+        :aria-label="t('shell.sidebar.about')"
+        :aria-current="route.path === '/about' ? 'page' : undefined"
+        @click="emit('navigate')"
+      >
+        <NIcon :component="Info" :size="16" aria-hidden="true" />
+        <span :class="collapsed ? 'sr-only' : 'truncate'">{{ t('shell.sidebar.about') }}</span>
       </RouterLink>
     </div>
   </nav>

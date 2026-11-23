@@ -70,6 +70,24 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
+        'packages/tools/calendar/src/lunar.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
+        'packages/tools/calendar/src/holidays.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
+        'packages/tools/calendar/src/anniversaries.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
         'packages/tools/unit-converter/src/manifest.ts': {
           lines: 80,
           functions: 80,

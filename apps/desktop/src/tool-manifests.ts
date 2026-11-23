@@ -1,5 +1,6 @@
 import type { ToolManifest } from '@lumin/plugin-api'
 import { manifest as calculatorManifest } from '@lumin/tool-calculator/manifest'
+import { manifest as calendarManifest } from '@lumin/tool-calendar/manifest'
 import { manifest as colorToolboxManifest } from '@lumin/tool-color-toolbox/manifest'
 import { manifest as devToolboxManifest } from '@lumin/tool-dev-toolbox/manifest'
 import { manifest as diskAnalyzerManifest } from '@lumin/tool-disk-analyzer/manifest'
@@ -39,6 +40,7 @@ import { manifest as zipToolManifest } from '@lumin/tool-zip-tool/manifest'
 /** 壳内唯一工具清单（Q14）：新增工具 = 新包 + 此处 1 行 + tool-mains 1 行（如有主进程）+ renderer 薄壳 1 行 */
 export const toolManifests: readonly ToolManifest[] = [
   calculatorManifest,
+  calendarManifest,
   unitConverterManifest,
   lifeCalculatorManifest,
   docx2pdfManifest,
