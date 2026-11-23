@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { tail } from '@lumin/node-kit'
 import {
+  convertFailureCode,
   DOCX2PDF_ERROR_CODES,
   errnoCode,
   isRetryable,
@@ -52,6 +53,13 @@ describe('isRetryable', () => {
       expect(isRetryable(code)).toBe(false)
     }
     expect(isRetryable('INTERNAL')).toBe(false)
+  })
+})
+
+describe('convertFailureCode', () => {
+  it('源文件无法加载 → INPUT_LOAD_FAILED，其余 → CONVERT_FAILED', () => {
+    expect(convertFailureCode('source file could not be loaded')).toBe('INPUT_LOAD_FAILED')
+    expect(convertFailureCode('segfault at ...')).toBe('CONVERT_FAILED')
   })
 })
 

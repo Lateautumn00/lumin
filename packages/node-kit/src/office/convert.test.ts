@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildConvertArgs,
+  classifyConvertFailure,
   convertDetail,
-  convertFailureCode,
   isLoadFailure,
-  mapPrecheckError,
   moveFile,
   pickSofficeCommand,
   precheckInput,
@@ -15,47 +14,44 @@ import {
   type MoveFs
 } from './convert'
 
-describe('mapPrecheckError', () => {
-  it('EBUSY / EPERM / EACCES → INPUT_LOCKED', () => {
-    for (const code of ['EBUSY', 'EPERM', 'EACCES']) {
-      expect(mapPrecheckError({ code }).code).toBe('INPUT_LOCKED')
-    }
-  })
-
-  it('ENOENT 及无 errno → INPUT_NOT_FOUND', () => {
-    expect(mapPrecheckError({ code: 'ENOENT' }).code).toBe('INPUT_NOT_FOUND')
-    expect(mapPrecheckError(new Error('boom')).code).toBe('INPUT_NOT_FOUND')
-  })
-})
-
 describe('precheckInput', () => {
   const ok = {
     checkReadable: async (): Promise<void> => undefined,
     checkExclusive: async (): Promise<void> => undefined
   }
 
-  it('双检通过 → 不抛', async () => {
-    await expect(precheckInput('a.docx', ok)).resolves.toBeUndefined()
+  it('双检通过 → ok', async () => {
+    await expect(precheckInput('a.docx', ok)).resolves.toEqual({ ok: true })
   })
 
-  it('读失败 → 结构化错误（ENOENT → INPUT_NOT_FOUND）', async () => {
-    const err = await precheckInput('a.docx', {
+  it('读失败 → not-found（ENOENT）', async () => {
+    const outcome = await precheckInput('a.docx', {
       ...ok,
       checkReadable: async () => {
         throw { code: 'ENOENT' }
       }
-    }).catch((e: unknown) => e)
-    expect(err).toMatchObject({ code: 'INPUT_NOT_FOUND' })
+    })
+    expect(outcome).toEqual({ ok: false, kind: 'not-found', detail: 'ENOENT' })
   })
 
-  it('占用探测失败 → INPUT_LOCKED', async () => {
-    const err = await precheckInput('a.docx', {
+  it('占用探测失败 → locked', async () => {
+    const outcome = await precheckInput('a.docx', {
       ...ok,
       checkExclusive: async () => {
         throw { code: 'EBUSY' }
       }
-    }).catch((e: unknown) => e)
-    expect(err).toMatchObject({ code: 'INPUT_LOCKED' })
+    })
+    expect(outcome).toEqual({ ok: false, kind: 'locked', detail: 'EBUSY' })
+  })
+
+  it('无 errno 的读失败 → not-found 且 detail 为空串', async () => {
+    const outcome = await precheckInput('a.docx', {
+      ...ok,
+      checkReadable: async () => {
+        throw new Error('boom')
+      }
+    })
+    expect(outcome).toEqual({ ok: false, kind: 'not-found', detail: '' })
   })
 })
 
@@ -97,13 +93,9 @@ describe('pickSofficeCommand', () => {
     expect(pickSofficeCommand('C:\\lo\\soffice.exe')).toBe('C:\\lo\\soffice.exe')
   })
 
-  it('其他扩展 → SPAWN_FAILED', () => {
-    expect(() => pickSofficeCommand('C:\\lo\\soffice.dll')).toThrowError()
-    try {
-      pickSofficeCommand('C:\\lo\\soffice.dll')
-    } catch (err) {
-      expect(err).toMatchObject({ code: 'SPAWN_FAILED' })
-    }
+  it('其他扩展 → null', () => {
+    expect(pickSofficeCommand('C:\\lo\\soffice.dll')).toBeNull()
+    expect(pickSofficeCommand('C:\\lo\\soffice')).toBeNull()
   })
 })
 
@@ -180,8 +172,12 @@ describe('moveFile', () => {
 })
 
 describe('taskWorkDir', () => {
-  it('按 taskId 独立目录', () => {
-    expect(taskWorkDir('C:\\temp', 't-1')).toBe('C:\\temp\\lumin-docx2pdf-t-1')
+  it('按 taskId 独立目录（默认前缀）', () => {
+    expect(taskWorkDir('C:\\temp', 't-1')).toBe('C:\\temp\\lumin-office-t-1')
+  })
+
+  it('可指定工具前缀', () => {
+    expect(taskWorkDir('C:\\temp', 't-1', 'lumin-docx2pdf')).toBe('C:\\temp\\lumin-docx2pdf-t-1')
   })
 })
 
@@ -191,9 +187,9 @@ describe('错误归类', () => {
     expect(isLoadFailure('SOME OTHER ERROR')).toBe(false)
   })
 
-  it('convertFailureCode 分流', () => {
-    expect(convertFailureCode('source file could not be loaded')).toBe('INPUT_LOAD_FAILED')
-    expect(convertFailureCode('segfault at ...')).toBe('CONVERT_FAILED')
+  it('classifyConvertFailure 分流', () => {
+    expect(classifyConvertFailure('source file could not be loaded')).toBe('load')
+    expect(classifyConvertFailure('segfault at ...')).toBe('convert')
   })
 
   it('convertDetail 拼接 stderr/stdout，忽略空段', () => {

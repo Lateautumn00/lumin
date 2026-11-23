@@ -1,6 +1,6 @@
 import { basename, extname, join } from 'node:path'
-import { classifyPrecheckError } from '@lumin/node-kit'
-import { toolError, errnoCode, type Docx2pdfErrorCode } from './errors'
+import { errnoCode } from '@lumin/shared'
+import { classifyPrecheckError } from '../precheck'
 
 /** 读权限 + 占用探测（注入 fs 包装） */
 export interface PrecheckDeps {
@@ -10,25 +10,34 @@ export interface PrecheckDeps {
   checkExclusive: (path: string) => Promise<void>
 }
 
-/** 预检 errno → 结构化错误（spec §5：EBUSY/EPERM → 占用，其余 → 不存在；分类上提 node-kit） */
-export function mapPrecheckError(err: unknown): ReturnType<typeof toolError> {
-  return classifyPrecheckError(err) === 'locked'
-    ? toolError('INPUT_LOCKED', errnoCode(err))
-    : toolError('INPUT_NOT_FOUND', errnoCode(err))
+/** 输入预检结果（调用方按 kind 映射各自工具的结构化错误码） */
+export type PrecheckOutcome =
+  { ok: true } | { ok: false; kind: 'locked' | 'not-found'; detail: string }
+
+function precheckFailure(err: unknown): PrecheckOutcome {
+  return {
+    ok: false,
+    kind: classifyPrecheckError(err) === 'locked' ? 'locked' : 'not-found',
+    detail: errnoCode(err)
+  }
 }
 
-/** 转换前输入预检：存在可读 + 未被独占；失败抛结构化错误 */
-export async function precheckInput(inputPath: string, deps: PrecheckDeps): Promise<void> {
+/** 转换前输入预检：存在可读 + 未被独占 */
+export async function precheckInput(
+  inputPath: string,
+  deps: PrecheckDeps
+): Promise<PrecheckOutcome> {
   try {
     await deps.checkReadable(inputPath)
   } catch (err) {
-    throw mapPrecheckError(err)
+    return precheckFailure(err)
   }
   try {
     await deps.checkExclusive(inputPath)
   } catch (err) {
-    throw mapPrecheckError(err)
+    return precheckFailure(err)
   }
+  return { ok: true }
 }
 
 /** 目录 → file:// URL（LibreOffice -env:UserInstallation 用；反斜杠转正斜杠并编码） */
@@ -60,10 +69,9 @@ export function buildConvertArgs(options: {
   ]
 }
 
-/** 入口文件校验：必须是 soffice.com / soffice.exe（否则 SPAWN_FAILED） */
-export function pickSofficeCommand(sofficePath: string): string {
-  if (!/\.(com|exe)$/i.test(sofficePath)) throw toolError('SPAWN_FAILED', sofficePath)
-  return sofficePath
+/** 入口文件校验：必须是 soffice.com / soffice.exe，否则返回 null（由调用方映射错误码） */
+export function pickSofficeCommand(sofficePath: string): string | null {
+  return /\.(com|exe)$/i.test(sofficePath) ? sofficePath : null
 }
 
 /** soffice 产物路径：`{输入基名}.pdf`（写入 outDir） */
@@ -94,7 +102,7 @@ export interface MoveFs {
 
 /**
  * 产物从工作目录移到目标路径（跨盘 EXDEV 时回退 copy+unlink）。
- * 目标已由 naming.resolveOutputPath 保证不冲突。
+ * 目标已由命名模块保证不冲突。
  */
 export async function moveFile(from: string, to: string, fs: MoveFs): Promise<void> {
   try {
@@ -106,9 +114,9 @@ export async function moveFile(from: string, to: string, fs: MoveFs): Promise<vo
   }
 }
 
-/** 每任务独立工作目录（finally 清理） */
-export function taskWorkDir(tempRoot: string, taskId: string): string {
-  return join(tempRoot, `lumin-docx2pdf-${taskId}`)
+/** 每任务独立工作目录（finally 清理；prefix 供各工具区分） */
+export function taskWorkDir(tempRoot: string, taskId: string, prefix = 'lumin-office'): string {
+  return join(tempRoot, `${prefix}-${taskId}`)
 }
 
 /** 失败时截取 stderr/stdout 尾部做 detail（spec §5） */
@@ -117,12 +125,14 @@ export function convertDetail(stderr: string, stdout: string): string {
   return text.trim()
 }
 
-/** stderr 嗅探：LibreOffice 明确的「源文件无法加载」文案 → INPUT_LOAD_FAILED */
+/** stderr 嗅探：LibreOffice 明确的「源文件无法加载」文案 */
 export function isLoadFailure(stderr: string): boolean {
   return /source file could not be loaded/i.test(stderr)
 }
 
-/** exit ≠ 0 时的错误码归类 */
-export function convertFailureCode(stderr: string): Docx2pdfErrorCode {
-  return isLoadFailure(stderr) ? 'INPUT_LOAD_FAILED' : 'CONVERT_FAILED'
+/** 通用失败归类：源文件无法加载 / 其余转换失败（调用方映射自身错误码） */
+export type ConvertFailureKind = 'load' | 'convert'
+
+export function classifyConvertFailure(stderr: string): ConvertFailureKind {
+  return isLoadFailure(stderr) ? 'load' : 'convert'
 }
