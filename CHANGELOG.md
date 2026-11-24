@@ -7,6 +7,7 @@
 
 ### Added
 
+- M65 图片去水印：`@lumin/tool-image-dewatermark`「图片去水印」（与 `image-watermark` 加水印职责分离）——单图手动框选多个矩形（新建/选中/拖动/删除，上限 20，最小 2×2）+ 三种填充（**快速修复 Telea 默认** / 模糊 4–40px / 纯色取边缘均值色）；快速修复单区域 >2M 像素自动降级模糊并提示；原图不修改，产物 `{原名}_去水印{原扩展名}` 冲突 `(n)`；输入 ≤40MB 且 ≤10000×10000；IPC 3 通道（`config` / `set-output-dir` 记忆缺省 `userData/image-dewatermark` / `dewatermark` 600s 可取消任务）；错误码 `IDW_*` 9 个 + `OP_TIMEOUT`/`CANCELLED`；**零新增第三方依赖、零模型**（复用 `@napi-rs/canvas` 1.1.1）；工具 chunk 31,446 B raw / **8,893 B gzip**，worker 199,158 B raw 随主进程不计 R5；单测 70（本包覆盖率分支 99.32%）+ e2e 2/2；字段级清单 `docs/spec/image-dewatermark.md`、冒烟 `docs/smoke/image-dewatermark.md`（R2 八类映射）、plan Q67/§4.65/M65 与 README 中英工具表已同步
 - M64 OCR PDF 输入：`@lumin/tool-ocr-text` 单张/批量扩展名白名单加 `.pdf`，`ocr-kit` 逐页渲染 + 逐页识别，多页非空文本按「===== 第 N 页 =====」分段（空白页不产生空段）；单 PDF ≤30 页（`OCR_PDF_TOO_MANY_PAGES`，渲染前判定、单项失败不中断整批），结果项增 `pageCount`、详情显示「N 页 · W×H 像素」；PDF 列表/详情用文件图标占位不破图，进度含页级文案；`ocr-kit` 新增 `maxPages` 选项与 `PDF_TOO_MANY_PAGES` 码；文案「张」统一为「个文件」；零新增依赖与运行时资产；单测（schema/recognize/node/errors）+ e2e 第 5 例（合成 2 页 PDF）；spec §0/§2/§3/§5/§8/§10、smoke §6、plan Q66/§4.64/M64 已同步
 - M0 阶段 0–1：版本基线锁定（全部最新稳定版 + 精确钉版；TypeScript 7.0.2 实测因 `typescript-eslint` 未适配按方案 A 回退至 6.0.3，例外记录于 plan.md §1.1）；pnpm 12 + Turborepo 工作区与质量工具链（ESLint 10 / Vitest 5 / dependency-cruiser / Prettier）
 - M0 阶段 2：`shared` IPC 信封/错误码/任务事件 schema 与 `plugin-api` 插拔契约（ToolManifest / MainPluginContext / LuminBridge）；dependency-cruiser 五条架构边界规则（R7）

@@ -13,6 +13,7 @@ import { registerMain as fileRenamerRegisterMain } from '@lumin/tool-file-rename
 import { registerMain as folderCompareRegisterMain } from '@lumin/tool-folder-compare/node'
 import { registerMain as fsCleanerRegisterMain } from '@lumin/tool-fs-cleaner/node'
 import { registerMain as imageCropRegisterMain } from '@lumin/tool-image-crop/node'
+import { registerMain as imageDewatermarkRegisterMain } from '@lumin/tool-image-dewatermark/node'
 import { registerMain as imageToolboxRegisterMain } from '@lumin/tool-image-toolbox/node'
 import { registerMain as imageRotateRegisterMain } from '@lumin/tool-image-rotate/node'
 import { registerMain as imageStitchRegisterMain } from '@lumin/tool-image-stitch/node'
@@ -47,6 +48,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'fs-cleaner': fsCleanerRegisterMain,
   'image-toolbox': imageToolboxRegisterMain,
   'image-crop': imageCropRegisterMain,
+  'image-dewatermark': imageDewatermarkRegisterMain,
   'image-rotate': imageRotateRegisterMain,
   'image-stitch': imageStitchRegisterMain,
   'image-watermark': imageWatermarkRegisterMain,

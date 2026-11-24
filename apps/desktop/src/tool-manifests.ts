@@ -15,6 +15,7 @@ import { manifest as fileRenamerManifest } from '@lumin/tool-file-renamer/manife
 import { manifest as folderCompareManifest } from '@lumin/tool-folder-compare/manifest'
 import { manifest as fsCleanerManifest } from '@lumin/tool-fs-cleaner/manifest'
 import { manifest as imageCropManifest } from '@lumin/tool-image-crop/manifest'
+import { manifest as imageDewatermarkManifest } from '@lumin/tool-image-dewatermark/manifest'
 import { manifest as imageToolboxManifest } from '@lumin/tool-image-toolbox/manifest'
 import { manifest as imageRotateManifest } from '@lumin/tool-image-rotate/manifest'
 import { manifest as imageStitchManifest } from '@lumin/tool-image-stitch/manifest'
@@ -52,6 +53,7 @@ export const toolManifests: readonly ToolManifest[] = [
   imageCropManifest,
   imageStitchManifest,
   imageWatermarkManifest,
+  imageDewatermarkManifest,
   pdfImagesManifest,
   pdfToolkitManifest,
   fileRenamerManifest,

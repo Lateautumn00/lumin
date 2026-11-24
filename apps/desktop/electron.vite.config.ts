@@ -106,6 +106,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/image-watermark/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-image-dewatermark\/manifest$/,
+    replacement: r('../../packages/tools/image-dewatermark/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-image-dewatermark\/node$/,
+    replacement: r('../../packages/tools/image-dewatermark/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-image-dewatermark\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/image-dewatermark/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-pdf-images\/manifest$/,
     replacement: r('../../packages/tools/pdf-images/src/manifest.ts')
   },
