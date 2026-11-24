@@ -1,5 +1,6 @@
 ﻿# M49 实施任务清单（PDF 收敛 + OCR 双模式合并）
 
+> 状态：**已实施**（2026-11-22 回写；本清单任务全部 [x]）。
 > 配套规格：`docs/spec/m49-pdf-ocr-consolidate.md`
 > 分支：`feature/m49-pdf-ocr-consolidate`（自 `feature/m48-dedupe-cleanup`）
 > 前置：**用户批准本清单**；不 push、不合并 master

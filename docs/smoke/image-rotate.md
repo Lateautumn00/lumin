@@ -32,19 +32,19 @@
 | 用例                                                        | 状态 | 说明 |
 | ----------------------------------------------------------- | ---- | ---- |
 | 页面加载 + 空态引导 + 未选操作时开始禁用                    | PASS | 不需要 ffmpeg |
-| R2.1 中文+空格路径旋转 90°，PNG IHDR 320×240 → 240×320      | SKIP | 缺 `binaries/download/ffmpeg.exe` |
-| 水平翻转保持尺寸 + 重复执行冲突命名 ` (1)`                  | SKIP | 同上 |
-| R2.3 损坏 + 不支持扩展名混合批次（1 成功 2 失败）           | SKIP | 同上 |
+| R2.1 中文+空格路径旋转 90°，PNG IHDR 320×240 → 240×320      | PASS | 2026-11-24 本机 ffmpeg 补验 |
+| 水平翻转保持尺寸 + 重复执行冲突命名 ` (1)`                  | PASS | 2026-11-24 本机 ffmpeg 补验 |
+| R2.3 损坏 + 不支持扩展名混合批次（1 成功 2 失败）           | PASS | 2026-11-24 本机 ffmpeg 补验 |
 
-**补齐方式**：网络可用时执行 `node scripts/fetch-binaries.mjs --group download`（固定 URL + SHA256），再跑上述 e2e 命令，期望 4/4。当前环境 `curl` 对 GitHub 不可达（超时），非代码缺陷。
+**补齐记录（2026-11-24）**：`binaries/download/ffmpeg.exe` 就绪后执行 `pnpm --filter @lumin/desktop build` + `playwright test e2e/image-rotate-smoke.spec.ts` → **4 passed (5.4s)**，原 3 例 SKIP 全部消解。
 
 ## 2. R2 八类异常映射
 
 | 编号 | 场景         | 覆盖方式                                                                 | 结果 |
 | ---- | ------------ | ------------------------------------------------------------------------ | ---- |
-| R2.1 | 中文/空格路径 | e2e 用例 2/3 文件名 `旋转 样例.png`、`横向 样例.png`（ASCII 临时目录 + 中文文件名）；单测命名函数 | 通过（e2e 待 ffmpeg 复验） |
+| R2.1 | 中文/空格路径 | e2e 用例 2/3 文件名 `旋转 样例.png`、`横向 样例.png`（ASCII 临时目录 + 中文文件名）；单测命名函数 | 通过（e2e 2026-11-24 补验） |
 | R2.2 | 文件被占用   | ffmpeg 打开失败 → `Permission denied` / `Access is denied` 归类 `IR_OUTPUT_WRITE_FAILED`（spec §6 简化口径，文案可重试）；输入 ACL 拒绝同样落此码 | 单测覆盖归类；真实占用待人工补录 |
-| R2.3 | 加密文件     | 损坏/非图片样本（`not an image at all`）→ `IR_FILE_CORRUPT`，批次继续；e2e 用例 4 + node 单测 | 通过（单测）/ e2e 待 ffmpeg 复验 |
+| R2.3 | 加密文件     | 损坏/非图片样本（`not an image at all`）→ `IR_FILE_CORRUPT`，批次继续；e2e 用例 4 + node 单测 | 通过（单测 + e2e 2026-11-24 补验） |
 | R2.4 | 超大文件     | >200MB 或非普通文件 → `IR_FILE_UNSUPPORTED`（`statSync` 分支）；目录伪扩展名已单测 | 分支单测通过；200MB 实文件待人工 |
 | R2.5 | 任务取消     | `process` 单测：运行中 `aborted` → 不记失败、产物保留；进入前 abort → 零执行并补 total | 单测通过；真实 ffmpeg 取消待人工 |
 | R2.6 | 并发溢出     | 壳任务队列并发上限统一约束；本工具批次内串行、单批 ≤500（zod）；UI 运行中禁用重复提交 | 契约单测通过；并发实测待人工 |
@@ -53,7 +53,7 @@
 
 ## 3. 人工补验清单（ffmpeg 就绪后）
 
-1. `node scripts/fetch-binaries.mjs --group download` → 重跑 e2e，期望 **4/4**。
+1. ~~`node scripts/fetch-binaries.mjs --group download` → 重跑 e2e，期望 **4/4**。~~ 已完成（2026-11-24，实测 4/4 PASS）。
 2. R2.2：用另一进程以 `FileShare.None` 独占一张 jpg，执行旋转 → 断言失败项码与文案、批次其余图片成功。
 3. R2.4：构造 200MB+ 图片 → 断言 `IR_FILE_UNSUPPORTED` 且不进入 ffmpeg。
 4. R2.5：选 50 张大图，进度中途取消 → 断言已完成产物存在、无失败项、UI 回 idle。

@@ -223,12 +223,12 @@
 
 ### 5.3 卫生项（顺带发现，低成本）
 
-| 项 | 证据 | 建议 |
-| --- | --- | --- |
-| `example` 示例工具注册在生产清单 | `apps/desktop/src/tool-manifests.ts` L8/L70（正式 UI「其他」分组可见） | 从生产清单移除（保留在 dev 条件注册或明确标注），0.25d |
-| `batch-ocr/` 空目录残留 | 仅含 `.turbo`、`node_modules`，无 src | 删除目录，0.1d |
-| `image-rotate-tasks.md` 三条 e2e SKIP | L56–58「本机缺 ffmpeg」未勾选 | 本机补验并回写，0.25d |
-| 6 个 spec 状态行滞后 | qr-code/zip-tool/pdf-toolkit-m38/m49（「待批准」但 tasks 全 [x]）、image-stitch、exam-split「敬请期待」历史叙述 | 状态行回写统一，0.25d |
+| 项 | 证据 | 建议 | 状态（2026-11-24 复核） |
+| --- | --- | --- | --- |
+| `example` 示例工具注册在生产清单 | `apps/desktop/src/tool-manifests.ts` L8/L70（正式 UI「其他」分组可见） | 从生产清单移除（保留在 dev 条件注册或明确标注），0.25d | 已完成：manifest 已 `hidden: true`，`AppSidebar` 过滤 hidden，侧边栏不可见；IPC 通道保留供 `ipc-smoke` 直连校验 |
+| `batch-ocr/` 空目录残留 | 仅含 `.turbo`、`node_modules`，无 src | 删除目录，0.1d | 已完成：`packages/tools` 与全仓均无 `batch-ocr` 目录 |
+| `image-rotate-tasks.md` 三条 e2e SKIP | L56–58「本机缺 ffmpeg」未勾选 | 本机补验并回写，0.25d | 已完成：ffmpeg 就绪后 e2e **4/4 PASS**，tasks/smoke 已回写 |
+| 6 个 spec 状态行滞后 | qr-code/zip-tool/pdf-toolkit-m38/m49（「待批准」但 tasks 全 [x]）、image-stitch、exam-split「敬请期待」历史叙述 | 状态行回写统一，0.25d | 已完成：qr-code/zip-tool/image-stitch 早有状态行；本次补 pdf-toolkit-m38-tasks、m49-tasks、exam-split 三份 |
 
 ---
 
@@ -249,7 +249,7 @@
 | P0-7 | 扩展 | file-hasher SHA-512 | 算法复选 +1 | Web Crypto | 0.25d | 需（spec 解冻） | 无 | 零新增 |
 | P0-8 | 扩展 | text-diff 词级高亮 | 变更行内词级 | LCS | 0.5d | 需（spec 解冻） | 无 | 零新增 |
 | P0-9 | 扩展 | text-toolbox/qr 小项（qr 批量识别或 Logo 二选一先行） | 单项 | 批量骨架/canvas | 0.5d | 需（spec 解冻） | 无 | 零新增 |
-| P0-10 | 卫生 | §5.3 四项（example 出清单、batch-ocr 清理、e2e 补验、状态行回写） | — | — | ~0.75d | 否 | 无 | 无 |
+| P0-10 | 卫生 | §5.3 四项（example 出清单、batch-ocr 清理、e2e 补验、状态行回写） | — | — | ~0.75d | 否 | 无 | 无 | ✅ 已完成（2026-11-24） |
 
 ### P1（中期主推）
 

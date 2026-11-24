@@ -1,7 +1,7 @@
 # 图片旋转（image-rotate）任务单 — M33
 
 > 关联：`docs/spec/image-rotate.md`（验收依据）· 分支 `feature/m33-image-rotate`（基于 `feature/m32-text-diff`，HEAD `2e5d026`）
-> 状态：**已实施**（2026-11-20）· e2e 旋转 3 例因本机缺 ffmpeg 且网络不可达而 skip，**待 CI/本机验证**，补验清单见 `docs/smoke/image-rotate.md` §3
+> 状态：**已实施**（2026-11-20）· e2e 4/4 PASS（2026-11-24 本机 ffmpeg 补验，原 3 例 SKIP 已消解，记录见 `docs/smoke/image-rotate.md` §3）
 
 ## T0 分支与骨架
 
@@ -53,9 +53,9 @@
 
 - [x] `apps/desktop/e2e/image-rotate-smoke.spec.ts` 4 用例（缺 ffmpeg 时逐例 skip）
 - [x] 用例 1：加载 + 空态 + 开始禁用（**PASS**）
-- [ ] 用例 2：旋转 90° 尺寸变化（PNG IHDR 校验）+ progress（**SKIP：缺 ffmpeg**；**待 CI/本机验证**——本机沙箱无法启动 Electron 且缺 ffmpeg，见 smoke §3）
-- [ ] 用例 3：水平翻转尺寸不变 + 二次执行冲突 ` (1)`（**SKIP：缺 ffmpeg**；**待 CI/本机验证**）
-- [ ] 用例 4：好图 + 损坏 + 不支持扩展名混合批次（1 成功 2 失败）（**SKIP：缺 ffmpeg**；**待 CI/本机验证**）
+- [x] 用例 2：旋转 90° 尺寸变化（PNG IHDR 校验）+ progress（**PASS**，2026-11-24 补验）
+- [x] 用例 3：水平翻转尺寸不变 + 二次执行冲突 ` (1)`（**PASS**，2026-11-24 补验）
+- [x] 用例 4：好图 + 损坏 + 不支持扩展名混合批次（1 成功 2 失败）（**PASS**，2026-11-24 补验）
 
 ## T7 文档与路线图
 
@@ -70,6 +70,6 @@
 - [x] `pnpm typecheck` / `pnpm lint`
 - [x] `pnpm coverage`（lines 96.8% / functions 100% / branches 91.9%）
 - [x] `pnpm gate`
-- [x] `pnpm build` + e2e 1/4 PASS（3 例 SKIP）
+- [x] `pnpm build` + e2e 4/4 PASS（2026-11-24 补验，原 3 例 SKIP 已消解）
 - [x] 3 个中文提交：`feat(image-rotate): ...` / `test(image-rotate): ...` / `docs(image-rotate): ...`
 - [x] 不推送、不建 MR（等用户指令）

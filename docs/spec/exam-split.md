@@ -1,5 +1,6 @@
 # 试卷切割 — 字段级功能清单（M3a 验收附件）
 
+> 状态：**已实施**（M3a PDF 五算子 / M3b OCR 切题 / M49 PDF 收敛与 OCR 双模式合并；2026-11-24 状态行回写）。
 > 依据 AGENTS §11：开工前定稿。变更须同步更新本文件与 `docs/opencode/plan.md` §4.4。
 > 工具 id：`exam-split` · 显示名：**试卷切割** · 包：`@lumin/tool-exam-split` · 图标：`scissors`
 > 本清单覆盖 **M3a（PDF 操作）**；**M3b（OCR 切题）已增补 §10（2026-11-16 定稿，R8）**，双 Tab 形态已定（plan §3 同包两入口）。
