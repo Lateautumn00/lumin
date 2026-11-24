@@ -73,6 +73,7 @@
 | Q60 | 壳级 UX（2026-11-23 用户拍板） | 移除原生菜单栏（`Menu.setApplicationMenu(null)`，dev 经 `before-input-event` 保留 F12/Ctrl+Shift+I/F5/Ctrl+R）；启动默认工具 = `calendar`（tool-manifests `DEFAULT_TOOL_ID`，router 回退首工具） |
 | Q61 | 剪贴板历史（M59，2026-11-23 用户拍板） | **新增独立工具包 `clipboard-history`，形态 = 工具页内轮询**：仅打开本工具页时每 1s 经 sync 通道读主进程 `clipboard`，文本变化才入库（文本 V1，图片不做）；上限 500 条 + 置顶永不淘汰、搜索/单条删除/清空；`userData/clipboard-history.json` 原子持久化（node-kit `writeAtomic`）；**零全局快捷键、零托盘、壳零改动、零新增依赖**；错误码 `CH_*`；详见 §4.59 |
 | Q62 | 速赢档一（M60，2026-11-23 用户全选四组） | **四既有工具 Tab 扩展（不新建包、纯 renderer、零 IPC、零新增依赖）**：① `text-toolbox` +「URL 编码」（组件级/完整编码、编码/解码/交换/再执行）与「SQL 格式化」（美化/压缩，自写 tokenizer 零依赖）；② `time-toolbox` +「日期计算器」（间隔：总天数/工作日仅周末口径；加减：天/周/月/年日历进位、日溢出钳制月末）；③ `dev-toolbox` +「进制与位运算」（2/8/10/16 BigInt 互转 + 与/或/异或/非）；④ `misc-toolbox` +「中文信息」（脱敏预设、身份证 18 位校验+生日+性别、金额转人民币大写）；chunk 均 <200KB gzip；详见 §4.60 |
+| Q63 | 剪贴板图片（M61，2026-11-24 用户拍板三选） | **扩展 `clipboard-history` 支持图片（Q61 分期排除项的下一期）**：形态 = **同一列表混排 + 「全部/文本/图片」类型筛选**；判定 = **poll 图片优先**（`clipboard.readImage()` 非空即按图片入库，文本分支仅在无图时走，避免截图工具的路径文本污染）；**单图 ≤5MB**（超限复用 `TOO_LARGE` 跳过）、**图片独立上限 100 条**（与文本 500 分开计数，置顶永不淘汰）；原图 PNG 存 `userData/clipboard-history/images/{id}.png`，JSON 仅存元数据 + ≤160px 缩略图 dataURL；图片去重按 PNG SHA-1；**新增 2 通道** `image`（按 id 返回原图 dataURL 供预览）与 `copy`（主进程 `clipboard.writeImage` 回写，渲染端 clipboard API 写不了图）；remove/clear 同步删图片文件 + 启动加载时清理孤儿图片文件；新错误码 `CH_IMAGE_MISSING`；搜索词非空时仅过滤文本条目（图片仅在无搜索词时出现）；零新增依赖；详见 §4.61 |
 | —   | 硬约束                              | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -829,6 +830,16 @@ lumin/
 - **misc-toolbox +「中文信息」**：三卡片区——数据脱敏（预设：手机中四位、身份证前四后四、邮箱用户名首字符 + `***`、姓名首字 + `*`；逐规则结果 + 复制）、身份证（18 位 GB 11643 校验位 + 出生日期 + 顺序码性别；位数/校验失败 → `MT_*` 新码）、金额大写（数字 → 人民币整零拾佰仟万亿角分大写，负数「负」前缀，非数字或整数部分 >16 位 → `MT_*` 码）；**不做**归属地号段表（体积，候选）。
 - **验收**：四包新增单测（URL 编解码往返与非法序列、SQL tokenizer 保护与两态、日期间隔/进位/含头含尾、进制互转与位运算、脱敏向量、身份证校验位向量、金额大写 12 锚点）；e2e 每工具 ≥1 用例追加；R2 八类映射记入四份 smoke 增量节；`pnpm gate` 全绿；文档五处同步。
 
+### 4.61 剪贴板图片（M61，2026-11-24 R8 登记）
+
+- **总则（Q63）**：扩展既有 `clipboard-history`，不新建包；零新增依赖（PNG 缩略图与 SHA-1 均用 Electron `nativeImage` 与 `node:crypto`）；限包覆盖率 ≥80%、chunk <200KB gzip；错误码沿用 `CH_*` 前缀。
+- **Entry 形状扩展**：`type: 'text' | 'image'`（旧 JSON 条目无 `type` → zod `default('text')` 向后兼容）；图片条目附加 `width` / `height` / `bytes` / `sha1`（PNG 内容去重）/ `thumb`（≤160px 宽 PNG dataURL，JSON 内联），`text` 恒为空串；文本条目不带图片字段。
+- **poll 判定（图片优先）**：`readImage()` 非空 → 图片分支（读 PNG → >5MB 跳过 `TOO_LARGE` → SHA-1 与头部图片条目相同跳过 → 新条目前插，图片独立上限 100 条淘汰且置顶永不淘汰）；图片为空 → 走既有文本分支（不变）。
+- **存储布局**：原图 `userData/clipboard-history/images/{id}.png`（新条目与 JSON 同批防抖落盘）；`ensureLoaded` 后扫描 images 目录清理 JSON 未引用的孤儿文件；remove/clear 同步删除对应图片文件（删除失败仅 warn 不阻断）。
+- **通道（5 → 7）**：新增 `image`（payload `{id}` → `{ dataUrl }`，文件缺失 → `CH_IMAGE_MISSING`）与 `copy`（payload `{id}` → 主进程读 PNG `clipboard.writeImage` 回写 → `{ ok }`，文件缺失同码）；list/poll/pin/remove/clear 载荷形状不变（Entry 扩展）。
+- **UI 字段级**：顶栏类型筛选（全部/文本/图片 分段按钮，默认全部）；图片卡片 = 缩略图 `<img>` + 尺寸徽标（如 `1920×1080 · 2.1MB`）+ 时间 + 置顶/复制/删除按钮；点缩略图开预览 `NModal`（按需调 `image` 通道取原图 dataURL，打开时才请求）；复制按钮调 `copy` 通道，成功后按钮态「已复制」1.5s（与文本一致）；搜索词非空时仅显示文本匹配条目；空态/加载/报错三态沿用现有结构，`CH_IMAGE_MISSING` → 中文文案 + 重试。
+- **验收**：单测（图片优先判定、SHA-1 去重、按类型独立淘汰、旧 JSON 兼容、筛选、孤儿清理、image/copy 通道注入测试）；e2e ≥2 用例（`app.evaluate` 写入真实剪贴板图片 → 轮询入库 → 类型筛选 → 预览/复制；图片缺失错误态）；R2 八类映射记入 smoke；`pnpm gate` 全绿；文档五处同步。
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -934,6 +945,8 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M59 v5.8** | 剪贴板历史（§4.59，2026-11-23）：新增 `clipboard-history` —— 工具页内每 1s 轮询 clipboard，文本条目上限 500 + 置顶永不淘汰，搜索/复制/删除/清空，`userData` JSON 原子持久化；5 个 sync 通道（list/poll/pin/remove/clear），错误码 `CH_*`；零全局快捷键、零托盘、壳零改动、零新增依赖 | §4.59 验收；纯函数单测 ≥80%；e2e 剪贴板入库/置顶/持久化往返；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 1 天 |
 
 | **M60 v5.9** | 速赢档一（§4.60，2026-11-23）：四工具 Tab 扩展——text-toolbox +URL 编码/SQL 格式化两页签；time-toolbox +日期计算器页签；dev-toolbox +进制与位运算页签；misc-toolbox +中文信息页签（脱敏/身份证/金额大写）；全部纯 renderer、零 IPC、零新增依赖 | §4.60 验收；每包限包覆盖率 ≥80%；新增单测（编解码往返/日期进位/BigInt 互转/校验向量与金额锚点）；e2e 每工具 ≥1 用例；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 1–2 天 |
+
+| **M61 v5.10** | 剪贴板图片（§4.61，2026-11-24）：`clipboard-history` 扩展图片条目——poll 图片优先、同一列表混排 + 「全部/文本/图片」筛选、原图 PNG 落盘 + JSON 内联 ≤160px 缩略图、图片独立上限 100 条、单图 ≤5MB、SHA-1 去重、孤儿文件清理；通道 5 → 7（新增 `image` 预览 / `copy` 主进程回写）、新错误码 `CH_IMAGE_MISSING`；零新增依赖 | §4.61 验收；限包覆盖率 ≥80%；e2e 图片采集/筛选/预览/复制 ≥2 用例；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5–1 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
