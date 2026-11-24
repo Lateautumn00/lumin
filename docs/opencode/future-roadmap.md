@@ -131,6 +131,8 @@
 
 ### 7.1 Bug：视频播放器误报「视频损坏」（video-player）
 
+> **状态：已修复（2026-11-24）** —— `MediaError` 按 code 分支映射（2→`VP_READ_FAILED`、3→`VP_PLAYBACK_FAILED`、4→`VP_CODEC_UNSUPPORTED`、1 不提示），`errors.ts` 新增 `playbackError` 并有 7 例单测；spec §5/§6 与 smoke 已同步。详见 `docs/spec/video-player.md`、`docs/smoke/video-player.md`。
+
 - **现象**：视频播放器无法播放，提示「视频损坏」。
 - **实际**：同一文件在其他播放器可正常播放。
 - **排查方向**：编解码/容器格式支持范围；demuxer/解码器报错被误映射为「损坏」；错误文案与真实错误码区分（可能是不支持的编解码而非文件损坏）。
