@@ -6,11 +6,11 @@
  *              结果与输入同序；模型缺失等任务级错误向上抛出。
  */
 import { tail } from '@lumin/node-kit'
-import type { OcrEngine, RenderedPage } from '@lumin/ocr-kit'
+import type { OcrEngine, RenderedPage, RenderOptions } from '@lumin/ocr-kit'
 import { composeText, sortReadingOrder } from '@lumin/ocr-kit'
 import { isStructuredError, type StructuredError } from '@lumin/shared'
 import { toolError } from './errors'
-import type { BatchItemResult, RecognizeResult } from './schema'
+import { MAX_PDF_PAGES, type BatchItemResult, type RecognizeResult } from './schema'
 
 /** worker 入参（binariesDir 由主进程预检后注入，renderer 不可指定） */
 export interface RecognizeRequest {
@@ -20,7 +20,7 @@ export interface RecognizeRequest {
 
 /** 可注入依赖（生产 = ocr-kit 真实实现） */
 export interface BatchDeps {
-  render(inputPath: string): Promise<RenderedPage[]>
+  render(inputPath: string, options?: RenderOptions): Promise<RenderedPage[]>
   createEngine(ocrDir: string): Promise<OcrEngine>
 }
 
@@ -59,21 +59,53 @@ export async function runBatch(
     if (inputPath === undefined) continue
     const label = `${index + 1}/${total}`
     try {
-      emit({ stage: 'render', current: index, total, message: `读取第 ${label} 张…` })
-      const pages = await deps.render(inputPath)
-      const page = pages[0]
-      if (page === undefined) throw toolError('OCR_INPUT_INVALID', '渲染结果为空')
+      emit({ stage: 'render', current: index, total, message: `读取第 ${label} 个…` })
+      const pages = await deps.render(inputPath, {
+        maxPages: MAX_PDF_PAGES,
+        onPage: (done, pageTotal) =>
+          emit({
+            stage: 'render',
+            current: index,
+            total,
+            message: `读取第 ${label} 个（${done}/${pageTotal} 页）…`
+          })
+      })
+      const first = pages[0]
+      if (first === undefined) throw toolError('OCR_INPUT_INVALID', '渲染结果为空')
 
-      emit({ stage: 'detect', current: index, total, message: `识别第 ${label} 张…` })
-      const lines = await engine.detectLines(page.image)
-      const text = composeText(sortReadingOrder(lines)).trim()
-      if (text === '') throw toolError('OCR_NO_TEXT')
+      const pageTexts: { pageNumber: number; text: string }[] = []
+      for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+        const page = pages[pageIndex]
+        if (page === undefined) continue
+        emit({
+          stage: 'detect',
+          current: index,
+          total,
+          message:
+            pages.length > 1
+              ? `识别第 ${label} 个 · 第 ${pageIndex + 1}/${pages.length} 页…`
+              : `识别第 ${label} 个…`
+        })
+        const lines = await engine.detectLines(page.image)
+        pageTexts.push({
+          pageNumber: page.pageNumber,
+          text: composeText(sortReadingOrder(lines)).trim()
+        })
+      }
+
+      const nonEmpty = pageTexts.filter((item) => item.text !== '')
+      if (nonEmpty.length === 0) throw toolError('OCR_NO_TEXT')
+      const text =
+        pages.length > 1
+          ? nonEmpty.map((item) => `===== 第 ${item.pageNumber} 页 =====\n${item.text}`).join('\n\n')
+          : (nonEmpty[0]?.text ?? '')
 
       items.push({
         status: 'done',
         inputPath,
-        width: page.width,
-        height: page.height,
+        width: first.width,
+        height: first.height,
+        pageCount: pages.length,
         text
       })
     } catch (err) {

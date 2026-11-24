@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * 图片文字识别（ocr-text）：单张自动识别 / 批量识别双模式；逐张编辑预览 → 复制 / 导出 TXT。
- * 三态：空态（DropZone）/ 加载态（可取消、批内进度）/ 报错态（重试或清空）；单张失败不中断整批。
+ * 图片/PDF 文字识别（ocr-text）：单张自动识别 / 批量识别双模式；逐项编辑预览 → 复制 / 导出 TXT。
+ * 三态：空态（DropZone）/ 加载态（可取消、批内进度）/ 报错态（重试或清空）；单项失败不中断整批。
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { Copy, RefreshCw, Save, Trash2 } from '@lucide/vue'
+import { Copy, FileText, RefreshCw, Save, Trash2 } from '@lucide/vue'
 import { NAlert, NButton, NInput, NRadioButton, NRadioGroup, NTag } from 'naive-ui'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
@@ -22,6 +22,8 @@ interface UiItem {
   status: 'pending' | 'running' | 'done' | 'failed'
   width?: number
   height?: number
+  /** 识别页数（PDF 多页；图片为 1） */
+  pageCount?: number
   text: string
   error?: StructuredError
 }
@@ -76,6 +78,18 @@ function detach(): void {
 
 function findItem(path: string): UiItem | undefined {
   return items.value.find((item) => item.path === path)
+}
+
+/** 是否为 PDF 输入（PDF 无图片预览，列表与详情用文件图标占位） */
+function isPdf(path: string): boolean {
+  return /\.pdf$/i.test(path)
+}
+
+/** 列表项副标题：已识别显示页数（多页）与像素尺寸，否则显示状态文案 */
+function itemSizeLabel(item: UiItem): string {
+  if (item.width === undefined) return STATUS_LABEL[item.status]
+  const pages = item.pageCount !== undefined && item.pageCount > 1 ? `${item.pageCount} 页 · ` : ''
+  return `${pages}${item.width}×${item.height}`
 }
 
 function setError(err: unknown): void {
@@ -134,6 +148,7 @@ function applyResults(payload: RecognizeResult): void {
       item.text = result.text
       item.width = result.width
       item.height = result.height
+      item.pageCount = result.pageCount
       item.error = undefined
     } else {
       item.status = 'failed'
@@ -147,8 +162,8 @@ function applyResults(payload: RecognizeResult): void {
   const failed = failedItems.value.length
   notice.value =
     failed === 0
-      ? `识别完成：${doneItems.value.length} 张全部成功`
-      : `识别完成：${doneItems.value.length} 张成功，${failed} 张失败`
+      ? `识别完成：${doneItems.value.length} 个文件全部成功`
+      : `识别完成：${doneItems.value.length} 个文件成功，${failed} 个失败`
   if (selected.value === null || selected.value.status !== 'done') {
     selectedPath.value = doneItems.value[0]?.path ?? failedItems.value[0]?.path ?? ''
   }
@@ -201,7 +216,7 @@ function onSelect(payload: { file: File; path: string }): void {
     return
   }
   if (items.value.length >= MAX_BATCH_FILES) {
-    invalidHint.value = `单次最多 ${MAX_BATCH_FILES} 张图片，请分批处理`
+    invalidHint.value = `单次最多 ${MAX_BATCH_FILES} 个文件，请分批处理`
     return
   }
   const item: UiItem = {
@@ -304,7 +319,7 @@ function formatAll(): string {
 }
 
 function copyAll(): void {
-  void copyText(formatAll(), `已复制 ${doneItems.value.length} 张图片的文本`)
+  void copyText(formatAll(), `已复制 ${doneItems.value.length} 个文件的文本`)
 }
 
 async function changeOutputDir(): Promise<void> {
@@ -366,7 +381,7 @@ onUnmounted(() => {
     <header class="flex flex-col gap-2">
       <h2 class="text-lg font-semibold text-[var(--lumin-color-text)]">图片文字识别</h2>
       <p class="text-sm text-[var(--lumin-color-text-secondary)]">
-        单张自动识别，或一次选择多张批量识别；结果可编辑、复制或导出 TXT，全程离线。
+        支持图片与 PDF：单张自动识别，或一次选择多个文件批量识别；结果可编辑、复制或导出 TXT，全程离线。
       </p>
       <NRadioGroup
         :value="mode"
@@ -407,37 +422,37 @@ onUnmounted(() => {
         <template v-if="mode === 'single'">
           <DropZone
             v-if="items.length === 0"
-            accept=".png,.jpg,.jpeg,.webp"
-            hint="拖拽或点击选择一张图片"
+            accept=".png,.jpg,.jpeg,.webp,.pdf"
+            hint="拖拽或点击选择一个文件（图片 / PDF）"
             :disabled="phase === 'running'"
             @select="onSelect"
             @invalid="onInvalid"
           />
           <template v-else>
             <p class="text-sm text-[var(--lumin-color-text-secondary)]">
-              已选择图片；如需更换，请点击下方按钮。
+              已选择文件；如需更换，请点击下方按钮。
             </p>
             <NButton quaternary :disabled="phase === 'running'" @click="resetAll">
-              重新选择图片
+              重新选择文件
             </NButton>
           </template>
           <p class="text-xs text-[var(--lumin-color-text-secondary)]">
-            支持 PNG / JPG / WebP，单张不超过 {{ MAX_MB }}MB；选择后自动识别，全程离线。
+            支持 PNG / JPG / WebP / PDF，单个不超过 {{ MAX_MB }}MB（PDF 最多 30 页）；选择后自动识别，全程离线。
           </p>
         </template>
 
         <template v-else>
           <DropZone
-            accept=".png,.jpg,.jpeg,.webp"
-            hint="拖拽或点击添加图片（可多选）"
+            accept=".png,.jpg,.jpeg,.webp,.pdf"
+            hint="拖拽或点击添加文件（可多选）"
             multiple
             :disabled="phase === 'running'"
             @select="onSelect"
             @invalid="onInvalid"
           />
           <p class="text-xs text-[var(--lumin-color-text-secondary)]">
-            支持 PNG / JPG / WebP，单张不超过 {{ MAX_MB }}MB，单次最多
-            {{ MAX_BATCH_FILES }} 张；识别全程离线。
+            支持 PNG / JPG / WebP / PDF，单个不超过 {{ MAX_MB }}MB（PDF 最多 30 页），单次最多
+            {{ MAX_BATCH_FILES }} 个文件；识别全程离线。
           </p>
 
           <ul v-if="items.length > 0" class="flex max-h-80 flex-col gap-1 overflow-auto pr-1">
@@ -454,20 +469,24 @@ onUnmounted(() => {
                 @click="selectItem(item.path)"
               >
                 <img
+                  v-if="!isPdf(item.path)"
                   :src="item.url"
                   :alt="item.name"
                   class="h-9 w-9 shrink-0 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] object-cover"
                 />
+                <span
+                  v-else
+                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] text-[var(--lumin-color-text-secondary)]"
+                  aria-hidden="true"
+                >
+                  <FileText :size="16" />
+                </span>
                 <span class="min-w-0 flex-1">
                   <span class="block truncate text-sm text-[var(--lumin-color-text)]">{{
                     item.name
                   }}</span>
                   <span class="text-xs text-[var(--lumin-color-text-secondary)]">
-                    {{
-                      item.width !== undefined
-                        ? `${item.width}×${item.height}`
-                        : STATUS_LABEL[item.status]
-                    }}
+                    {{ itemSizeLabel(item) }}
                   </span>
                 </span>
                 <NTag size="small" :type="STATUS_TAG[item.status]">{{
@@ -485,7 +504,7 @@ onUnmounted(() => {
             </li>
           </ul>
           <p v-if="items.length === 0" class="text-sm text-[var(--lumin-color-text-secondary)]">
-            列表为空：添加图片后点击「开始识别」。
+            列表为空：添加文件后点击「开始识别」。
           </p>
         </template>
 
@@ -500,15 +519,26 @@ onUnmounted(() => {
         <template v-if="selected !== null">
           <div class="flex items-start gap-3">
             <img
+              v-if="!isPdf(selected.path)"
               :src="selected.url"
               :alt="selected.name"
               class="max-h-40 max-w-56 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] object-contain"
             />
+            <span
+              v-else
+              class="flex h-24 w-20 shrink-0 items-center justify-center rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] text-[var(--lumin-color-text-secondary)]"
+              aria-hidden="true"
+            >
+              <FileText :size="28" />
+            </span>
             <div
               class="flex min-w-0 flex-col gap-1 text-sm text-[var(--lumin-color-text-secondary)]"
             >
               <span class="break-all text-[var(--lumin-color-text)]">{{ selected.name }}</span>
               <span v-if="selected.status === 'done'">
+                <template v-if="selected.pageCount !== undefined && selected.pageCount > 1">
+                  {{ selected.pageCount }} 页 ·
+                </template>
                 {{ selected.width }}×{{ selected.height }} 像素 · {{ charCount }} 字
               </span>
               <span v-if="selected.status === 'failed' && selected.error !== undefined">
@@ -581,8 +611,8 @@ onUnmounted(() => {
         <p v-else class="text-sm text-[var(--lumin-color-text-secondary)]">
           {{
             mode === 'single'
-              ? '拖拽或选择一张图片，将自动开始识别。'
-              : '在左侧选择图片查看识别结果；未识别的图片会显示状态标签。'
+              ? '拖拽或选择文件（图片 / PDF），将自动开始识别。'
+              : '在左侧选择文件查看识别结果；未识别的文件会显示状态标签。'
           }}
         </p>
       </section>
@@ -595,7 +625,7 @@ onUnmounted(() => {
         @click="startPending"
       >
         <template #icon><RefreshCw :size="16" /></template>
-        开始识别（{{ pendingItems.length }} 张）
+        开始识别（{{ pendingItems.length }} 个）
       </NButton>
       <NButton v-if="failedItems.length > 0 && phase !== 'running'" @click="retryFailed">
         <template #icon><RefreshCw :size="16" /></template>

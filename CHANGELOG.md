@@ -7,6 +7,7 @@
 
 ### Added
 
+- M64 OCR PDF 输入：`@lumin/tool-ocr-text` 单张/批量扩展名白名单加 `.pdf`，`ocr-kit` 逐页渲染 + 逐页识别，多页非空文本按「===== 第 N 页 =====」分段（空白页不产生空段）；单 PDF ≤30 页（`OCR_PDF_TOO_MANY_PAGES`，渲染前判定、单项失败不中断整批），结果项增 `pageCount`、详情显示「N 页 · W×H 像素」；PDF 列表/详情用文件图标占位不破图，进度含页级文案；`ocr-kit` 新增 `maxPages` 选项与 `PDF_TOO_MANY_PAGES` 码；文案「张」统一为「个文件」；零新增依赖与运行时资产；单测（schema/recognize/node/errors）+ e2e 第 5 例（合成 2 页 PDF）；spec §0/§2/§3/§5/§8/§10、smoke §6、plan Q66/§4.64/M64 已同步
 - M0 阶段 0–1：版本基线锁定（全部最新稳定版 + 精确钉版；TypeScript 7.0.2 实测因 `typescript-eslint` 未适配按方案 A 回退至 6.0.3，例外记录于 plan.md §1.1）；pnpm 12 + Turborepo 工作区与质量工具链（ESLint 10 / Vitest 5 / dependency-cruiser / Prettier）
 - M0 阶段 2：`shared` IPC 信封/错误码/任务事件 schema 与 `plugin-api` 插拔契约（ToolManifest / MainPluginContext / LuminBridge）；dependency-cruiser 五条架构边界规则（R7）
 - M0 阶段 3：`desktop` 三端骨架——安全基线（CSP 双保险/导航拦截/单实例锁）、`lumin:invoke` 单通道 IPC 总线、任务队列（并发上限/取消）、动态路由侧边栏与 example 占位工具（三段式长任务）；设置原子写 + electron-log 滚动日志

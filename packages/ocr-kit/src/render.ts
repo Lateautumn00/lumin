@@ -42,6 +42,8 @@ export interface RenderOptions {
   rotation?: OcrRotation
   /** PDF 渲染倍率；缺省 `DEFAULT_RENDER_SCALE`（图片输入不使用） */
   scale?: number
+  /** PDF 页数上限：超过则抛 `PDF_TOO_MANY_PAGES`（渲染前判定，避免一次性渲染过多页） */
+  maxPages?: number
   /** 渲染进度：已渲染页数 / 总页数（detect 侧 render 阶段 progress） */
   onPage?: (done: number, total: number) => void
 }
@@ -93,6 +95,9 @@ async function renderPdf(inputPath: string, options: RenderOptions): Promise<Ren
 
   try {
     const total = opened.pageCount
+    if (options.maxPages !== undefined && total > options.maxPages) {
+      throw ocrToolError('PDF_TOO_MANY_PAGES', `共 ${total} 页，上限 ${options.maxPages} 页`)
+    }
     options.onPage?.(0, total)
     const wanted = options.pageNumbers ?? Array.from({ length: total }, (_, index) => index + 1)
     const out: RenderedPage[] = []

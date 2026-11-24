@@ -1,26 +1,38 @@
+/**
+ * @file ocr-text IPC schema（recognize / export / config）与输入常量
+ * @author cuilanchao
+ * @date 2026-11-20
+ * @description 扩展名白名单（图片 + PDF）、数量/体积/页数上限、入参与回包 zod 校验
+ */
 import { z } from 'zod'
 
-/** 输入图片扩展名白名单（.png/.jpg/.jpeg/.webp，大小写不敏感） */
-export const IMAGE_INPUT_RE = /\.(png|jpe?g|webp)$/i
+/** 输入文件扩展名白名单（.png/.jpg/.jpeg/.webp/.pdf，大小写不敏感） */
+export const INPUT_RE = /\.(png|jpe?g|webp|pdf)$/i
 
-/** 单批图片数量上限 */
+/** 单批文件数量上限 */
 export const MAX_BATCH_FILES = 50
 
-/** 单张图片体积上限（20MB；主进程 stat 后判定 OCR_IMAGE_TOO_LARGE） */
+/** 单个文件体积上限（20MB；主进程 stat 后判定 OCR_IMAGE_TOO_LARGE） */
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024
+
+/** 单个 PDF 页数上限（ocr-kit 渲染前判定，超限 → OCR_PDF_TOO_MANY_PAGES） */
+export const MAX_PDF_PAGES = 30
 
 /** 单项导出文本长度上限（防御异常载荷） */
 export const MAX_TEXT_LENGTH = 1_000_000
 
-const imagePathSchema = z.string().min(1).regex(IMAGE_INPUT_RE, '仅支持 PNG/JPG/WebP 图片')
+const inputPathSchema = z
+  .string()
+  .min(1)
+  .regex(INPUT_RE, '仅支持 PNG/JPG/WebP 图片或 PDF 文件')
 
-/** `ocr-text:recognize` 入参（1–50 张图片绝对路径，不允许重复） */
+/** `ocr-text:recognize` 入参（1–50 个文件绝对路径，不允许重复） */
 export const recognizePayloadSchema = z.object({
   inputPaths: z
-    .array(imagePathSchema)
-    .min(1, '请至少选择 1 张图片')
-    .max(MAX_BATCH_FILES, `单次最多 ${MAX_BATCH_FILES} 张图片`)
-    .refine((paths) => new Set(paths).size === paths.length, '存在重复的图片路径')
+    .array(inputPathSchema)
+    .min(1, '请至少选择 1 个文件')
+    .max(MAX_BATCH_FILES, `单次最多 ${MAX_BATCH_FILES} 个文件`)
+    .refine((paths) => new Set(paths).size === paths.length, '存在重复的文件路径')
 })
 
 export type RecognizePayload = z.infer<typeof recognizePayloadSchema>
@@ -32,13 +44,15 @@ export const itemErrorSchema = z.object({
   detail: z.string().optional()
 })
 
-/** 单张图片识别结果：成功带文本，失败带结构化错误 */
+/** 单个文件识别结果：成功带文本，失败带结构化错误 */
 export const batchItemResultSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('done'),
     inputPath: z.string().min(1),
     width: z.number().int().positive(),
     height: z.number().int().positive(),
+    /** 识别页数（PDF 多页；图片为 1） */
+    pageCount: z.number().int().positive().optional(),
     text: z.string().min(1)
   }),
   z.object({
@@ -50,7 +64,7 @@ export const batchItemResultSchema = z.discriminatedUnion('status', [
 
 export type BatchItemResult = z.infer<typeof batchItemResultSchema>
 
-/** `ocr-text:recognize` done 回包：与输入同序的逐张结果 */
+/** `ocr-text:recognize` done 回包：与输入同序的逐项结果 */
 export const recognizeResultSchema = z.object({
   items: z.array(batchItemResultSchema).min(1)
 })

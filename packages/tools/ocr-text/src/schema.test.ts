@@ -12,40 +12,48 @@ import {
 } from './schema'
 
 describe('recognizePayloadSchema', () => {
-  it('接受 1–50 张 PNG/JPG/WebP（大小写不敏感、中文/空格路径）', () => {
+  it('接受 1–50 个图片/PDF（大小写不敏感、中文/空格路径）', () => {
     const paths = Array.from(
       { length: MAX_BATCH_FILES },
       (_, index) => `C:\\图片 目录\\第${index}张.PNG`
     )
     expect(recognizePayloadSchema.safeParse({ inputPaths: paths }).success).toBe(true)
-    for (const path of ['a.JPG', 'a.jpeg', 'D:/x/y.JpEg', 'a.webp']) {
+    for (const path of ['a.JPG', 'a.jpeg', 'D:/x/y.JpEg', 'a.webp', 'a.PDF', 'a.Pdf']) {
       expect(recognizePayloadSchema.safeParse({ inputPaths: [path] }).success).toBe(true)
     }
   })
 
-  it('拒绝空数组、超过 50 张、PDF/其他扩展名与重复路径', () => {
+  it('拒绝空数组、超过 50 个、GIF/其他扩展名与重复路径', () => {
     expect(recognizePayloadSchema.safeParse({ inputPaths: [] }).success).toBe(false)
     const tooMany = Array.from({ length: MAX_BATCH_FILES + 1 }, (_, index) => `${index}.png`)
     expect(recognizePayloadSchema.safeParse({ inputPaths: tooMany }).success).toBe(false)
-    expect(recognizePayloadSchema.safeParse({ inputPaths: ['a.pdf'] }).success).toBe(false)
     expect(recognizePayloadSchema.safeParse({ inputPaths: ['a.gif'] }).success).toBe(false)
+    expect(recognizePayloadSchema.safeParse({ inputPaths: ['a.txt'] }).success).toBe(false)
     expect(recognizePayloadSchema.safeParse({ inputPaths: ['a.png', 'a.png'] }).success).toBe(false)
   })
 })
 
 describe('recognizeResultSchema', () => {
-  it('接受成功/失败混合结果', () => {
+  it('接受成功/失败混合结果与多页 pageCount', () => {
     expect(
       recognizeResultSchema.safeParse({
         items: [
           { status: 'done', inputPath: 'a.png', width: 10, height: 10, text: '文字' },
-          { status: 'failed', inputPath: 'b.png', error: { code: 'OCR_NO_TEXT', message: '无文字' } }
+          {
+            status: 'done',
+            inputPath: 'b.pdf',
+            width: 893,
+            height: 1263,
+            pageCount: 3,
+            text: '第 1 页'
+          },
+          { status: 'failed', inputPath: 'c.png', error: { code: 'OCR_NO_TEXT', message: '无文字' } }
         ]
       }).success
     ).toBe(true)
   })
 
-  it('拒绝空结果与缺字段', () => {
+  it('拒绝空结果、缺字段、非法 pageCount', () => {
     expect(recognizeResultSchema.safeParse({ items: [] }).success).toBe(false)
     expect(
       recognizeResultSchema.safeParse({
@@ -54,6 +62,11 @@ describe('recognizeResultSchema', () => {
     ).toBe(false)
     expect(
       recognizeResultSchema.safeParse({ items: [{ status: 'failed', inputPath: 'a.png' }] }).success
+    ).toBe(false)
+    expect(
+      recognizeResultSchema.safeParse({
+        items: [{ status: 'done', inputPath: 'a.pdf', width: 10, height: 10, pageCount: 0, text: 'x' }]
+      }).success
     ).toBe(false)
   })
 })

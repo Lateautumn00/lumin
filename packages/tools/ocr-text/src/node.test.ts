@@ -2,7 +2,7 @@
  * @file node.ts 单测（假 ctx/依赖，不依赖 Electron 与真实 OCR）
  * @author cuilanchao
  * @date 2026-11-20
- * @description recognize 预检/逐个失败不中断/结果同序与错误映射、export 两种模式与写盘失败、
+ * @description recognize 预检/逐个失败不中断/结果同序/PDF 输入与错误映射、export 两种模式与写盘失败、
  *              config 缺省与记忆（spec §5/§6）
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -185,11 +185,18 @@ describe('recognize', () => {
   })
 
   it('非法扩展名/空数组/重复路径 → OCR_INVALID_PAYLOAD 且不触发 worker', async () => {
-    for (const inputPaths of [[], ['a.pdf'], ['a.png', 'a.png']]) {
+    for (const inputPaths of [[], ['a.gif'], ['a.png', 'a.png']]) {
       const harness = createHarness()
       await expectCode(runTask(harness, 'recognize', { inputPaths }), 'OCR_INVALID_PAYLOAD')
       expect(harness.runs).toHaveLength(0)
     }
+  })
+
+  it('PDF 输入通过预检并提交 worker', async () => {
+    const harness = createHarness()
+    const inputPaths = ['C:\\扫描 文件.PDF']
+    await runTask(harness, 'recognize', { inputPaths })
+    expect(harness.runs[0]?.payload).toMatchObject({ inputPaths })
   })
 
   it('单张预检失败保留为失败项，其余继续识别', async () => {
@@ -281,6 +288,9 @@ describe('recognize', () => {
       code: 'OCR_FILE_LOCKED',
       detail: 'EBUSY'
     })
+    expect(
+      mapWorkerError({ code: 'PDF_TOO_MANY_PAGES', message: '页数超限', detail: '共 40 页' })
+    ).toMatchObject({ code: 'OCR_PDF_TOO_MANY_PAGES', detail: '共 40 页' })
     const custom = { code: 'SOMETHING', message: '自定义错误' }
     expect(mapWorkerError(custom)).toBe(custom)
   })

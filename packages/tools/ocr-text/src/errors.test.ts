@@ -10,7 +10,7 @@ describe('toolError', () => {
   it('无 detail 时不带字段', () => {
     expect(toolError('OCR_NO_TEXT')).toEqual({
       code: 'OCR_NO_TEXT',
-      message: '未识别到文字，请换更清晰的图片'
+      message: '未识别到文字，请换更清晰的文件'
     })
   })
 

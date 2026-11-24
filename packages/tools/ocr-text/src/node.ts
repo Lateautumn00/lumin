@@ -2,9 +2,9 @@
  * @file ocr-text 主进程逻辑（recognize 任务 / export / config）
  * @author cuilanchao
  * @date 2026-11-20
- * @description 三段式任务：逐张预检（存在/占用/体积）→ 模型资产校验 → runTask(worker)；
+ * @description 三段式任务：逐项预检（存在/占用/体积）→ 模型资产校验 → runTask(worker)；
  *              预检失败项保留为失败结果，不中断整批。导出走 zod → 冲突命名 → 原子写盘。
- *              依赖可注入，单测不触碰真实 OCR 与磁盘。
+ *              输入支持图片与 PDF（PDF 由 worker 逐页渲染后识别）。依赖可注入，单测不触碰真实 OCR 与磁盘。
  */
 import { existsSync, mkdirSync } from 'node:fs'
 import { access, constants, open, stat } from 'node:fs/promises'
@@ -70,18 +70,29 @@ export interface OcrTextDeps {
 
 /** ocr-kit 错误码 → ocr-text 错误码（renderer 只见本工具语义） */
 const KIT_CODE_MAP: Readonly<
-  Record<string, 'OCR_FILE_NOT_FOUND' | 'OCR_FILE_LOCKED' | 'OCR_INPUT_INVALID'>
+  Record<
+    string,
+    'OCR_FILE_NOT_FOUND' | 'OCR_FILE_LOCKED' | 'OCR_INPUT_INVALID' | 'OCR_PDF_TOO_MANY_PAGES'
+  >
 > = {
   PDF_NOT_FOUND: 'OCR_FILE_NOT_FOUND',
   PDF_LOCKED: 'OCR_FILE_LOCKED',
   PDF_ENCRYPTED: 'OCR_INPUT_INVALID',
   PDF_INVALID: 'OCR_INPUT_INVALID',
+  PDF_TOO_MANY_PAGES: 'OCR_PDF_TOO_MANY_PAGES',
+  OCR_INPUT_INVALID: 'OCR_INPUT_INVALID',
   INVALID_PAYLOAD: 'OCR_INPUT_INVALID'
+}
+
+/** 结构化错误码归一：命中 KIT_CODE_MAP 时改用本工具码与文案，保留 detail；否则原样返回 */
+function normalizeKitError(err: StructuredError): StructuredError {
+  const mapped = KIT_CODE_MAP[err.code]
+  return mapped === undefined ? err : toolError(mapped, err.detail)
 }
 
 /**
  * worker / 渲染错误映射：超时 → OP_TIMEOUT；崩溃 → OCR_FAILED；
- * ocr-kit 的 PDF_* 码归一为图片语义；其余结构化错误原样透传（队列再归一 CANCELLED）。
+ * ocr-kit 的 PDF_* 码归一为本工具语义（页数超限单独映射）；其余结构化错误原样透传（队列再归一 CANCELLED）。
  */
 export function mapWorkerError(err: unknown): unknown {
   if (err instanceof TaskTimeoutError) return toolError('OP_TIMEOUT')
@@ -90,14 +101,11 @@ export function mapWorkerError(err: unknown): unknown {
     const detail = cause instanceof Error ? cause.message : String(cause ?? err.message)
     return toolError('OCR_FAILED', tail(detail))
   }
-  if (isStructuredError(err)) {
-    const mapped = KIT_CODE_MAP[err.code]
-    if (mapped !== undefined) return toolError(mapped, err.detail)
-  }
+  if (isStructuredError(err)) return normalizeKitError(err)
   return err
 }
 
-/** 单张预检失败 → 结构化错误（ENOENT → 不存在，EBUSY/EPERM/EACCES → 占用） */
+/** 单项预检失败 → 结构化错误（ENOENT → 不存在，EBUSY/EPERM/EACCES → 占用） */
 export function classifyInputError(err: unknown): StructuredError {
   const kind = classifyPrecheckError(err)
   const detail = errnoCode(err)
@@ -123,8 +131,8 @@ export function registerWith(ctx: MainPluginContext, deps: OcrTextDeps): void {
   const exportFs = deps.fs ?? defaultExportFs
   const defaultOutputDir = join(ctx.paths.userData, 'ocr-text')
 
-  /** 单张图片预检：可读 + 未独占 + 体积上限；失败返回结构化错误 */
-  async function precheckImage(inputPath: string): Promise<StructuredError | null> {
+  /** 单个文件预检：可读 + 未独占 + 体积上限；失败返回结构化错误 */
+  async function precheckFile(inputPath: string): Promise<StructuredError | null> {
     try {
       await deps.checkReadable(inputPath)
       await deps.checkExclusive(inputPath)
@@ -162,7 +170,7 @@ export function registerWith(ctx: MainPluginContext, deps: OcrTextDeps): void {
     const total = parsed.inputPaths.length
     const prechecked: { path: string; error: StructuredError | null }[] = []
 
-    emit({ kind: 'progress', stage: 'precheck', current: 0, total, message: '检查图片…' })
+    emit({ kind: 'progress', stage: 'precheck', current: 0, total, message: '检查文件…' })
     for (let index = 0; index < total; index += 1) {
       const inputPath = parsed.inputPaths[index]
       if (inputPath === undefined) continue
@@ -171,9 +179,9 @@ export function registerWith(ctx: MainPluginContext, deps: OcrTextDeps): void {
         stage: 'precheck',
         current: index,
         total,
-        message: `检查第 ${index + 1}/${total} 张…`
+        message: `检查第 ${index + 1}/${total} 个…`
       })
-      prechecked.push({ path: inputPath, error: await precheckImage(inputPath) })
+      prechecked.push({ path: inputPath, error: await precheckFile(inputPath) })
     }
 
     const validPaths = prechecked.filter((item) => item.error === null).map((item) => item.path)
@@ -201,10 +209,12 @@ export function registerWith(ctx: MainPluginContext, deps: OcrTextDeps): void {
         return {
           status: 'failed',
           inputPath: item.path,
-          error: toolError('OCR_FAILED', '缺少该图片的识别结果')
+          error: toolError('OCR_FAILED', '缺少该文件的识别结果')
         }
       }
-      return result
+      return result.status === 'failed'
+        ? { ...result, error: normalizeKitError(result.error) }
+        : result
     })
     return recognizeResultSchema.parse({ items })
   })
