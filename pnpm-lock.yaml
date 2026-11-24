@@ -254,6 +254,9 @@ importers:
       '@lumin/tool-calendar':
         specifier: workspace:*
         version: link:../../packages/tools/calendar
+      '@lumin/tool-clipboard-history':
+        specifier: workspace:*
+        version: link:../../packages/tools/clipboard-history
       '@lumin/tool-color-toolbox':
         specifier: workspace:*
         version: link:../../packages/tools/color-toolbox
@@ -499,6 +502,34 @@ importers:
       vue:
         specifier: 3.5.45
         version: 3.5.45(typescript@6.0.3)
+
+  packages/tools/clipboard-history:
+    dependencies:
+      '@lucide/vue':
+        specifier: 1.72.0
+        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
+      '@lumin/node-kit':
+        specifier: workspace:*
+        version: link:../../node-kit
+      '@lumin/plugin-api':
+        specifier: workspace:*
+        version: link:../../plugin-api
+      '@lumin/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      naive-ui:
+        specifier: 2.45.3
+        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
+      vue:
+        specifier: 3.5.45
+        version: 3.5.45(typescript@6.0.3)
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      electron:
+        specifier: 45.3.1
+        version: 45.3.1(supports-color@7.2.0)
 
   packages/tools/color-toolbox:
     dependencies:

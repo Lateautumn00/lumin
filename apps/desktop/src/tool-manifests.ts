@@ -1,6 +1,7 @@
 import type { ToolManifest } from '@lumin/plugin-api'
 import { manifest as calculatorManifest } from '@lumin/tool-calculator/manifest'
 import { manifest as calendarManifest } from '@lumin/tool-calendar/manifest'
+import { manifest as clipboardHistoryManifest } from '@lumin/tool-clipboard-history/manifest'
 import { manifest as colorToolboxManifest } from '@lumin/tool-color-toolbox/manifest'
 import { manifest as devToolboxManifest } from '@lumin/tool-dev-toolbox/manifest'
 import { manifest as diskAnalyzerManifest } from '@lumin/tool-disk-analyzer/manifest'
@@ -41,6 +42,7 @@ import { manifest as zipToolManifest } from '@lumin/tool-zip-tool/manifest'
 export const toolManifests: readonly ToolManifest[] = [
   calculatorManifest,
   calendarManifest,
+  clipboardHistoryManifest,
   unitConverterManifest,
   lifeCalculatorManifest,
   docx2pdfManifest,

@@ -1,4 +1,5 @@
 import type { RegisterMain } from '@lumin/plugin-api'
+import { registerMain as clipboardHistoryRegisterMain } from '@lumin/tool-clipboard-history/node'
 import { registerMain as colorToolboxRegisterMain } from '@lumin/tool-color-toolbox/node'
 import { registerMain as devToolboxRegisterMain } from '@lumin/tool-dev-toolbox/node'
 import { registerMain as diskAnalyzerRegisterMain } from '@lumin/tool-disk-analyzer/node'
@@ -30,6 +31,7 @@ import { registerMain as videoPlayerRegisterMain } from '@lumin/tool-video-playe
 import { registerMain as zipToolRegisterMain } from '@lumin/tool-zip-tool/node'
 
 export const toolMains: Readonly<Record<string, RegisterMain>> = {
+  'clipboard-history': clipboardHistoryRegisterMain,
   'color-toolbox': colorToolboxRegisterMain,
   'dev-toolbox': devToolboxRegisterMain,
   'disk-analyzer': diskAnalyzerRegisterMain,

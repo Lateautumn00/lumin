@@ -318,6 +318,18 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/calendar/src/renderer/$1')
   },
   {
+    find: /^@lumin\/tool-clipboard-history\/manifest$/,
+    replacement: r('../../packages/tools/clipboard-history/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-clipboard-history\/node$/,
+    replacement: r('../../packages/tools/clipboard-history/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-clipboard-history\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/clipboard-history/src/renderer/$1')
+  },
+  {
     find: /^@lumin\/tool-password-generator\/manifest$/,
     replacement: r('../../packages/tools/password-generator/src/manifest.ts')
   },
