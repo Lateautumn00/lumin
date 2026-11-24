@@ -71,6 +71,8 @@
 | Q58 | 音视频格式转换增强（M57）           | **在既有 `media-convert` 扩展「音频/视频转格式」（2026-11-23 用户选定，M57，不新建工具包）**：① 视频目标容器 3→8（补 `mov/avi/flv/ts/m4v`），音频目标 5→7（补 `aac/opus`）；② 新增换封装（remux，`-c copy`，输出 `{stem}.remux.{ext}` 防覆盖）、H.265 选择（仅 mp4/m4v/mov/mkv 暴露）、分辨率/帧率/视频码率自定义、去音轨（`-an`）；③ 音频互转补采样率（44100/48000）与声道（单/立体声）；④ 容器×编码兼容矩阵纯函数 `compat.ts`，不兼容 → 新错误码 `MC_CONTAINER_INCOMPATIBLE`（单文件失败不中断批次）、非法组合 → `MC_PARAM_INVALID`；**不做** wmv/3gp/ogv 目标、GIF、AV1（本机 ffmpeg 无软件 AV1 编码器）、硬件加速、字幕、剪辑、批量并发（保持串行）；**零新包、零新增依赖、零新增二进制**（继续用 `ffmpeg.exe` 6.1.1），通道不新增（复用 `probe/process/config/set-output-dir`）；详见 §4.57 |
 | Q59 | 日历（M58）                         | **新增独立工具包 `calendar`（2026-11-23 用户拍板）**：公历/农历月历（恒 42 格、周一起始、节气与节日标记）、法定节假日与调休（本地 `holidays.json` 2023–2027 权威导出全量展开优先 + `HolidayUtil` 兜底双轨）、黄历（宜/忌、建除、值神、冲煞、吉神/凶煞）、用户纪念日（公历 + 农历两种每年重复，闰月/月长降级链，倒数日与 N 周年，localStorage 持久化）；纯 renderer、零 IPC；新增依赖 `lunar-javascript` 1.7.8（MIT、零传递依赖，精确钉版、动态 import 独立分包，无内置类型 → 手写 ambient `d.ts` 覆盖所用子集）；**不用 NCalendar**（浅层插槽改样式需 `:deep()` 违反 AGENTS §5.1）→ 自绘 `grid grid-cols-7`；详见 §4.58                                                                                                                                                                          |
 | Q60 | 壳级 UX（2026-11-23 用户拍板） | 移除原生菜单栏（`Menu.setApplicationMenu(null)`，dev 经 `before-input-event` 保留 F12/Ctrl+Shift+I/F5/Ctrl+R）；启动默认工具 = `calendar`（tool-manifests `DEFAULT_TOOL_ID`，router 回退首工具） |
+| Q61 | 剪贴板历史（M59，2026-11-23 用户拍板） | **新增独立工具包 `clipboard-history`，形态 = 工具页内轮询**：仅打开本工具页时每 1s 经 sync 通道读主进程 `clipboard`，文本变化才入库（文本 V1，图片不做）；上限 500 条 + 置顶永不淘汰、搜索/单条删除/清空；`userData/clipboard-history.json` 原子持久化（node-kit `writeAtomic`）；**零全局快捷键、零托盘、壳零改动、零新增依赖**；错误码 `CH_*`；详见 §4.59 |
+| Q62 | 速赢档一（M60，2026-11-23 用户全选四组） | **四既有工具 Tab 扩展（不新建包、纯 renderer、零 IPC、零新增依赖）**：① `text-toolbox` +「URL 编码」（组件级/完整编码、编码/解码/交换/再执行）与「SQL 格式化」（美化/压缩，自写 tokenizer 零依赖）；② `time-toolbox` +「日期计算器」（间隔：总天数/工作日仅周末口径；加减：天/周/月/年日历进位、日溢出钳制月末）；③ `dev-toolbox` +「进制与位运算」（2/8/10/16 BigInt 互转 + 与/或/异或/非）；④ `misc-toolbox` +「中文信息」（脱敏预设、身份证 18 位校验+生日+性别、金额转人民币大写）；chunk 均 <200KB gzip；详见 §4.60 |
 | —   | 硬约束                              | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -808,6 +810,27 @@ lumin/
 
 ---
 
+### 4.59 剪贴板历史（M59，2026-11-23 R8 登记）
+
+- **形态拍板（Q61）**：工具页内轮询——**仅本工具页挂载时**每 1s sync 通道 `clipboard-history:poll` 读主进程 `clipboard.readText()`；与头部条目相同则跳过，否则新条目前插；`onUnmounted` 停轮询。**不做**：图片、全局快捷键、常驻后台、托盘浮窗（下一期候选）。
+- **存储**：主进程内存表 + `userData/clipboard-history.json`（node-kit `writeAtomic` 原子写，保存防抖 500ms）；上限 **500 条**（淘汰尾部未置顶项，**置顶永不淘汰**并排最前）；条目 `{ id: crypto.randomUUID(), text, createdAt, pinned }`。
+- **通道（5，全 sync + zod）**：`list` 全量（置顶在前、按时间倒序）、`poll`（变化→入库返回新条目，无变化→`null`）、`pin` `{id}` 置顶切换、`remove` `{id}`、`clear` 全清（含置顶）。
+- **限值**：单条文本 ≤100KB（超出跳过并一次性提示）；搜索词 ≤64 字符；持久化文件损坏 → 重建空表（告警日志）。
+- **字段级 UI**：搜索框（子串、忽略大小写实时过滤）；条目卡 = 3 行截断预览 + 字数/行数徽标 + 相对时间 + 操作（复制回写剪贴板并置顶前移、置顶/取消、删除）；顶栏 = 搜索 + 清空（`NPopconfirm` 二次确认）；空态 `NEmpty`「复制任意文本后自动出现在这里」；报错态 `CH_STORAGE_FAILED` → 中文文案 + 重试（内存态继续可用）；首载 `NSpin` 瞬时（同步通道豁免口径）。
+- **壳接线 6 处**（照 calendar 模板）：vite alias ×2、desktop workspace 依赖、`tool-manifests.ts` 1 行、`tools/clipboard-history.vue` 薄壳、AppSidebar iconMap `'clipboard-list': ClipboardList`、根 vitest 三文件阈值；manifest `category: 'text'`、`order: 65`、`icon: 'clipboard-list'`。
+- **验收**：纯函数（入库去重、上限淘汰、置顶排序、搜索过滤、相对时间）单测 ≥80%；e2e `clipboard-history-smoke`：写剪贴板→轮询入库→复制/置顶/删除/清空→重启 `list` 恢复；R2 八类记入 `docs/smoke/clipboard-history.md`；chunk <200KB gzip；`pnpm gate` 全绿。
+
+### 4.60 速赢档一（M60，2026-11-23 R8 登记）
+
+- **总则（Q62）**：四组全部纯 renderer、零 IPC、零新增依赖；均为既有工具内新增页签；错误码沿用各工具既有前缀；限包覆盖率 ≥80%、chunk <200KB gzip。
+- **text-toolbox +「URL 编码」「SQL 格式化」**：URL —— 模式二选（组件级 `encodeURIComponent` / 完整编码 RFC 3986 额外 `!'()*`）、按钮 编码/解码/交换/再执行一次（多重编解码）、解码遇非法 `%` 序列 → `TT_INVALID_INPUT` 定位到首个非法处；SQL —— 美化（子句级换行 + 关键字大写 + 2 空格缩进）与压缩（空白折叠单空格），自写 tokenizer 保护字符串字面量/注释/反引号标识符，空输入走空态提示。
+- **time-toolbox +「日期计算器」**：子模式「间隔」= 起/止日期 → 总天数、自然周数、工作日天数（**仅跳过周六日口径**，法定节假日调休列为后续候选）、含头含尾开关；「加减」= 基准日期 ± N（天/周/月/年，月年日历进位、日溢出钳制月末 1/31+1月→2/28）→ 结果日期 + 星期；非法日期 → `TT_INVALID_INPUT`。
+- **dev-toolbox +「进制与位运算」**：互转 = 输入（`0x/0b/0o` 前缀、下划线/空格分组容忍）+ 当前进制 → 2/8/10/16 四结果（BigInt，非负整数 ≤2^63-1，负数仅十进制允许）；位运算 = A AND/OR/XOR/NOT B（BigInt 语义）→ 结果同步四进制；非法字符/超范围 → dev 工具既有错误码（实现时沿用其前缀）。
+- **misc-toolbox +「中文信息」**：三卡片区——数据脱敏（预设：手机中四位、身份证前四后四、邮箱用户名首字符 + `***`、姓名首字 + `*`；逐规则结果 + 复制）、身份证（18 位 GB 11643 校验位 + 出生日期 + 顺序码性别；位数/校验失败 → `MT_*` 新码）、金额大写（数字 → 人民币整零拾佰仟万亿角分大写，负数「负」前缀，非数字或整数部分 >16 位 → `MT_*` 码）；**不做**归属地号段表（体积，候选）。
+- **验收**：四包新增单测（URL 编解码往返与非法序列、SQL tokenizer 保护与两态、日期间隔/进位/含头含尾、进制互转与位运算、脱敏向量、身份证校验位向量、金额大写 12 锚点）；e2e 每工具 ≥1 用例追加；R2 八类映射记入四份 smoke 增量节；`pnpm gate` 全绿；文档五处同步。
+
+---
+
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
 
 ### 5.1 精选 8 份 → AGENTS.md（已生成于根目录）
@@ -907,6 +930,10 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M56 v5.5** | 三工具（§4.56，2026-11-22）：新增 `file-preview`（文本/Markdown/HTML/JSON/CSV/PDF/图片/Office 三件套）、`text-editor`（CodeMirror 6）、`video-player`（原生 mp4/webm/ogg）；公共上提 `node-kit/office`、`ui/markdown`、`shared/csv`、`shared/text-file`；新增 CodeMirror 6 + iconv-lite | §4.56 验收；每包限包覆盖率 ≥80%；三 e2e 套件；R2 八类；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 3–4 天 |
 | **M57 v5.6** | 音视频格式转换增强（§4.57，2026-11-23）：`media-convert` 视频目标 3→8 容器、音频目标 5→7，新增 remux（`-c copy` + `.remux` 中缀）、H.265、分辨率/帧率/视频码率、去音轨、采样率/声道；兼容矩阵纯函数 `compat.ts` + 新错误码 `MC_CONTAINER_INCOMPATIBLE`；零新增依赖，通道不新增 | §4.57 验收；限包覆盖率 ≥80%；e2e 格式矩阵 + remux；R2 八类；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 1–2 天 |
 | **M58 v5.7** | 日历（§4.58，2026-11-23）：新增 `calendar` —— 公历/农历月历（节气与节日标记）、法定节假日与调休（双轨本地数据）、黄历宜忌/建除/值神/冲煞、公历与农历纪念日（倒数日与周年，localStorage）；纯 renderer、零 IPC；新增 `lunar-javascript` 1.7.8（动态分包，手写 d.ts） | §4.58 验收；单测 36；e2e 5/5；限包覆盖率 ≥80%；R2 八类；增量 123,405 B gzip < 200KB；`pnpm gate` 全绿；文档五处同步 | 1–2 天 |
+
+| **M59 v5.8** | 剪贴板历史（§4.59，2026-11-23）：新增 `clipboard-history` —— 工具页内每 1s 轮询 clipboard，文本条目上限 500 + 置顶永不淘汰，搜索/复制/删除/清空，`userData` JSON 原子持久化；5 个 sync 通道（list/poll/pin/remove/clear），错误码 `CH_*`；零全局快捷键、零托盘、壳零改动、零新增依赖 | §4.59 验收；纯函数单测 ≥80%；e2e 剪贴板入库/置顶/持久化往返；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 1 天 |
+
+| **M60 v5.9** | 速赢档一（§4.60，2026-11-23）：四工具 Tab 扩展——text-toolbox +URL 编码/SQL 格式化两页签；time-toolbox +日期计算器页签；dev-toolbox +进制与位运算页签；misc-toolbox +中文信息页签（脱敏/身份证/金额大写）；全部纯 renderer、零 IPC、零新增依赖 | §4.60 验收；每包限包覆盖率 ≥80%；新增单测（编解码往返/日期进位/BigInt 互转/校验向量与金额锚点）；e2e 每工具 ≥1 用例；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 1–2 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 
