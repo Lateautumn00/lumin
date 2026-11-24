@@ -25,11 +25,19 @@ describe('toolError', () => {
       detail: 'ENOSPC'
     })
   })
+
+  it('图片文件丢失中文文案', () => {
+    expect(toolError('CH_IMAGE_MISSING')).toEqual({
+      code: 'CH_IMAGE_MISSING',
+      message: '图片文件已丢失'
+    })
+  })
 })
 
 describe('isRetryable', () => {
-  it('仅存储读写失败可重试', () => {
+  it('存储读写失败与图片文件丢失可重试', () => {
     expect(isRetryable('CH_STORAGE_FAILED')).toBe(true)
+    expect(isRetryable('CH_IMAGE_MISSING')).toBe(true)
     expect(isRetryable('INVALID_INPUT')).toBe(false)
     expect(isRetryable('UNKNOWN')).toBe(false)
   })

@@ -1,15 +1,19 @@
 /**
  * @file entries.test.ts 轮询判定与展示纯函数单测（R1：核心纯函数 ≥80%）
  * @author cuilanchao
- * @date 2026-11-23
+ * @date 2026-11-24
  */
 import { describe, expect, it } from 'vitest'
 import {
+  evictImagesOverLimit,
   evictOverLimit,
   filterEntries,
+  formatBytes,
+  formatImageStats,
   formatRelativeTime,
   formatTextStats,
   ingestClipboard,
+  ingestClipboardImage,
   moveToFront,
   removeEntry,
   sortEntries,
@@ -18,12 +22,42 @@ import {
   upsertEntry,
   utf8ByteLength
 } from './entries'
-import { MAX_ENTRIES, MAX_TEXT_BYTES, type Entry } from './schema'
+import {
+  MAX_ENTRIES,
+  MAX_IMAGE_BYTES,
+  MAX_IMAGE_ENTRIES,
+  MAX_TEXT_BYTES,
+  type Entry
+} from './schema'
 
 const NOW = 1_700_000_000_000
 
 function entry(partial: Partial<Entry> & { id: string }): Entry {
-  return { text: `文本-${partial.id}`, createdAt: NOW, pinned: false, ...partial }
+  return { text: `文本-${partial.id}`, createdAt: NOW, pinned: false, type: 'text', ...partial }
+}
+
+/** 图片条目工厂（text 恒空串，附带图片字段） */
+function imageEntry(
+  partial: Partial<Entry> & { id: string; sha1: string; createdAt: number }
+): Entry {
+  return {
+    text: '',
+    pinned: false,
+    type: 'image',
+    width: 1920,
+    height: 1080,
+    bytes: 2048,
+    thumb: 'data:image/png;base64,thumb',
+    ...partial
+  }
+}
+
+const IMAGE_META = {
+  sha1: 'sha-a',
+  width: 800,
+  height: 600,
+  bytes: 4096,
+  thumb: 'data:image/png;base64,x'
 }
 
 describe('utf8ByteLength', () => {
@@ -109,7 +143,13 @@ describe('ingestClipboard', () => {
       entry({ id: 'dup', text: '重复', createdAt: 100 })
     ]
     const outcome = ingestClipboard(items, '重复', NOW, 'new')
-    expect(outcome.entry).toEqual({ id: 'dup', text: '重复', createdAt: NOW, pinned: false })
+    expect(outcome.entry).toEqual({
+      id: 'dup',
+      text: '重复',
+      createdAt: NOW,
+      pinned: false,
+      type: 'text'
+    })
     expect(outcome.items).toHaveLength(2)
     expect(outcome.items[0]?.id).toBe('dup')
   })
@@ -142,11 +182,144 @@ describe('ingestClipboard', () => {
   })
 })
 
+describe('ingestClipboardImage（M61 图片分支）', () => {
+  it('新图片条目前插：text 恒空串、图片字段齐全、type=image', () => {
+    const items = [entry({ id: 't', createdAt: 100 })]
+    const outcome = ingestClipboardImage(items, IMAGE_META, NOW, 'img-new')
+    expect(outcome.entry).toEqual({
+      id: 'img-new',
+      text: '',
+      createdAt: NOW,
+      pinned: false,
+      type: 'image',
+      ...IMAGE_META
+    })
+    expect(outcome.items.map((e) => e.id)).toEqual(['img-new', 't'])
+    expect(outcome.skipped).toBeUndefined()
+  })
+
+  it('与头部图片条目 SHA-1 相同 → 跳过（去重，不新增）', () => {
+    const items = [
+      imageEntry({ id: 'head-img', sha1: 'sha-a', createdAt: 300 }),
+      imageEntry({ id: 'other-img', sha1: 'sha-b', createdAt: 200 }),
+      entry({ id: 't', createdAt: 100 })
+    ]
+    const outcome = ingestClipboardImage(items, IMAGE_META, NOW, 'img-new')
+    expect(outcome.entry).toBeNull()
+    expect(outcome.items).toHaveLength(3)
+  })
+
+  it('仅与非头部图片 SHA-1 相同（头部不同）→ 按新条目插入', () => {
+    const items = [
+      imageEntry({ id: 'head-img', sha1: 'sha-b', createdAt: 300 }),
+      imageEntry({ id: 'dup-img', sha1: 'sha-a', createdAt: 200 })
+    ]
+    const outcome = ingestClipboardImage(items, IMAGE_META, NOW, 'img-new')
+    expect(outcome.entry?.id).toBe('img-new')
+    expect(outcome.items).toHaveLength(3)
+  })
+
+  it('头部为文本条目时按首个图片条目判重', () => {
+    const items = [
+      entry({ id: 't', createdAt: 400 }),
+      imageEntry({ id: 'img', sha1: 'sha-a', createdAt: 300 })
+    ]
+    expect(ingestClipboardImage(items, IMAGE_META, NOW, 'img-new').entry).toBeNull()
+  })
+
+  it('>5MB → skipped TOO_LARGE 且不入库', () => {
+    const outcome = ingestClipboardImage(
+      [],
+      { ...IMAGE_META, bytes: MAX_IMAGE_BYTES + 1 },
+      NOW,
+      'img-new'
+    )
+    expect(outcome.skipped).toBe('TOO_LARGE')
+    expect(outcome.entry).toBeNull()
+    expect(outcome.items).toHaveLength(0)
+  })
+
+  it('恰好 5MB 入库（上限边界）', () => {
+    const outcome = ingestClipboardImage(
+      [],
+      { ...IMAGE_META, bytes: MAX_IMAGE_BYTES },
+      NOW,
+      'img-new'
+    )
+    expect(outcome.entry?.bytes).toBe(MAX_IMAGE_BYTES)
+    expect(outcome.skipped).toBeUndefined()
+  })
+
+  it('满 100 张时新图片挤掉最旧未置顶图片（文本条目不受影响）', () => {
+    const images = Array.from({ length: MAX_IMAGE_ENTRIES }, (_, i) =>
+      imageEntry({ id: `i${i}`, sha1: `sha-${i}`, createdAt: MAX_IMAGE_ENTRIES - i })
+    )
+    const texts = [entry({ id: 't', createdAt: 1 })]
+    const outcome = ingestClipboardImage([...images, ...texts], IMAGE_META, NOW, 'img-new')
+    expect(outcome.items.filter((e) => e.type === 'image')).toHaveLength(MAX_IMAGE_ENTRIES)
+    expect(outcome.items.filter((e) => e.type === 'text')).toHaveLength(1)
+    expect(outcome.items.some((e) => e.id === 'img-new')).toBe(true)
+    // 最旧（createdAt 最小 = i99）未置顶图片被淘汰，最新 i0 保留
+    expect(outcome.items.some((e) => e.id === 'i99')).toBe(false)
+    expect(outcome.items.some((e) => e.id === 'i0')).toBe(true)
+  })
+
+  it('图片置顶永不淘汰（最旧未置顶图片先出）', () => {
+    const images = Array.from({ length: MAX_IMAGE_ENTRIES }, (_, i) =>
+      imageEntry({
+        id: `i${i}`,
+        sha1: `sha-${i}`,
+        createdAt: MAX_IMAGE_ENTRIES - i,
+        pinned: i === 0
+      })
+    )
+    const outcome = ingestClipboardImage(images, IMAGE_META, NOW, 'img-new')
+    expect(outcome.items.filter((e) => e.type === 'image')).toHaveLength(MAX_IMAGE_ENTRIES)
+    expect(outcome.items.some((e) => e.id === 'i0')).toBe(true)
+    expect(outcome.items.some((e) => e.id === 'i99')).toBe(false)
+    expect(outcome.items.some((e) => e.id === 'img-new')).toBe(true)
+  })
+})
+
+describe('evictImagesOverLimit', () => {
+  it('未超上限原样返回', () => {
+    const items = Array.from({ length: MAX_IMAGE_ENTRIES }, (_, i) =>
+      imageEntry({ id: `i${i}`, sha1: `sha-${i}`, createdAt: i })
+    )
+    expect(evictImagesOverLimit(items)).toHaveLength(MAX_IMAGE_ENTRIES)
+  })
+
+  it('图片全为置顶时不淘汰（置顶永不淘汰）', () => {
+    const items = Array.from({ length: MAX_IMAGE_ENTRIES + 1 }, (_, i) =>
+      imageEntry({ id: `p${i}`, sha1: `sha-${i}`, createdAt: i, pinned: true })
+    )
+    expect(evictImagesOverLimit(items)).toHaveLength(MAX_IMAGE_ENTRIES + 1)
+  })
+
+  it('文本条目超限不触发图片淘汰（独立计数）', () => {
+    const items = [
+      ...Array.from({ length: MAX_ENTRIES + 1 }, (_, i) =>
+        entry({ id: `t${i}`, createdAt: MAX_ENTRIES + 1 - i })
+      ),
+      imageEntry({ id: 'img', sha1: 'sha-a', createdAt: 1 })
+    ]
+    const next = evictImagesOverLimit(items)
+    expect(next.some((e) => e.id === 'img')).toBe(true)
+    expect(next).toHaveLength(items.length)
+  })
+})
+
 describe('togglePinned / removeEntry / moveToFront / upsertEntry', () => {
   it('togglePinned 切换并重排（置顶组在前）', () => {
     const items = [entry({ id: 'a', createdAt: 200 }), entry({ id: 'b', createdAt: 300 })]
     const next = togglePinned(items, 'a')
-    expect(next?.[0]).toEqual({ id: 'a', text: '文本-a', createdAt: 200, pinned: true })
+    expect(next?.[0]).toEqual({
+      id: 'a',
+      text: '文本-a',
+      createdAt: 200,
+      pinned: true,
+      type: 'text'
+    })
     const back = togglePinned(next ?? [], 'a')
     expect(back?.find((e) => e.id === 'a')?.pinned).toBe(false)
   })
@@ -186,19 +359,39 @@ describe('filterEntries / summarize', () => {
   const items = [
     entry({ id: 'a', text: 'Hello 世界' }),
     entry({ id: 'b', text: 'hello lumin', pinned: true }),
-    entry({ id: 'c', text: '无关文本' })
+    entry({ id: 'c', text: '无关文本' }),
+    imageEntry({ id: 'img1', sha1: 'sha-a', createdAt: 400 }),
+    imageEntry({ id: 'img2', sha1: 'sha-b', createdAt: 300, pinned: true })
   ]
 
   it('空词返回全量，子串忽略大小写过滤', () => {
-    expect(filterEntries(items, '')).toHaveLength(3)
+    expect(filterEntries(items, '')).toHaveLength(5)
     expect(filterEntries(items, 'HELLO').map((e) => e.id)).toEqual(['a', 'b'])
     expect(filterEntries(items, '世界').map((e) => e.id)).toEqual(['a'])
     expect(filterEntries(items, '无命中词')).toHaveLength(0)
   })
 
+  it('搜索词非空时排除图片条目（图片不参与搜索）', () => {
+    expect(filterEntries(items, 'hello')).toHaveLength(2)
+    expect(filterEntries(items, 'x').some((e) => e.type === 'image')).toBe(false)
+  })
+
+  it('类型筛选：全部 / 文本 / 图片', () => {
+    expect(filterEntries(items, '', 'all')).toHaveLength(5)
+    expect(filterEntries(items, '', 'text').map((e) => e.id)).toEqual(['a', 'b', 'c'])
+    expect(filterEntries(items, '', 'image').map((e) => e.id)).toEqual(['img1', 'img2'])
+  })
+
+  it('类型筛选与搜索叠加（筛选图片 + 搜索词 → 空）', () => {
+    expect(filterEntries(items, '', 'image')).toHaveLength(2)
+    expect(filterEntries(items, 'hello', 'image')).toHaveLength(0)
+    expect(filterEntries(items, '世界', 'text').map((e) => e.id)).toEqual(['a'])
+  })
+
   it('条数徽标随过滤更新', () => {
-    expect(summarize(items)).toBe('共 3 条 · 置顶 1 条')
+    expect(summarize(items)).toBe('共 5 条 · 置顶 2 条')
     expect(summarize(filterEntries(items, 'hello'))).toBe('共 2 条 · 置顶 1 条')
+    expect(summarize(filterEntries(items, '', 'image'))).toBe('共 2 条 · 置顶 1 条')
   })
 })
 
@@ -218,5 +411,32 @@ describe('formatRelativeTime / formatTextStats', () => {
   it('字数与行数徽标', () => {
     expect(formatTextStats('abc')).toBe('3 字 · 1 行')
     expect(formatTextStats('第一行\n第二行\n第三行')).toBe('11 字 · 3 行')
+  })
+})
+
+describe('formatBytes / formatImageStats（M61 图片徽标）', () => {
+  it('字节 B / KB / MB 紧凑格式化', () => {
+    expect(formatBytes(512)).toBe('512B')
+    expect(formatBytes(1023)).toBe('1023B')
+    expect(formatBytes(1024)).toBe('1.0KB')
+    expect(formatBytes(1024 * 1024 - 1)).toBe('1024.0KB')
+    expect(formatBytes(2.1 * 1024 * 1024)).toBe('2.1MB')
+    expect(formatBytes(5 * 1024 * 1024)).toBe('5.0MB')
+  })
+
+  it('图片徽标：1920×1080 · 2.1MB', () => {
+    const item = imageEntry({
+      id: 'img',
+      sha1: 'sha-a',
+      createdAt: NOW,
+      bytes: Math.round(2.1 * 1024 * 1024)
+    })
+    expect(formatImageStats(item)).toBe('1920×1080 · 2.1MB')
+  })
+
+  it('图片字段缺失返回空串', () => {
+    expect(
+      formatImageStats({ id: 'a', text: 'x', createdAt: NOW, pinned: false, type: 'text' })
+    ).toBe('')
   })
 })

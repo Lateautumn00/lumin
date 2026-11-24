@@ -1,10 +1,10 @@
 /**
- * @file 持久化存储（userData/clipboard-history.json 原子读写）
+ * @file 持久化存储（userData/clipboard-history.json 原子读写 + 孤儿图片清理）
  * @author cuilanchao
- * @date 2026-11-23
+ * @date 2026-11-24
  * @description 读写经可注入 StorageFs（单测不触盘）；损坏/半写 JSON 删除重建空表
  *              （断电恢复口径，调用方记 electron-log warn）；非 ENOENT 读失败原样抛出，
- *              由通道包装为 CH_STORAGE_FAILED。
+ *              由通道包装为 CH_STORAGE_FAILED；启动加载后清理 JSON 未引用的孤儿 PNG。
  */
 import { errnoCode } from './errors'
 import { entriesFileSchema, type Entry } from './schema'
@@ -59,4 +59,37 @@ function rebuild(fs: StorageFs, filePath: string, reason: string): LoadResult {
     // 删除失败不阻断重建，后续原子写会覆盖
   }
   return { entries: [], corrupted: reason }
+}
+
+/** 图片文件能力（生产 = userData/clipboard-history/images 目录） */
+export interface ImageFs {
+  /** 列出图片文件名（{id}.png）；目录不存在抛 ENOENT（静默口径） */
+  listFiles(): string[]
+  /** 删除图片文件（按 id）；不存在时静默 */
+  removeImage(id: string): void
+}
+
+/**
+ * 孤儿 PNG 清理（崩溃残留口径，spec §1.3）：删除 JSON 未引用的图片文件，
+ * 返回已删文件名；目录不存在（ENOENT）静默返回空，其他错误原样抛出（调用方 warn）。
+ */
+export function cleanupOrphanImages(entries: readonly Entry[], imageFs: ImageFs): string[] {
+  let files: string[]
+  try {
+    files = imageFs.listFiles()
+  } catch (err) {
+    if (errnoCode(err) === 'ENOENT') return []
+    throw err
+  }
+  const referenced = new Set(
+    entries.filter((entry) => entry.type === 'image').map((entry) => `${entry.id}.png`)
+  )
+  const removed: string[] = []
+  for (const file of files) {
+    if (file.endsWith('.png') && !referenced.has(file)) {
+      imageFs.removeImage(file.slice(0, -'.png'.length))
+      removed.push(file)
+    }
+  }
+  return removed
 }

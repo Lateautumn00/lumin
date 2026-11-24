@@ -1,25 +1,66 @@
 /**
- * @file node.test.ts 主进程通道单测（5 同步通道 + 存储错误分支，不触真实剪贴板/磁盘）
+ * @file node.test.ts 主进程通道单测（7 同步通道 + 存储错误分支，不触真实剪贴板/磁盘）
  * @author cuilanchao
- * @date 2026-11-23
+ * @date 2026-11-24
  * @description fs 以内存表注入（writeAtomic 仅在 createDefaultDeps 用例中写临时目录），
- *              覆盖：入库判定、置顶/删除/清空、防抖与立即落盘、CH_STORAGE_FAILED、
- *              损坏 JSON 重建、INVALID_INPUT。
+ *              覆盖：文本/图片入库判定、SHA-1 去重、图片独立上限、置顶/删除/清空、
+ *              防抖与立即落盘、CH_STORAGE_FAILED / CH_IMAGE_MISSING、损坏 JSON 重建、
+ *              INVALID_INPUT、孤儿 PNG 清理。
  */
+import { createHash } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { clipboard } from 'electron'
 import type { IpcHandler, MainPluginContext } from '@lumin/plugin-api'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Entry, ListResult, OkResult, PollResult } from './schema'
-import { STORAGE_FILE_NAME, createDefaultDeps, registerMain, registerWith } from './node'
+import type { Entry, ImageResult, ListResult, OkResult, PollResult } from './schema'
+import { MAX_IMAGE_BYTES } from './schema'
+import {
+  IMAGES_DIR_NAME,
+  STORAGE_FILE_NAME,
+  createDefaultDeps,
+  registerMain,
+  registerWith
+} from './node'
 import type { ClipboardHistoryDeps } from './node'
 import type { StorageFs } from './storage'
 
-vi.mock('electron', () => ({
-  clipboard: { readText: vi.fn(() => '') }
-}))
+vi.mock('electron', () => {
+  type ThumbImage = {
+    resize: (options: { width: number }) => ThumbImage
+    toPNG: () => Buffer
+  }
+  const thumbImage: ThumbImage = {
+    resize: vi.fn(() => thumbImage),
+    toPNG: vi.fn(() => Buffer.from('thumb-png'))
+  }
+  const sourceImage = {
+    resize: vi.fn(() => thumbImage),
+    toPNG: vi.fn(() => Buffer.from('full-png')),
+    getSize: vi.fn(() => ({ width: 1920, height: 1080 }))
+  }
+  return {
+    clipboard: {
+      readText: vi.fn(() => ''),
+      read: vi.fn(() => Promise.resolve([])),
+      write: vi.fn(() => Promise.resolve())
+    },
+    nativeImage: {
+      createFromBuffer: vi.fn(() => sourceImage)
+    },
+    ClipboardItem: class FakeClipboardItem {
+      constructor(readonly data: Record<string, unknown>) {}
+    }
+  }
+})
+
+/** 组装带 image/png 的 clipboard.read 回包 */
+function readItemsWithPng(bytes: string): Awaited<ReturnType<typeof clipboard.read>> {
+  return [
+    { types: ['image/png'], getType: vi.fn(() => Promise.resolve(new Blob([bytes]))) }
+  ] as unknown as Awaited<ReturnType<typeof clipboard.read>>
+}
 
 /** 内存文件系统（单测不触盘） */
 interface MemFs extends StorageFs {
@@ -55,7 +96,12 @@ function makeMemFs(files: Record<string, string> = {}): MemFs {
 interface Harness {
   ctx: MainPluginContext
   handlers: Map<string, IpcHandler>
-  log: { debug: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> }
+  log: {
+    debug: ReturnType<typeof vi.fn>
+    info: ReturnType<typeof vi.fn>
+    warn: ReturnType<typeof vi.fn>
+    error: ReturnType<typeof vi.fn>
+  }
   deps: ClipboardHistoryDeps
   fs: MemFs
 }
@@ -80,6 +126,17 @@ function makeHarness(
   let seq = 0
   const deps: ClipboardHistoryDeps = {
     readClipboardText: vi.fn(() => ''),
+    readClipboardImage: vi.fn(() => Promise.resolve(null)),
+    makeThumb: vi.fn(() => 'data:image/png;base64,thumb'),
+    imageDir: join(tmpdir(), `lumin-ch-images-${Date.now()}`),
+    readImageFile: vi.fn(() => {
+      const err = new Error("ENOENT: no such file, open 'missing.png'") as NodeJS.ErrnoException
+      err.code = 'ENOENT'
+      throw err
+    }),
+    writeImageFile: vi.fn(),
+    removeImageFile: vi.fn(),
+    listImageFiles: vi.fn(() => []),
     filePath: join(tmpdir(), `lumin-ch-${Date.now()}.json`),
     fs,
     now: vi.fn(() => 1_700_000_000_000),
@@ -106,10 +163,24 @@ function flushTimer(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 10))
 }
 
-const HEAD: Entry = { id: 'head', text: '头部条目', createdAt: 100, pinned: false }
-const OTHER: Entry = { id: 'other', text: '非头部条目', createdAt: 50, pinned: false }
+const HEAD: Entry = { id: 'head', text: '头部条目', createdAt: 100, pinned: false, type: 'text' }
+const OTHER: Entry = { id: 'other', text: '非头部条目', createdAt: 50, pinned: false, type: 'text' }
 
-describe('clipboard-history 5 同步通道', () => {
+/** 图片条目样本（M61） */
+const IMAGE_ENTRY: Entry = {
+  id: 'img-1',
+  text: '',
+  createdAt: 200,
+  pinned: false,
+  type: 'image',
+  width: 1920,
+  height: 1080,
+  bytes: 1024,
+  sha1: 'sha-of-img-1',
+  thumb: 'data:image/png;base64,thumb'
+}
+
+describe('clipboard-history 7 同步通道', () => {
   it('registerMain 生产入口注册全部通道（默认依赖，首次运行空表）', async () => {
     const userData = mkdtempSync(join(tmpdir(), 'lumin-ch-main-'))
     const handlers = new Map<string, IpcHandler>()
@@ -127,7 +198,15 @@ describe('clipboard-history 5 同步通道', () => {
     } as unknown as MainPluginContext
     try {
       registerMain(ctx)
-      expect([...handlers.keys()].sort()).toEqual(['clear', 'list', 'pin', 'poll', 'remove'])
+      expect([...handlers.keys()].sort()).toEqual([
+        'clear',
+        'copy',
+        'image',
+        'list',
+        'pin',
+        'poll',
+        'remove'
+      ])
       expect(log.info).toHaveBeenCalledWith('clipboard-history registered')
       const result = await invoke<ListResult>(handlers, 'list', {})
       expect(result.items).toEqual([])
@@ -349,6 +428,197 @@ describe('clipboard-history 5 同步通道', () => {
   })
 })
 
+describe('M61 图片分支与 image/copy 通道', () => {
+  const PNG = Buffer.from('clipboard-image-png-bytes')
+  const SHA1 = createHash('sha1').update(PNG).digest('hex')
+
+  beforeEach(() => {
+    vi.mocked(clipboard.write).mockClear()
+  })
+
+  /** 注入图片剪贴板（图片优先判定）的 harness */
+  function withImage(overrides: Partial<ClipboardHistoryDeps> = {}): Harness {
+    return makeHarness({
+      overrides: {
+        readClipboardImage: async () => ({ png: PNG, width: 800, height: 600 }),
+        ...overrides
+      }
+    })
+  }
+
+  it('poll 图片优先：图片分支入库、先写 PNG 再防抖写 JSON、不读文本', async () => {
+    const harness = withImage()
+    const result = await invoke<PollResult>(harness.handlers, 'poll', {})
+    expect(result.entry).toMatchObject({
+      type: 'image',
+      text: '',
+      width: 800,
+      height: 600,
+      bytes: PNG.length,
+      sha1: SHA1
+    })
+    expect(result.entry?.id).toBe('id-1')
+    expect(harness.deps.writeImageFile).toHaveBeenCalledWith('id-1', PNG)
+    expect(harness.deps.readClipboardText).not.toHaveBeenCalled()
+    expect(harness.deps.makeThumb).toHaveBeenCalledWith(PNG, 800)
+    await flushTimer()
+    const saved = JSON.parse(harness.fs.files.get(harness.deps.filePath) ?? '[]') as Entry[]
+    expect(saved).toHaveLength(1)
+    expect(saved[0]).toMatchObject({ id: 'id-1', type: 'image' })
+  })
+
+  it('poll 图片 >5MB → skipped TOO_LARGE 且不写文件不写盘', async () => {
+    const big = Buffer.alloc(MAX_IMAGE_BYTES + 1)
+    const harness = withImage({
+      readClipboardImage: async () => ({ png: big, width: 1, height: 1 })
+    })
+    const result = await invoke<PollResult>(harness.handlers, 'poll', {})
+    expect(result.skipped).toBe('TOO_LARGE')
+    expect(result.entry).toBeNull()
+    expect(harness.deps.writeImageFile).not.toHaveBeenCalled()
+    await flushTimer()
+    expect(harness.fs.writeCount).toBe(0)
+  })
+
+  it('poll 图片与头部图片 SHA-1 相同 → 跳过（不写文件不写盘）', async () => {
+    const harness = withImage()
+    harness.fs.files.set(harness.deps.filePath, JSON.stringify([{ ...IMAGE_ENTRY, sha1: SHA1 }]))
+    const result = await invoke<PollResult>(harness.handlers, 'poll', {})
+    expect(result.entry).toBeNull()
+    expect(result.skipped).toBeUndefined()
+    expect(harness.deps.writeImageFile).not.toHaveBeenCalled()
+    await flushTimer()
+    expect(harness.fs.writeCount).toBe(0)
+  })
+
+  it('image 通道：返回原图 dataURL（打开预览时按需读取）', async () => {
+    const harness = makeHarness({ overrides: { readImageFile: vi.fn(() => PNG) } })
+    harness.fs.files.set(harness.deps.filePath, JSON.stringify([IMAGE_ENTRY]))
+    const result = await invoke<ImageResult>(harness.handlers, 'image', { id: 'img-1' })
+    expect(result.dataUrl).toBe(`data:image/png;base64,${PNG.toString('base64')}`)
+  })
+
+  it('image 通道：PNG 文件缺失 → CH_IMAGE_MISSING 中文文案', async () => {
+    const harness = makeHarness()
+    harness.fs.files.set(harness.deps.filePath, JSON.stringify([IMAGE_ENTRY]))
+    await expect(invoke(harness.handlers, 'image', { id: 'img-1' })).rejects.toEqual({
+      code: 'CH_IMAGE_MISSING',
+      message: '图片文件已丢失'
+    })
+  })
+
+  it('image 通道：非图片条目 / 未知 id / 缺 id 载荷 → INVALID_INPUT', async () => {
+    const harness = makeHarness()
+    harness.fs.files.set(harness.deps.filePath, JSON.stringify([HEAD]))
+    await expect(invoke(harness.handlers, 'image', { id: 'head' })).rejects.toEqual({
+      code: 'INVALID_INPUT',
+      message: '请求格式无效',
+      detail: '条目不存在'
+    })
+    await expect(invoke(harness.handlers, 'image', { id: 'missing' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT'
+    })
+    await expect(invoke(harness.handlers, 'image', {})).rejects.toMatchObject({
+      code: 'INVALID_INPUT'
+    })
+  })
+
+  it('copy 通道：读 PNG 经 clipboard.write(clipboard-item) 回写', async () => {
+    const harness = makeHarness({ overrides: { readImageFile: vi.fn(() => PNG) } })
+    harness.fs.files.set(harness.deps.filePath, JSON.stringify([IMAGE_ENTRY]))
+    expect(await invoke<OkResult>(harness.handlers, 'copy', { id: 'img-1' })).toEqual({ ok: true })
+    expect(clipboard.write).toHaveBeenCalledTimes(1)
+    const written = vi.mocked(clipboard.write).mock.calls[0]?.[0]
+    expect(written).toHaveLength(1)
+  })
+
+  it('copy 通道：PNG 文件缺失 → CH_IMAGE_MISSING（不触剪贴板）', async () => {
+    const harness = makeHarness()
+    harness.fs.files.set(harness.deps.filePath, JSON.stringify([IMAGE_ENTRY]))
+    await expect(invoke(harness.handlers, 'copy', { id: 'img-1' })).rejects.toEqual({
+      code: 'CH_IMAGE_MISSING',
+      message: '图片文件已丢失'
+    })
+    expect(clipboard.write).not.toHaveBeenCalled()
+  })
+
+  it('remove 图片条目：同步删 PNG，删除失败仅 warn 不阻断', async () => {
+    const harness = makeHarness({
+      overrides: {
+        removeImageFile: vi.fn(() => {
+          throw new Error('EPERM')
+        })
+      }
+    })
+    harness.fs.files.set(harness.deps.filePath, JSON.stringify([IMAGE_ENTRY, HEAD]))
+    expect(await invoke<OkResult>(harness.handlers, 'remove', { id: 'img-1' })).toEqual({
+      ok: true
+    })
+    expect(harness.deps.removeImageFile).toHaveBeenCalledWith('img-1')
+    expect(harness.log.warn).toHaveBeenCalledWith('剪贴板图片文件删除失败', expect.any(Error))
+    const items = (await invoke<ListResult>(harness.handlers, 'list', {})).items
+    expect(items.map((e) => e.id)).toEqual(['head'])
+  })
+
+  it('remove 文本条目不触发图片文件删除', async () => {
+    const harness = makeHarness()
+    harness.fs.files.set(harness.deps.filePath, JSON.stringify([IMAGE_ENTRY, HEAD]))
+    await invoke<OkResult>(harness.handlers, 'remove', { id: 'head' })
+    expect(harness.deps.removeImageFile).not.toHaveBeenCalled()
+  })
+
+  it('clear：全部图片文件同步删除 + JSON 清空', async () => {
+    const harness = makeHarness()
+    harness.fs.files.set(
+      harness.deps.filePath,
+      JSON.stringify([IMAGE_ENTRY, { ...IMAGE_ENTRY, id: 'img-2' }, HEAD])
+    )
+    expect(await invoke<OkResult>(harness.handlers, 'clear', {})).toEqual({ ok: true })
+    expect(harness.deps.removeImageFile).toHaveBeenCalledWith('img-1')
+    expect(harness.deps.removeImageFile).toHaveBeenCalledWith('img-2')
+    expect(harness.fs.files.get(harness.deps.filePath)).toBe('[]')
+  })
+
+  it('加载后孤儿 PNG 清理：JSON 未引用即删 + warn', async () => {
+    const harness = makeHarness({
+      overrides: { listImageFiles: vi.fn(() => ['img-1.png', 'orphan.png', 'note.txt']) }
+    })
+    harness.fs.files.set(harness.deps.filePath, JSON.stringify([IMAGE_ENTRY]))
+    await invoke<ListResult>(harness.handlers, 'list', {})
+    expect(harness.deps.removeImageFile).toHaveBeenCalledWith('orphan')
+    expect(harness.deps.removeImageFile).toHaveBeenCalledTimes(1)
+    expect(harness.log.warn).toHaveBeenCalledWith('已清理孤儿剪贴板图片 1 个')
+  })
+
+  it('孤儿清理：目录不存在（ENOENT）静默且不告警', async () => {
+    const harness = makeHarness({
+      overrides: {
+        listImageFiles: vi.fn(() => {
+          const err = new Error('ENOENT: scandir') as NodeJS.ErrnoException
+          err.code = 'ENOENT'
+          throw err
+        })
+      }
+    })
+    expect((await invoke<ListResult>(harness.handlers, 'list', {})).items).toEqual([])
+    expect(harness.log.warn).not.toHaveBeenCalled()
+  })
+
+  it('孤儿清理：其他目录错误仅 warn 不阻断 list', async () => {
+    const harness = makeHarness({
+      overrides: {
+        listImageFiles: vi.fn(() => {
+          const err = new Error('permission denied') as NodeJS.ErrnoException
+          err.code = 'EACCES'
+          throw err
+        })
+      }
+    })
+    expect((await invoke<ListResult>(harness.handlers, 'list', {})).items).toEqual([])
+    expect(harness.log.warn).toHaveBeenCalledWith('孤儿剪贴板图片清理失败', expect.any(Error))
+  })
+})
+
 describe('createDefaultDeps', () => {
   const created: string[] = []
 
@@ -388,6 +658,45 @@ describe('createDefaultDeps', () => {
 
     expect(deps.now()).toBeGreaterThan(0)
     expect(deps.newId()).toMatch(/^[0-9a-f-]{36}$/)
+
+    // 图片能力：目录路径 + 剪贴板图片读取（Electron 45 W3C 口径：read 找 image/png）+ 缩略图 + PNG 文件读写删列
+    expect(deps.imageDir).toBe(join(userData, IMAGES_DIR_NAME))
+
+    vi.mocked(clipboard.read).mockResolvedValueOnce([])
+    expect(await deps.readClipboardImage()).toBeNull()
+
+    // 仅文本无图片 → null
+    vi.mocked(clipboard.read).mockResolvedValueOnce([
+      { types: ['text/plain'], getType: vi.fn(() => Promise.resolve(new Blob(['txt']))) }
+    ] as unknown as Awaited<ReturnType<typeof clipboard.read>>)
+    expect(await deps.readClipboardImage()).toBeNull()
+
+    // 含 image/png → 返回 PNG 与 nativeImage 解析出的尺寸
+    vi.mocked(clipboard.read).mockResolvedValueOnce(readItemsWithPng('clip-png'))
+    expect(await deps.readClipboardImage()).toEqual({
+      png: Buffer.from('clip-png'),
+      width: 1920,
+      height: 1080
+    })
+
+    // 空 PNG 负载 → 视为无图
+    vi.mocked(clipboard.read).mockResolvedValueOnce(readItemsWithPng(''))
+    expect(await deps.readClipboardImage()).toBeNull()
+
+    const wideThumb = deps.makeThumb(Buffer.from('x'), 1920)
+    const narrowThumb = deps.makeThumb(Buffer.from('x'), 100)
+    expect(wideThumb.startsWith('data:image/png;base64,')).toBe(true)
+    expect(narrowThumb.startsWith('data:image/png;base64,')).toBe(true)
+    // 超 160 宽走 resize 缩略图，窄图保持原图（两者 PNG 不同）
+    expect(wideThumb).not.toBe(narrowThumb)
+
+    deps.writeImageFile('img-1', Buffer.from('png-bytes'))
+    expect(deps.listImageFiles()).toEqual(['img-1.png'])
+    expect(deps.readImageFile('img-1')).toEqual(Buffer.from('png-bytes'))
+    deps.removeImageFile('img-1')
+    expect(deps.listImageFiles()).toEqual([])
+    expect(() => deps.removeImageFile('img-1')).not.toThrow()
+    expect(() => deps.readImageFile('missing')).toThrow()
   })
 })
 

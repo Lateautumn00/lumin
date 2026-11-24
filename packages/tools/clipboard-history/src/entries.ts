@@ -1,11 +1,17 @@
 /**
  * @file 轮询判定与列表展示纯函数（R1：核心纯函数 ≥80%，入口薄）
  * @author cuilanchao
- * @date 2026-11-23
- * @description 入库去重 / 上限淘汰 / 置顶排序 / 搜索过滤 / 相对时间与字数格式化；
- *              全部无 IO、无副作用，主进程通道与 renderer 共用同一套规则。
+ * @date 2026-11-24
+ * @description 入库去重 / 上限淘汰 / 置顶排序 / 搜索与类型过滤 / 相对时间与字数、
+ *              字节格式化；全部无 IO、无副作用，主进程通道与 renderer 共用同一套规则。
  */
-import { MAX_ENTRIES, MAX_TEXT_BYTES, type Entry } from './schema'
+import {
+  MAX_ENTRIES,
+  MAX_IMAGE_BYTES,
+  MAX_IMAGE_ENTRIES,
+  MAX_TEXT_BYTES,
+  type Entry
+} from './schema'
 
 /** UTF-8 字节长度（>100KB 跳过判定） */
 export function utf8ByteLength(text: string): number {
@@ -57,7 +63,8 @@ export function ingestClipboard(
   newId: string
 ): IngestOutcome {
   if (text === '') return { items: [...items], entry: null }
-  if (utf8ByteLength(text) > MAX_TEXT_BYTES) return { items: [...items], entry: null, skipped: 'TOO_LARGE' }
+  if (utf8ByteLength(text) > MAX_TEXT_BYTES)
+    return { items: [...items], entry: null, skipped: 'TOO_LARGE' }
 
   const sorted = sortEntries(items)
   const head = sorted[0]
@@ -70,18 +77,80 @@ export function ingestClipboard(
     const firstOfGroup = sorted.findIndex((entry) => entry.pinned === existing.pinned)
     if (firstOfGroup === index) return { items: sorted, entry: null }
     const moved: Entry = { ...existing, createdAt: now }
-    return { items: sortEntries(sorted.map((entry) => (entry.id === existing.id ? moved : entry))), entry: moved }
+    return {
+      items: sortEntries(sorted.map((entry) => (entry.id === existing.id ? moved : entry))),
+      entry: moved
+    }
   }
 
-  const created: Entry = { id: newId, text, createdAt: now, pinned: false }
+  const created: Entry = { id: newId, text, createdAt: now, pinned: false, type: 'text' }
   return { items: evictOverLimit(sortEntries([created, ...sorted])), entry: created }
+}
+
+/** 图片条目附加元数据（SHA-1 内容去重 + 尺寸 + PNG 字节 + 缩略图 dataURL） */
+export interface ImageIngestMeta {
+  sha1: string
+  width: number
+  height: number
+  bytes: number
+  thumb: string
+}
+
+/**
+ * poll 图片入库判定（spec §1.3）：>5MB 跳过；与头部图片条目 SHA-1 相同跳过；
+ * 新图片条目前插（text 恒空串），并按图片独立上限 100 条淘汰（置顶永不淘汰）。
+ */
+export function ingestClipboardImage(
+  items: readonly Entry[],
+  meta: ImageIngestMeta,
+  now: number,
+  newId: string
+): IngestOutcome {
+  if (meta.bytes > MAX_IMAGE_BYTES) return { items: [...items], entry: null, skipped: 'TOO_LARGE' }
+
+  const sorted = sortEntries(items)
+  const headImage = sorted.find((entry) => entry.type === 'image')
+  if (headImage !== undefined && headImage.sha1 === meta.sha1) {
+    return { items: sorted, entry: null }
+  }
+
+  const created: Entry = {
+    id: newId,
+    text: '',
+    createdAt: now,
+    pinned: false,
+    type: 'image',
+    ...meta
+  }
+  return { items: evictImagesOverLimit(sortEntries([created, ...sorted])), entry: created }
+}
+
+/** 图片独立上限淘汰：仅统计图片条目（与文本 500 独立计数），最旧未置顶图片先出，置顶永不淘汰 */
+export function evictImagesOverLimit(items: readonly Entry[]): Entry[] {
+  const list = [...items]
+  while (list.filter((entry) => entry.type === 'image').length > MAX_IMAGE_ENTRIES) {
+    let oldestUnpinnedImage = -1
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      const item = list[i]
+      if (item !== undefined && item.type === 'image' && !item.pinned) {
+        oldestUnpinnedImage = i
+        break
+      }
+    }
+    // 图片全为置顶：置顶永不淘汰
+    if (oldestUnpinnedImage === -1) break
+    list.splice(oldestUnpinnedImage, 1)
+  }
+  return list
 }
 
 /** 置顶切换；id 不存在返回 null（调用方转 INVALID_INPUT） */
 export function togglePinned(items: readonly Entry[], id: string): Entry[] | null {
   const target = items.find((entry) => entry.id === id)
   if (target === undefined) return null
-  return sortEntries(items.map((entry) => (entry.id === id ? { ...entry, pinned: !entry.pinned } : entry)))
+  return sortEntries(
+    items.map((entry) => (entry.id === id ? { ...entry, pinned: !entry.pinned } : entry))
+  )
 }
 
 /** 单条删除；id 不存在返回 null（调用方转 INVALID_INPUT） */
@@ -105,11 +174,20 @@ export function upsertEntry(items: readonly Entry[], entry: Entry): Entry[] {
   return sortEntries(next)
 }
 
-/** 搜索过滤：子串、忽略大小写实时过滤；空词返回全量 */
-export function filterEntries(items: readonly Entry[], query: string): Entry[] {
-  if (query === '') return [...items]
+/** 顶栏类型筛选（spec §1.1：全部 / 文本 / 图片，默认全部） */
+export type EntryTypeFilter = 'all' | 'text' | 'image'
+
+/** 过滤：类型筛选与搜索叠加；搜索词非空时排除图片条目（图片不参与搜索，spec §1.1） */
+export function filterEntries(
+  items: readonly Entry[],
+  query: string,
+  type: EntryTypeFilter = 'all'
+): Entry[] {
+  let list = [...items]
+  if (type !== 'all') list = list.filter((entry) => entry.type === type)
+  if (query === '') return list
   const keyword = query.toLowerCase()
-  return items.filter((entry) => entry.text.toLowerCase().includes(keyword))
+  return list.filter((entry) => entry.type === 'text' && entry.text.toLowerCase().includes(keyword))
 }
 
 /** 条数徽标：共 N 条 · 置顶 M 条（随过滤更新） */
@@ -139,4 +217,17 @@ export function formatRelativeTime(createdAt: number, now: number): string {
 export function formatTextStats(text: string): string {
   const lines = text.split('\n').length
   return `${text.length} 字 · ${lines} 行`
+}
+
+/** 字节格式化（KB/MB 紧凑口径）：512B / 128.5KB / 2.1MB */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+/** 图片徽标：1920×1080 · 2.1MB（图片字段缺失返回空串） */
+export function formatImageStats(item: Entry): string {
+  if (item.width === undefined || item.height === undefined || item.bytes === undefined) return ''
+  return `${item.width}×${item.height} · ${formatBytes(item.bytes)}`
 }

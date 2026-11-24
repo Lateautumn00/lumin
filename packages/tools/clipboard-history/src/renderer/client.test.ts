@@ -1,10 +1,18 @@
 /**
- * @file client.test.ts renderer invoke 封装单测（断言通道名与入参）
+ * @file client.test.ts renderer invoke 封装单测（断言通道名与入参，7 通道）
  * @author cuilanchao
- * @date 2026-11-23
+ * @date 2026-11-24
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearHistory, deleteEntry, loadList, loadPoll, togglePin } from './client'
+import {
+  clearHistory,
+  copyImage,
+  deleteEntry,
+  loadImage,
+  loadList,
+  loadPoll,
+  togglePin
+} from './client'
 
 const invoke = vi.fn()
 
@@ -38,5 +46,16 @@ describe('client', () => {
   it('clearHistory 走 clipboard-history:clear 且空入参', async () => {
     await clearHistory()
     expect(invoke).toHaveBeenCalledWith('clipboard-history:clear', {})
+  })
+
+  it('loadImage 走 clipboard-history:image 且携带 id', async () => {
+    invoke.mockResolvedValue({ dataUrl: 'data:image/png;base64,AA' })
+    expect(await loadImage('img-9')).toEqual({ dataUrl: 'data:image/png;base64,AA' })
+    expect(invoke).toHaveBeenCalledWith('clipboard-history:image', { id: 'img-9' })
+  })
+
+  it('copyImage 走 clipboard-history:copy 且携带 id', async () => {
+    await copyImage('img-9')
+    expect(invoke).toHaveBeenCalledWith('clipboard-history:copy', { id: 'img-9' })
   })
 })
