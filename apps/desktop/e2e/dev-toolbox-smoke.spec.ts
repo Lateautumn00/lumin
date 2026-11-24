@@ -252,4 +252,25 @@ test.describe('dev-toolbox（开发工具）冒烟', () => {
       await app.close()
     }
   })
+
+  test('进制与位运算：十进制 255 互转出 HEX FF；AND 位运算出结果', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '计算器')
+      await clickSidebarTool(page, '开发工具')
+      await tab(page, 'base').click()
+
+      // 区 A：十进制 255 → 四读数卡 HEX 显示 FF
+      await page.getByPlaceholder('输入数值，如 255、0xFF、0b1010').fill('255')
+      await expect(page.getByText('FF', { exact: true })).toBeVisible({ timeout: 10_000 })
+
+      // 区 B：255 AND 240 = 240 → HEX 显示 F0（默认 AND，64 位无符号口径）
+      await page.getByPlaceholder('A：十进制整数').fill('255')
+      await page.getByPlaceholder('B：十进制整数').fill('240')
+      await expect(page.getByText('F0', { exact: true })).toBeVisible()
+    } finally {
+      await app.close()
+    }
+  })
 })

@@ -1,9 +1,19 @@
 <script setup lang="ts">
-// 文本工具箱主视图（M8，M36 增 Hex/Unicode 与文本处理）
-// 作者：cuilanchao · 修改时间：2026-11-21
-// 纯 renderer 四 Tab（JSON / 编解码 / 正则 / 文本处理），零 IPC；大文本先渲染 busy 再分帧计算（R4 加载态）
+// 文本工具箱主视图（M8，M36 增 Hex/Unicode 与文本处理，M60 增 URL 编码 / SQL 格式化）
+// 作者：cuilanchao · 修改时间：2026-11-23
+// 纯 renderer 多 Tab（JSON / 编解码 / 正则 / 文本处理 / 摩尔斯 / CSV-JSON / 拼音 / URL 编码 / SQL 格式化），零 IPC；大文本先渲染 busy 再分帧计算（R4 加载态）
 import { computed, ref, watch } from 'vue'
-import { NButton, NCheckbox, NInput, NTabPane, NTabs, NTag, NText } from 'naive-ui'
+import {
+  NButton,
+  NCheckbox,
+  NInput,
+  NRadio,
+  NRadioGroup,
+  NTabPane,
+  NTabs,
+  NTag,
+  NText
+} from 'naive-ui'
 import { Copy } from '@lucide/vue'
 import type { StructuredError } from '@lumin/shared'
 import { errorMessage, type TextResult } from '../errors'
@@ -16,7 +26,8 @@ import {
   encodeBase64,
   encodeHex,
   encodeUnicode,
-  encodeUrl
+  encodeUrl,
+  type UrlEncodeMode
 } from '../encoding'
 import { decodeMorse, encodeMorse } from '../morse'
 import { collectMatches, replacePreview, type RegexMatchInfo } from '../regex'
@@ -24,6 +35,7 @@ import { applyLineOps, replaceText, type CaseMode, type SortMode } from '../text
 import { countText } from '../stats'
 import { csvToJson, jsonToCsv, type CsvDelimiter } from '../csv'
 import { convertPinyin, type PinyinStyle } from '../pinyin'
+import { formatSql, minifySql } from '../sql'
 
 /** 超过该字节数先渲染「处理中」再分帧计算，避免输入后界面卡住无反馈 */
 const HEAVY_BYTES = 200 * 1024
@@ -85,6 +97,16 @@ const pinyinStyle = ref<PinyinStyle>('tone')
 const pinyinKeepNonZh = ref(true)
 const pinyinInput = ref('')
 const pinyinOutput = ref('')
+
+// —— URL 编码 Tab（M60）——
+const urlMode = ref<UrlEncodeMode>('component')
+const urlInput = ref('')
+const urlOutput = ref('')
+const urlLastAction = ref<'encode' | 'decode' | null>(null)
+
+// —— SQL 格式化 Tab（M60）——
+const sqlInput = ref('')
+const sqlOutput = ref('')
 
 // —— 正则 Tab ——
 const regexPattern = ref('')
@@ -382,6 +404,77 @@ function resetPinyin(): void {
   pinyinOutput.value = ''
 }
 
+/* ---------- URL 编码 Tab（M60） ---------- */
+
+/** 按当前模式编码或解码；解码先探测非法 % 序列，产物含替换符时给非阻断警告 */
+function runUrl(kind: 'encode' | 'decode'): void {
+  clearFeedback()
+  if (urlInput.value.trim() === '') return
+  const input = urlInput.value
+  runMaybeHeavy(input, () => {
+    const result = kind === 'encode' ? encodeUrl(input, urlMode.value) : decodeUrl(input)
+    if (!result.ok) {
+      urlOutput.value = ''
+      showError(result.error)
+      return
+    }
+    urlOutput.value = result.value
+    urlLastAction.value = kind
+    if (kind === 'decode' && result.value.includes('\uFFFD')) {
+      notice.value = '输入可能不是合法 UTF-8 字节序列'
+      return
+    }
+    notice.value = `${kind === 'encode' ? '编码' : '解码'}完成 · ${byteLength(result.value)} 字节`
+  })
+}
+
+/** 输出与输入互换（输出 ↔ 输入） */
+function swapUrl(): void {
+  if (urlOutput.value === '') return
+  clearFeedback()
+  const previousInput = urlInput.value
+  urlInput.value = urlOutput.value
+  urlOutput.value = previousInput
+}
+
+/** 对输出按上次方向再执行一次，支持多重编解码 */
+function rerunUrl(): void {
+  const action = urlLastAction.value
+  if (action === null || urlOutput.value === '') return
+  clearFeedback()
+  const source = urlOutput.value
+  runMaybeHeavy(source, () => {
+    const result = action === 'encode' ? encodeUrl(source, urlMode.value) : decodeUrl(source)
+    if (!result.ok) {
+      showError(result.error)
+      return
+    }
+    urlOutput.value = result.value
+    if (action === 'decode' && result.value.includes('\uFFFD')) {
+      notice.value = '输入可能不是合法 UTF-8 字节序列'
+      return
+    }
+    notice.value = `再次${action === 'encode' ? '编码' : '解码'}完成 · ${byteLength(result.value)} 字节`
+  })
+}
+
+/* ---------- SQL 格式化 Tab（M60） ---------- */
+
+/** 美化或压缩 SQL；未闭合字面量按原文保留并给非阻断警告 */
+function runSql(kind: 'format' | 'minify'): void {
+  clearFeedback()
+  if (sqlInput.value.trim() === '') return
+  const input = sqlInput.value
+  runMaybeHeavy(input, () => {
+    const result = kind === 'format' ? formatSql(input) : minifySql(input)
+    sqlOutput.value = result.value
+    notice.value =
+      result.warning !== ''
+        ? result.warning
+        : `${kind === 'format' ? '美化' : '压缩'}完成 · ${byteLength(result.value)} 字节`
+  })
+}
+
 /* ---------- 文本处理 Tab ---------- */
 
 /** 统计对象：已处理则统计输出，否则统计输入 */
@@ -566,6 +659,12 @@ function messageOf(code: string): string {
       </NTabPane>
       <NTabPane name="pinyin">
         <template #tab>拼音</template>
+      </NTabPane>
+      <NTabPane name="url">
+        <template #tab>URL 编码</template>
+      </NTabPane>
+      <NTabPane name="sql">
+        <template #tab>SQL 格式化</template>
       </NTabPane>
     </NTabs>
 
@@ -1004,6 +1103,99 @@ function messageOf(code: string): string {
       <NText depth="3" class="text-xs">
         支持带声调 / 数字声调 / 无声调 /
         首字母；相邻汉字间按模式加分隔符，非汉字原样保留（可移除以只保留拼音）。
+      </NText>
+    </div>
+
+    <!-- URL 编码：组件级 / 完整（RFC 3986）两种模式，解码先定位非法 % 序列 -->
+    <div v-if="activeTab === 'url'" class="flex flex-col gap-3">
+      <div class="flex flex-wrap items-center gap-4 text-sm">
+        <NText depth="2">模式</NText>
+        <NRadioGroup v-model:value="urlMode">
+          <NRadio value="component">组件级</NRadio>
+          <NRadio value="full">完整</NRadio>
+        </NRadioGroup>
+      </div>
+      <div class="grid gap-3 md:grid-cols-2">
+        <div class="flex flex-col gap-2">
+          <NText depth="2" class="text-sm">输入</NText>
+          <NInput
+            v-model:value="urlInput"
+            type="textarea"
+            placeholder="粘贴要编码或解码的源文本"
+            :autosize="{ minRows: 8, maxRows: 16 }"
+          />
+        </div>
+        <div class="flex flex-col gap-2">
+          <NText depth="2" class="text-sm">输出</NText>
+          <NInput
+            :value="urlOutput"
+            type="textarea"
+            readonly
+            placeholder="处理结果"
+            :autosize="{ minRows: 8, maxRows: 16 }"
+          />
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <NButton
+          type="primary"
+          :disabled="busy || urlInput.trim() === ''"
+          @click="runUrl('encode')"
+        >
+          编码
+        </NButton>
+        <NButton :disabled="busy || urlInput.trim() === ''" @click="runUrl('decode')">
+          解码
+        </NButton>
+        <NButton quaternary :disabled="busy || urlOutput === ''" @click="swapUrl">交换</NButton>
+        <NButton :disabled="busy || urlOutput === '' || urlLastAction === null" @click="rerunUrl">
+          再执行一次
+        </NButton>
+      </div>
+    </div>
+
+    <!-- SQL 格式化：自写 tokenizer 保护字面量，子句关键字换行大写缩进 -->
+    <div v-if="activeTab === 'sql'" class="flex flex-col gap-3">
+      <div class="grid gap-3 md:grid-cols-2">
+        <div class="flex flex-col gap-2">
+          <NText depth="2" class="text-sm">输入</NText>
+          <NInput
+            v-model:value="sqlInput"
+            type="textarea"
+            placeholder="粘贴 SQL 语句"
+            :autosize="{ minRows: 8, maxRows: 16 }"
+          />
+        </div>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <NText depth="2" class="text-sm">输出</NText>
+            <NButton size="tiny" quaternary @click="copyText(sqlOutput, 'sql')">
+              <Copy class="mr-1 h-3 w-3" />{{ copiedLabel === 'sql' ? '已复制' : '复制' }}
+            </NButton>
+          </div>
+          <NInput
+            :value="sqlOutput"
+            type="textarea"
+            readonly
+            placeholder="格式化结果"
+            :autosize="{ minRows: 8, maxRows: 16 }"
+          />
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <NButton
+          type="primary"
+          :disabled="busy || sqlInput.trim() === ''"
+          @click="runSql('format')"
+        >
+          美化
+        </NButton>
+        <NButton :disabled="busy || sqlInput.trim() === ''" @click="runSql('minify')">
+          压缩
+        </NButton>
+      </div>
+      <NText v-if="sqlInput.trim() === ''" depth="3" class="text-sm">
+        输入 SQL 语句后可美化或压缩。
       </NText>
     </div>
 

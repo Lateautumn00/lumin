@@ -1,7 +1,7 @@
 /**
- * @file 工具错误码与统一结果形状（UPPER_SNAKE；文案见 spec/text-toolbox.md §5，改动须同步 spec）
+ * @file 工具错误码与统一结果形状（UPPER_SNAKE；文案见 spec/text-toolbox.md §5 与 §7.1，改动须同步 spec）
  * @author cuilanchao
- * @date 2026-11-18
+ * @date 2026-11-23
  * @description 纯 renderer 工具也走统一结构化错误形状，便于 UI 按 code → 中文文案展示
  */
 import type { StructuredError } from '@lumin/shared'
@@ -9,7 +9,7 @@ import type { StructuredError } from '@lumin/shared'
 /** 单次处理文本的字节上限（5MB，防渲染进程卡死） */
 export const MAX_TEXT_BYTES = 5 * 1024 * 1024
 
-/** text-toolbox 错误码全集（spec §5） */
+/** text-toolbox 错误码全集（spec §5 与 §7.1） */
 export const TEXT_TOOLBOX_ERROR_CODES = [
   'TT_JSON_INVALID',
   'TT_TEXT_TOO_LARGE',
@@ -20,12 +20,13 @@ export const TEXT_TOOLBOX_ERROR_CODES = [
   'TT_UNICODE_INVALID',
   'TT_REPLACE_INVALID',
   'TT_MORSE_INVALID',
-  'TT_CSV_INVALID'
+  'TT_CSV_INVALID',
+  'TT_INVALID_INPUT'
 ] as const
 
 export type TextToolboxErrorCode = (typeof TEXT_TOOLBOX_ERROR_CODES)[number]
 
-/** 错误码 → 中文文案（renderer 展示；spec §5 同源） */
+/** 错误码 → 中文文案（renderer 展示；spec §5 与 §7.1 同源） */
 const MESSAGES: Record<TextToolboxErrorCode, string> = {
   TT_JSON_INVALID: 'JSON 格式不正确',
   TT_TEXT_TOO_LARGE: '文本超过 5MB 上限，请分段处理',
@@ -36,7 +37,8 @@ const MESSAGES: Record<TextToolboxErrorCode, string> = {
   TT_UNICODE_INVALID: '不是有效的 Unicode 转义文本',
   TT_REPLACE_INVALID: '查找内容不能为空',
   TT_MORSE_INVALID: '不是有效的摩尔斯电码文本',
-  TT_CSV_INVALID: 'CSV/JSON 数据格式不正确'
+  TT_CSV_INVALID: 'CSV/JSON 数据格式不正确',
+  TT_INVALID_INPUT: '输入格式不正确，请检查后重试'
 }
 
 /** 纯函数统一结果：成功带值，失败带结构化错误（不含 throw） */

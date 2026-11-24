@@ -87,12 +87,18 @@ describe('URL', () => {
     expect(decodeUrl(valueOf(encodeUrl(text)))).toEqual({ ok: true, value: text })
   })
 
-  it('非法百分号编码 → TT_URL_INVALID', () => {
-    for (const bad of ['%', '%E0%A4%A', '%ZZ']) {
+  it('非法百分号编码 → TT_INVALID_INPUT（detail 含首个非法处索引）', () => {
+    const cases: ReadonlyArray<readonly [string, number]> = [
+      ['%', 0],
+      ['%E0%A4%A', 6],
+      ['%ZZ', 0]
+    ]
+    for (const [bad, index] of cases) {
       const result = decodeUrl(bad)
       expect(result.ok).toBe(false)
       if (result.ok) continue
-      expect(result.error.code).toBe('TT_URL_INVALID')
+      expect(result.error.code).toBe('TT_INVALID_INPUT')
+      expect(result.error.detail).toContain(`索引 ${index}`)
     }
   })
 

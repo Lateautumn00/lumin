@@ -6,22 +6,30 @@
  */
 import type { StructuredError } from '@lumin/shared'
 
-/** misc-toolbox 错误码全集（spec §1） */
+/** misc-toolbox 错误码全集（spec §1 + M60 中文信息扩展） */
 export const MISC_TOOLBOX_ERROR_CODES = [
   'MT_CIDR_INVALID',
   'MT_CAPTURE_FAILED',
   'MT_RULER_INVALID',
-  'MT_CLIPBOARD_FAILED'
+  'MT_CLIPBOARD_FAILED',
+  'MT_ID_INVALID',
+  'MT_ID_CHECKSUM',
+  'MT_ID_LEGACY',
+  'MT_AMOUNT_INVALID'
 ] as const
 
 export type MiscToolboxErrorCode = (typeof MISC_TOOLBOX_ERROR_CODES)[number]
 
-/** 错误码 → 中文文案（renderer 展示；spec §1 同源） */
+/** 错误码 → 中文文案（renderer 展示；spec §1 / M60 同源） */
 const MESSAGES: Record<MiscToolboxErrorCode, string> = {
   MT_CIDR_INVALID: '子网 / IP 输入无效',
   MT_CAPTURE_FAILED: '屏幕截图失败',
   MT_RULER_INVALID: '测量参数无效',
-  MT_CLIPBOARD_FAILED: '复制到剪贴板失败'
+  MT_CLIPBOARD_FAILED: '复制到剪贴板失败',
+  MT_ID_INVALID: '身份证号格式无效',
+  MT_ID_CHECKSUM: '身份证校验位不通过',
+  MT_ID_LEGACY: 'V1 仅支持 18 位',
+  MT_AMOUNT_INVALID: '金额格式无效'
 }
 
 /**

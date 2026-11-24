@@ -1,9 +1,10 @@
 /**
  * @file text-toolbox（文本工具箱）e2e 冒烟：真实 Electron 驱动页面交互
  * @author cuilanchao
- * @date 2026-11-18
+ * @date 2026-11-23
  * @description 覆盖：页面加载与空态、JSON 格式化成功 + 非法 JSON 报错、Base64 编解码往返与交换、
- *              正则匹配列表与替换预览（纯 renderer 工具，零 IPC）。
+ *              正则匹配列表与替换预览、CSV/JSON 互转、拼音转换、URL 编解码往返、SQL 美化/压缩幂等
+ *              （纯 renderer 工具，零 IPC）。
  */
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
@@ -170,6 +171,55 @@ test.describe('text-toolbox（文本工具箱）冒烟', () => {
       await page.locator('select[aria-label="拼音模式"]').selectOption('initial')
       await page.getByRole('button', { name: '转换', exact: true }).click()
       await expect(output).toHaveValue('cq nh Lumin 2026')
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('URL 编码：中文与空格编码 → 解码往返一致', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '文本工具箱')
+      await page.locator('.n-tabs-tab[data-name="url"]').click()
+      const input = page.getByPlaceholder('粘贴要编码或解码的源文本')
+      const output = page.getByPlaceholder('处理结果')
+      await input.fill('你好 Lumin 2026')
+      await page.getByRole('button', { name: '编码', exact: true }).click()
+      await expect(output).toHaveValue('%E4%BD%A0%E5%A5%BD%20Lumin%202026')
+
+      await input.fill(await output.inputValue())
+      await page.getByRole('button', { name: '解码', exact: true }).click()
+      await expect(output).toHaveValue('你好 Lumin 2026')
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('SQL 美化换行大写且保留字符串注释，压缩幂等', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '文本工具箱')
+      await page.locator('.n-tabs-tab[data-name="sql"]').click()
+      const input = page.getByPlaceholder('粘贴 SQL 语句')
+      const output = page.getByPlaceholder('格式化结果')
+      await input.fill("select id, name from users where status = 'active' -- 状态\nand age > 18")
+      await page.getByRole('button', { name: '美化', exact: true }).click()
+      await expect(output).toHaveValue(
+        "SELECT id, name\nFROM users\nWHERE status = 'active' -- 状态\n  AND age > 18"
+      )
+
+      // 对美化结果再压缩：折叠换行缩进，字符串与注释原样；再压缩一次结果不变（幂等）
+      await input.fill(await output.inputValue())
+      await page.getByRole('button', { name: '压缩', exact: true }).click()
+      const minified = await output.inputValue()
+      expect(minified).toBe(
+        "SELECT id, name FROM users WHERE status = 'active' -- 状态\nAND age > 18"
+      )
+      await input.fill(minified)
+      await page.getByRole('button', { name: '压缩', exact: true }).click()
+      await expect(output).toHaveValue(minified)
     } finally {
       await app.close()
     }

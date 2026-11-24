@@ -65,9 +65,7 @@ test.describe('time-toolbox（时间工具箱）冒烟', () => {
       const input = page.getByPlaceholder('1700000000 或 1700000000000')
       await input.fill('1700000000')
       await expect(page.getByText('2023-11-14T22:13:20.000Z', { exact: true })).toBeVisible()
-      await expect(
-        page.getByText('2023-11-14 22:13:20', { exact: true }).first()
-      ).toBeVisible()
+      await expect(page.getByText('2023-11-14 22:13:20', { exact: true }).first()).toBeVisible()
 
       await input.fill('abc')
       await expect(page.getByRole('alert')).toContainText('TT_INVALID_INPUT')
@@ -98,6 +96,31 @@ test.describe('time-toolbox（时间工具箱）冒烟', () => {
       await expect(page.getByRole('alert')).toHaveCount(0)
       await expect(page.getByText('描述：每周一至周五 09:00', { exact: true })).toBeVisible()
       await expect(page.locator('[data-cron-run]')).toHaveCount(5)
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('日期计算器：间隔总天数/工作日可见 + 加减月末钳制', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '时间工具箱')
+      await page.getByText('日期计算器', { exact: true }).first().click()
+
+      // 间隔模式默认今/明天：总天数、自然周、工作日三行输出可见
+      await expect(page.getByText('总天数', { exact: true })).toBeVisible()
+      await expect(page.getByText('自然周', { exact: true })).toBeVisible()
+      await expect(page.getByText('工作日', { exact: true })).toBeVisible()
+
+      // 加减模式：2023-01-31 + 1 月 → 2023-02-28（日溢出钳制月末）
+      await page.getByText('加减', { exact: true }).click()
+      await page.getByPlaceholder('基准日期').fill('2023-01-31')
+      await page.keyboard.press('Tab')
+      await page.getByText('月', { exact: true }).click()
+
+      await expect(page.getByText('2023-02-28', { exact: true })).toBeVisible()
+      await expect(page.getByText('星期二', { exact: true })).toBeVisible()
     } finally {
       await app.close()
     }

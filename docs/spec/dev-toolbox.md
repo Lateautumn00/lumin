@@ -211,3 +211,11 @@
 ### 门禁
 
 `pnpm --filter @lumin/tool-dev-toolbox typecheck` → `pnpm exec vitest run packages/tools/dev-toolbox` → `pnpm --filter @lumin/desktop build`（记录 chunk raw/gzip）→ e2e（由主会话串行执行）。
+
+## M60 扩展（速赢档一 · Q62/M60，2026-11-23 登记）：进制与位运算
+
+- **区 A「进制互转」**：输入框（容忍 `0x`/`0b`/`0o` 前缀——与所选进制一致时采纳；剥离下划线与空格分组）+ 当前进制单选（2/8/10/16）→ 四读数卡 BIN/OCT/DEC/HEX（十六进制大写、每 4 位空格分组）+ 所需最少位宽徽标。
+- **区 B「位运算」**：A、B 输入（默认十进制、BigInt、非负）、运算单选 AND/OR/XOR/NOT（NOT 单目时隐藏 B 框）→ 结果同步显示十/二/八/十六进制；NOT 与全运算按 **64 位无符号**（`BigInt.asUintN(64, …)`）口径，界面注明，避免负号困扰。
+- **约束**：互转区仅非负整数（≤ 2^63-1 十进制可负、绝对值 ≤ 63 位）；位运算输入 ≤ 2^64-1；非法字符/小数/超范围 → 沿用本工具既有错误码前缀（从既有码表取），中文文案 + 恢复上一有效值。
+- **实现**：纯函数 `convertBase(raw, from)`、`bitwise(a, op, b)`、`groupDigits`。零 IPC、零依赖。
+- **验收**：单测锚点（0xFF 四进制互转、`0b1010` 前缀、下划线分组、2^64-1 边界、负十进制 asUintN、NOT 口径、非法字符、小数拒绝、分组宽度）本包 ≥80%；e2e ≥1 用例；R2 记入 `docs/smoke/dev-toolbox.md` M60 增量节；chunk <200KB gzip。

@@ -1,8 +1,8 @@
 /**
  * @file Base64 / URL / Hex / Unicode 编解码纯函数（UTF-8 安全，无 IO）
  * @author cuilanchao
- * @date 2026-11-21
- * @description Base64/Hex 用 TextEncoder/TextDecoder 保证中文与 emoji 无损；Unicode 按 UTF-16 码元转义
+ * @date 2026-11-23
+ * @description Base64/Hex 用 TextEncoder/TextDecoder 保证中文与 emoji 无损；URL 支持组件级 / 完整（RFC 3986）模式，解码先定位首个非法 %xx（spec §7.1）
  */
 import { checkTextSize, toolError, type TextResult } from './errors'
 
@@ -55,32 +55,69 @@ export function decodeBase64(text: string): TextResult<string> {
   }
 }
 
+/** URL 编码模式：component = encodeURIComponent；full = 组件编码后追加 RFC 3986 的 !'()* */
+export type UrlEncodeMode = 'component' | 'full'
+
+/** 完整模式需追加百分号编码的 RFC 3986 额外保留字符 */
+const RFC3986_EXTRA_CHARS = /[!'()*]/g
+
 /**
- * 文本 → URL component 编码（空格编码为 %20，&/=/?# 一并编码）
+ * 文本 → URL 编码（默认组件级语义，空格编码为 %20）
  * @param text 原始文本
+ * @param mode 组件级（encodeURIComponent）/ 完整（追加编码 !'()* 五个字符）
  */
-export function encodeUrl(text: string): TextResult<string> {
+export function encodeUrl(text: string, mode: UrlEncodeMode = 'component'): TextResult<string> {
   const tooLarge = checkTextSize(text)
   if (tooLarge !== null) return { ok: false, error: tooLarge }
   try {
-    return { ok: true, value: encodeURIComponent(text) }
+    const encoded = encodeURIComponent(text)
+    if (mode === 'component') return { ok: true, value: encoded }
+    return {
+      ok: true,
+      value: encoded.replace(
+        RFC3986_EXTRA_CHARS,
+        (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`
+      )
+    }
   } catch (err) {
     return { ok: false, error: toolError('TT_URL_INVALID', String(err)) }
   }
 }
 
 /**
- * URL component 解码
+ * URL 编码 → 文本（先探测首个非法 %xx 位置再整体解码）
  * @param text 已编码文本
  */
 export function decodeUrl(text: string): TextResult<string> {
   const tooLarge = checkTextSize(text)
   if (tooLarge !== null) return { ok: false, error: tooLarge }
+  const invalidIndex = findInvalidPercent(text)
+  if (invalidIndex >= 0) {
+    return {
+      ok: false,
+      error: toolError('TT_INVALID_INPUT', `首个非法 % 序列位于索引 ${invalidIndex}`)
+    }
+  }
   try {
     return { ok: true, value: decodeURIComponent(text) }
   } catch (err) {
     return { ok: false, error: toolError('TT_URL_INVALID', String(err)) }
   }
+}
+
+/**
+ * 探测首个非法 % 序列（% 后不足两位十六进制）
+ * @param text 待探测文本
+ * @returns 首个非法 % 的下标；无非法序列返回 -1
+ */
+function findInvalidPercent(text: string): number {
+  for (let index = 0; index < text.length; index += 1) {
+    if (text.charAt(index) !== '%') continue
+    const first = text.charAt(index + 1)
+    const second = text.charAt(index + 2)
+    if (!/^[0-9a-fA-F]$/.test(first) || !/^[0-9a-fA-F]$/.test(second)) return index
+  }
+  return -1
 }
 
 /**

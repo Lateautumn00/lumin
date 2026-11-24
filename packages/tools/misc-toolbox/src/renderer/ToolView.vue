@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 实用工具（misc-toolbox）：子网 / IP 计算器 + 屏幕标尺 + 秒表 / 倒计时 / 番茄钟。
+ * 实用工具（misc-toolbox）：子网 / IP 计算器 + 屏幕标尺 + 秒表 / 倒计时 / 番茄钟 + 中文信息三卡片。
  * 三态：空态（IP 引导 + 预设、标尺 DPI 引导、秒表 00:00.00）/ 加载态（截屏按钮 loading、计时豁免）/ 报错态（MT_* + 中文文案）。
  * 计时基于 performance.now 差值，setInterval 仅刷新显示；卸载时清理 interval / AudioContext / 标题标记。
  */
@@ -22,6 +22,7 @@ import { Flag, Pause, Play, RotateCcw, SkipForward } from '@lucide/vue'
 import type { StructuredError } from '@lumin/shared'
 
 import ScreenRulerPanel from './ScreenRulerPanel.vue'
+import ChineseInfoPanel from './ChineseInfoPanel.vue'
 import { errorMessage } from '../errors'
 import { isIpv6Info, parseAndCompute, type SubnetInfo, type SubnetInfo6 } from '../ip'
 import {
@@ -421,7 +422,7 @@ onUnmounted(() => {
     <div>
       <h1 class="text-base font-semibold">实用工具</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        子网 / IP 计算器、屏幕标尺与秒表、倒计时、番茄钟（全部本地运行，不联网）
+        子网 / IP 计算器、屏幕标尺、秒表 / 倒计时 / 番茄钟与中文信息（全部本地运行，不联网）
       </p>
     </div>
 
@@ -435,6 +436,9 @@ onUnmounted(() => {
       </NTabPane>
       <NTabPane name="timer">
         <template #tab>计时器</template>
+      </NTabPane>
+      <NTabPane name="chinese">
+        <template #tab>中文信息</template>
       </NTabPane>
     </NTabs>
 
@@ -636,6 +640,11 @@ onUnmounted(() => {
           专注 4 个后进入长休；阶段结束后需点「开始下一阶段」，不会自动计时。
         </NText>
       </div>
+    </div>
+
+    <!-- 页签四：中文信息（三卡片区） -->
+    <div v-if="activeTab === 'chinese'">
+      <ChineseInfoPanel />
     </div>
   </div>
 </template>

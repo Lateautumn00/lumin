@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 开发工具主视图（M42）
 // 作者：cuilanchao · 修改时间：2026-11-21
-// 四页签：端口占用 / CURL 转代码 / JWT 解码 / 静态服务器；静态服务器跑在主进程，切走页签不打断
+// 五页签：端口占用 / CURL 转代码 / JWT 解码 / 进制与位运算 / 静态服务器；静态服务器跑在主进程，切走页签不打断
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { NAlert, NButton, NTabPane, NTabs, NTag } from 'naive-ui'
 import { toStructuredError, type StructuredError } from '@lumin/shared'
@@ -10,6 +10,7 @@ import { config, serverStart, serverStatus, serverStop, setConfig } from './clie
 import PortsPanel from './PortsPanel.vue'
 import CurlPanel from './CurlPanel.vue'
 import JwtPanel from './JwtPanel.vue'
+import BasePanel from './BasePanel.vue'
 import ServerPanel from './ServerPanel.vue'
 
 /** 服务器视图状态（与 IPC 出参同形） */
@@ -178,6 +179,9 @@ onUnmounted(() => {
       <NTabPane name="jwt">
         <template #tab>JWT 解码</template>
       </NTabPane>
+      <NTabPane name="base">
+        <template #tab>进制与位运算</template>
+      </NTabPane>
       <NTabPane name="server">
         <template #tab>静态服务器</template>
       </NTabPane>
@@ -186,6 +190,7 @@ onUnmounted(() => {
     <PortsPanel v-if="activeTab === 'ports'" />
     <CurlPanel v-else-if="activeTab === 'curl'" />
     <JwtPanel v-else-if="activeTab === 'jwt'" />
+    <BasePanel v-else-if="activeTab === 'base'" />
 
     <div v-else class="flex flex-col gap-3">
       <ServerPanel

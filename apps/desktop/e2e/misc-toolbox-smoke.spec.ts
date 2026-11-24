@@ -3,7 +3,8 @@
  * @author cuilanchao
  * @date 2026-11-21
  * @description 覆盖：三页签可见、CIDR /24 计算、/33 报错码 → 中文文案、IPv6 子网、
- *              秒表开始/重置、番茄钟默认 25:00 与递减、屏幕标尺截屏/框选/测量/Esc 关闭。
+ *              秒表开始/重置、番茄钟默认 25:00 与递减、屏幕标尺截屏/框选/测量/Esc 关闭、
+ *              中文信息页签三卡片与身份证通过/失败、金额大写对照。
  */
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
@@ -64,7 +65,7 @@ test.describe('misc-toolbox（实用工具）冒烟', () => {
     await ensureReady(page)
     try {
       await clickSidebarTool(page, '实用工具')
-      await page.getByPlaceholder(/输入 CIDR/).fill('192.168.1.10/24')
+      await page.getByPlaceholder(/192\.168\.1\.0/).fill('192.168.1.10/24')
       await page.getByRole('button', { name: '计算', exact: true }).click()
 
       await expect(page.getByText('192.168.1.0', { exact: true }).first()).toBeVisible()
@@ -81,7 +82,7 @@ test.describe('misc-toolbox（实用工具）冒烟', () => {
     await ensureReady(page)
     try {
       await clickSidebarTool(page, '实用工具')
-      await page.getByPlaceholder(/输入 CIDR/).fill('192.168.1.0/33')
+      await page.getByPlaceholder(/192\.168\.1\.0/).fill('192.168.1.0/33')
       await page.getByRole('button', { name: '计算', exact: true }).click()
 
       await expect(page.getByText(/子网 \/ IP 输入无效/)).toBeVisible()
@@ -97,7 +98,7 @@ test.describe('misc-toolbox（实用工具）冒烟', () => {
     await ensureReady(page)
     try {
       await clickSidebarTool(page, '实用工具')
-      await page.getByPlaceholder(/输入 CIDR/).fill('2001:db8::3/32')
+      await page.getByPlaceholder(/192\.168\.1\.0/).fill('2001:db8::3/32')
       await page.getByRole('button', { name: '计算', exact: true }).click()
 
       await expect(page.getByText('2001:db8::', { exact: true }).first()).toBeVisible()
@@ -178,6 +179,41 @@ test.describe('misc-toolbox（实用工具）冒烟', () => {
       await page.getByRole('button', { name: '开始', exact: true }).click()
       await page.waitForTimeout(1500)
       expect((await remaining.innerText()).trim()).not.toBe('25:00')
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('中文信息：三卡片可见，身份证通过/失败徽标与金额大写对照', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '实用工具')
+      await page.locator('.n-tabs-tab[data-name="chinese"]').click()
+
+      await expect(page.getByRole('heading', { name: '数据脱敏' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: '身份证', exact: true })).toBeVisible()
+      await expect(page.getByRole('heading', { name: '金额大写' })).toBeVisible()
+
+      // 合法身份证（X 尾校验位）→ 通过徽标 + 出生日期 + 性别
+      await page
+        .getByPlaceholder('输入 18 位身份证号（自动去空格、大写 X）')
+        .fill('11010519491231002X')
+      await expect(page.getByTestId('idcard-badge')).toHaveText('通过')
+      await expect(page.getByText('1949-12-31', { exact: true })).toBeVisible()
+      await expect(page.getByText('女', { exact: true })).toBeVisible()
+
+      // 校验位非法 → 失败徽标 + MT_ID_CHECKSUM 中文文案
+      await page
+        .getByPlaceholder('输入 18 位身份证号（自动去空格、大写 X）')
+        .fill('110105194912310021')
+      await expect(page.getByTestId('idcard-badge')).toHaveText('失败')
+      await expect(page.getByText(/身份证校验位不通过/)).toBeVisible()
+      await expect(page.getByText(/MT_ID_CHECKSUM/)).toBeVisible()
+
+      // 金额大写两行对照
+      await page.getByPlaceholder('输入金额，如 1,234.56').fill('1001')
+      await expect(page.getByTestId('amount-chinese')).toHaveText('壹仟零壹元整')
     } finally {
       await app.close()
     }

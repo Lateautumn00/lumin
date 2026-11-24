@@ -3,9 +3,21 @@
  * 时间工具箱（time-toolbox）：时间戳转换 / 时区查看 / 时长计算 / Cron 解析与反向生成。
  * 三态：空态（各页签均带默认值）/ 加载态（全同步纯函数，豁免）/ 报错态（结构化错误码 + 中文文案）。
  */
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ArrowLeftRight, Clock, Copy } from '@lucide/vue'
-import { NButton, NInput, NSelect, NTabPane, NTabs, NText } from 'naive-ui'
+import {
+  NButton,
+  NDatePicker,
+  NInput,
+  NInputNumber,
+  NRadio,
+  NRadioGroup,
+  NSelect,
+  NSwitch,
+  NTabPane,
+  NTabs,
+  NText
+} from 'naive-ui'
 import type { StructuredError } from '@lumin/shared'
 
 import {
@@ -25,6 +37,14 @@ import {
 } from '../time'
 import { buildCron, describeCron, nextCronRuns, parseCron, type ParsedCron } from '../cron'
 import { toolError } from '../errors'
+import {
+  addDays,
+  calcInterval,
+  MAX_DATE_STEP,
+  type DateCalcUnit,
+  weekdayLabel,
+  weekdayOf
+} from '../date-calc'
 
 const LOCAL_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
 
@@ -233,6 +253,104 @@ const dateDiffRows = computed<{ key: string; label: string; value: string }[]>((
   return [{ key: 'date-diff-total-days', label: '总天数', value: `${diff.totalDays} 天` }]
 })
 
+/* ---------- 日期计算器（M60：spec/time-toolbox.md M60 节） ---------- */
+
+/** 本地零点毫秒（days 天后；内部重新归零时分秒） */
+function localMidnightOffset(days: number): number {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  date.setHours(0, 0, 0, 0)
+  return date.getTime()
+}
+
+/** date 选择器时间戳 → YYYY-MM-DD（选择器值为本地零点，按本地分量取值） */
+function tsToDateText(ts: number): string {
+  const date = new Date(ts)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+const todayTs = localMidnightOffset(0)
+const tomorrowTs = localMidnightOffset(1)
+
+/** 子模式：间隔 / 加减 */
+const calcMode = ref<'interval' | 'add'>('interval')
+
+// 间隔状态：起/止选择器（null = 已清空 → TT_INVALID_INPUT），结果始终取上一有效值
+const intervalStartTs = ref<number | null>(todayTs)
+const intervalEndTs = ref<number | null>(tomorrowTs)
+const inclusive = ref(false)
+const intervalError = ref<StructuredError | null>(null)
+const lastInterval = ref({ start: todayTs, end: tomorrowTs })
+
+watch([intervalStartTs, intervalEndTs], () => {
+  const start = intervalStartTs.value
+  const end = intervalEndTs.value
+  if (start === null || end === null) {
+    intervalError.value = toolError('TT_INVALID_INPUT', '请选择完整的开始与结束日期')
+    return
+  }
+  lastInterval.value = { start, end }
+  intervalError.value = null
+})
+
+const intervalRows = computed<{ key: string; label: string; value: string }[]>(() => {
+  const { start, end } = lastInterval.value
+  const result = calcInterval(tsToDateText(start), tsToDateText(end), inclusive.value)
+  if (result === null) return []
+  const absolute = result.negative ? '（绝对值）' : ''
+  return [
+    { key: 'calc-total-days', label: '总天数', value: `${result.totalDays} 天${absolute}` },
+    { key: 'calc-weeks', label: '自然周', value: `${result.weeks} 周` },
+    { key: 'calc-weekdays', label: '工作日', value: `${result.weekdays} 天` },
+    {
+      key: 'calc-weekday-range',
+      label: '起止星期',
+      value: `${weekdayLabel(result.startWeekday)} → ${weekdayLabel(result.endWeekday)}`
+    }
+  ]
+})
+
+// 加减状态：基准选择器 + 数量（整数 |N| ≤ 36500）+ 单位，结果同样保留上一有效值
+const addBaseTs = ref<number | null>(todayTs)
+const addCount = ref<number | null>(1)
+const addUnit = ref<DateCalcUnit>('day')
+const addError = ref<StructuredError | null>(null)
+const lastAdd = ref({ base: todayTs, count: 1 })
+
+watch([addBaseTs, addCount], () => {
+  const base = addBaseTs.value
+  const count = addCount.value
+  if (base === null) {
+    addError.value = toolError('TT_INVALID_INPUT', '请选择基准日期')
+    return
+  }
+  if (count === null || !Number.isInteger(count) || Math.abs(count) > MAX_DATE_STEP) {
+    addError.value = toolError('TT_INVALID_INPUT', '数量须为 -36500 ~ 36500 的整数')
+    return
+  }
+  lastAdd.value = { base, count }
+  addError.value = null
+})
+
+const addResult = computed<string | null>(() =>
+  addDays(tsToDateText(lastAdd.value.base), lastAdd.value.count, addUnit.value)
+)
+
+const addResultWeekday = computed(() =>
+  addResult.value === null ? '' : weekdayOf(addResult.value)
+)
+
+function onCalcModeChange(value: string | number): void {
+  if (value === 'interval' || value === 'add') calcMode.value = value
+}
+
+function onCalcUnitChange(value: string | number): void {
+  if (value === 'day' || value === 'week' || value === 'month' || value === 'year') {
+    addUnit.value = value
+  }
+}
+
 /* ---------- Tab4 Cron 解析 ---------- */
 
 const cronInput = ref('*/5 * * * *')
@@ -399,6 +517,9 @@ onUnmounted(() => {
       </NTabPane>
       <NTabPane name="date-diff">
         <template #tab>日期差</template>
+      </NTabPane>
+      <NTabPane name="date-calc">
+        <template #tab>日期计算器</template>
       </NTabPane>
       <NTabPane name="cron">
         <template #tab>Cron</template>
@@ -646,6 +767,123 @@ onUnmounted(() => {
       <NText depth="3" class="text-xs">
         按本地日历日计算；月末按「加月截断」借位（如 1-31 → 3-01 为 1 个月 1 天）。
       </NText>
+    </div>
+
+    <!-- 日期计算器（M60）：间隔 / 加减，纯 renderer 零 IPC -->
+    <div v-if="activeTab === 'date-calc'" class="flex max-w-2xl flex-col gap-3">
+      <div class="flex flex-wrap items-center gap-4">
+        <NRadioGroup :value="calcMode" size="small" @update:value="onCalcModeChange">
+          <NRadio value="interval">间隔</NRadio>
+          <NRadio value="add">加减</NRadio>
+        </NRadioGroup>
+        <div v-if="calcMode === 'interval'" class="flex items-center gap-2">
+          <NSwitch v-model:value="inclusive" aria-label="含头含尾" />
+          <NText depth="2" class="text-sm">含头含尾</NText>
+        </div>
+      </div>
+
+      <!-- 间隔：起/止日期 + 总天数/自然周/工作日/起止星期 -->
+      <template v-if="calcMode === 'interval'">
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="flex flex-col gap-1">
+            <NText depth="2" class="text-sm">开始日期</NText>
+            <NDatePicker
+              v-model:value="intervalStartTs"
+              type="date"
+              placeholder="开始日期"
+              class="w-44"
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <NText depth="2" class="text-sm">结束日期</NText>
+            <NDatePicker
+              v-model:value="intervalEndTs"
+              type="date"
+              placeholder="结束日期"
+              class="w-44"
+            />
+          </div>
+        </div>
+
+        <div
+          v-if="intervalError !== null"
+          role="alert"
+          class="text-sm text-[var(--lumin-color-error, #d03050)]"
+        >
+          {{ intervalError.message }}（{{ intervalError.code }}）
+        </div>
+
+        <div v-if="intervalRows.length > 0" class="flex flex-col gap-1">
+          <div
+            v-for="row in intervalRows"
+            :key="row.key"
+            class="flex items-center gap-3 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-2"
+          >
+            <NText depth="2" class="w-20 shrink-0 text-xs">{{ row.label }}</NText>
+            <NText class="flex-1 font-mono text-sm">{{ row.value }}</NText>
+          </div>
+        </div>
+
+        <NText depth="3" class="text-xs">
+          工作日仅统计周一至周五（跳过周六日，未计法定节假日与调休）；止早于起按绝对值计算并标注「（绝对值）」。
+        </NText>
+      </template>
+
+      <!-- 加减：基准日期 + 数量/单位 + 结果日期与星期 -->
+      <template v-else>
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="flex flex-col gap-1">
+            <NText depth="2" class="text-sm">基准日期</NText>
+            <NDatePicker
+              v-model:value="addBaseTs"
+              type="date"
+              placeholder="基准日期"
+              class="w-44"
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <NText depth="2" class="text-sm">数量</NText>
+            <NInputNumber
+              v-model:value="addCount"
+              :step="1"
+              placeholder="整数"
+              aria-label="数量"
+              class="w-36"
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <NText depth="2" class="text-sm">单位</NText>
+            <NRadioGroup :value="addUnit" size="small" @update:value="onCalcUnitChange">
+              <NRadio value="day">天</NRadio>
+              <NRadio value="week">周</NRadio>
+              <NRadio value="month">月</NRadio>
+              <NRadio value="year">年</NRadio>
+            </NRadioGroup>
+          </div>
+        </div>
+
+        <div
+          v-if="addError !== null"
+          role="alert"
+          class="text-sm text-[var(--lumin-color-error, #d03050)]"
+        >
+          {{ addError.message }}（{{ addError.code }}）
+        </div>
+
+        <div
+          v-if="addResult !== null"
+          class="flex items-baseline gap-3 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-2"
+        >
+          <NText depth="2" class="w-20 shrink-0 text-xs">结果日期</NText>
+          <NText class="flex-1 font-mono text-lg font-semibold">{{ addResult }}</NText>
+          <NText depth="2" class="text-sm">{{ addResultWeekday }}</NText>
+        </div>
+
+        <NText depth="3" class="text-xs">
+          月/年按日历进位，日溢出钳制到月末（如 1/31 + 1 月 → 2/28，闰年 → 2/29）；数量为整数且 |N|
+          ≤ 36500。
+        </NText>
+      </template>
     </div>
 
     <!-- Cron 解析 -->

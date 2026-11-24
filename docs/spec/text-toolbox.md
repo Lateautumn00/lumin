@@ -200,4 +200,21 @@
 
 ## 6. R5 体积口径
 
-工具 chunk `text-toolbox-*.js` 实测 **77,047 B raw / 16,663 B gzip**（M47）；独占依赖 chunk 为 0（naive-ui Tabs/Button 等为多工具共享 vendor，不计入增量）。
+工具 chunk `text-toolbox-*.js` 实测 **101,792 B raw / 21,330 B gzip**（M60 后，2026-11-23）；拼音字典独占 `esm-*.js` 401,263 B raw（内容未变，动态加载不进首屏），两者合计 ≈169KB gzip < 200KB；独占依赖 chunk 为 0（naive-ui Tabs/Button 等为多工具共享 vendor，不计入增量）。
+
+## 7. M60 扩展（速赢档一 · Q62/M60，2026-11-23 登记）
+
+### 7.1 「URL 编码」页签（字段级）
+
+- **输入**：源文本 textarea（不限长）；**模式单选**：组件级（`encodeURIComponent`）/ 完整（组件编码后将 `!'()*` 五个字符按 RFC 3986 追加百分号编码）。
+- **按钮**：编码、解码、交换（输出 ↔ 输入）、再执行一次（对输出重复当前方向，支持多重编解码）。
+- **分支**：解码遇非法 `%` 序列（`%` 后非两位十六进制）→ `TT_INVALID_INPUT`，文案含首个非法处索引；空输入 → 按钮禁用；解码产物含 U+FFFD → 警告「输入可能不是合法 UTF-8 字节序列」（不阻断）。
+- **实现**：纯函数 `encodeUrl(text, mode)` / `decodeUrl(text)`；`decodeURIComponent` 对首个非法序列整体抛错 → 先探测非法 `%xx` 位置再抛结构化错。零 IPC、零依赖。
+
+### 7.2 「SQL 格式化」页签（字段级）
+
+- **输入**：SQL 源文本；**按钮**：美化（子句换行 + 关键字大写 + 2 空格缩进）、压缩（空白折叠单空格）、复制输出。
+- **自写 tokenizer（零依赖）**：保护字符串字面量（`'…''…'` 转义、`"…"`）、注释（`--` 行、`/* */` 块）、反引号标识符、数字；子句关键字（SELECT/FROM/WHERE/GROUP BY/ORDER BY/HAVING/LIMIT/OFFSET/JOIN/LEFT|RIGHT|INNER|FULL JOIN/ON/UNION ALL/INSERT/UPDATE/DELETE/SET/VALUES/CREATE/ALTER/DROP/AND/OR）触发换行与缩进；`CASE…WHEN…END` 内部保持一级缩进。
+- **分支**：空输入 → 空态提示不执行；未闭合字符串/注释 → 按原文保留并提示「存在未闭合字面量，已按原文处理」（警告）；压缩对美化结果幂等。
+- **实现**：纯函数 `formatSql(sql)` / `minifySql(sql)`。零 IPC、零依赖。
+- **验收**：单测（组件/完整编解码往返、`!'()*` 完整模式锚点、非法 `%` 定位、多重编解码、tokenizer 字符串/注释保护、关键字换行快照、压缩幂等）本包限包 ≥80%；e2e 每页签 ≥1 用例；R2 记入 `docs/smoke/text-toolbox.md` M60 增量节；R5 chunk 实测更新本节。

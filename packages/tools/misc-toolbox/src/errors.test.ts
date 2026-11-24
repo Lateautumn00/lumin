@@ -8,7 +8,11 @@ describe('errors', () => {
       'MT_CIDR_INVALID',
       'MT_CAPTURE_FAILED',
       'MT_RULER_INVALID',
-      'MT_CLIPBOARD_FAILED'
+      'MT_CLIPBOARD_FAILED',
+      'MT_ID_INVALID',
+      'MT_ID_CHECKSUM',
+      'MT_ID_LEGACY',
+      'MT_AMOUNT_INVALID'
     ])
   })
 
@@ -33,6 +37,10 @@ describe('errors', () => {
     expect(errorMessage('MT_CAPTURE_FAILED')).toBe('屏幕截图失败')
     expect(errorMessage('MT_RULER_INVALID')).toBe('测量参数无效')
     expect(errorMessage('MT_CLIPBOARD_FAILED')).toBe('复制到剪贴板失败')
+    expect(errorMessage('MT_ID_INVALID')).toBe('身份证号格式无效')
+    expect(errorMessage('MT_ID_CHECKSUM')).toBe('身份证校验位不通过')
+    expect(errorMessage('MT_ID_LEGACY')).toBe('V1 仅支持 18 位')
+    expect(errorMessage('MT_AMOUNT_INVALID')).toBe('金额格式无效')
     expect(errorMessage('UNKNOWN')).toBe('UNKNOWN')
   })
 })

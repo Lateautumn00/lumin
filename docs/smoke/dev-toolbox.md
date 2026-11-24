@@ -68,9 +68,9 @@ JWT 页签为纯 renderer 同步计算，不读文件、不写盘、不发网络
 
 | 项                            | raw      | gzip     | 结论                |
 | ----------------------------- | -------- | -------- | ------------------- |
-| 工具 chunk `dev-toolbox-*.js` | 59,611 B | 14,203 B | gzip < 200 KB，达标 |
+| 工具 chunk `dev-toolbox-*.js` | 77,930 B | 17,790 B | gzip < 200 KB，达标（M60 后实测） |
 
-> 口径：`dev-toolbox` 页 chunk 为工具代码增量（M42 三页签 46,220 B raw → M45 五页签 68,738 B raw → M48 四页签 59,611 B raw）；Naive UI 组件（Alert/Tabs/Spin/Popconfirm/Tag/Button/Input/InputNumber/Radio）与 `@lucide/vue` 图标（含 `Copy`/`RefreshCw`/`KeyRound`）均落共享 vendor chunk，不计入增量。主进程 `server.ts` 走 `out/main/index.js`，不属 R5 renderer 口径。
+> 口径：`dev-toolbox` 页 chunk 为工具代码增量（M42 三页签 46,220 B raw → M45 五页签 68,738 B raw → M48 四页签 59,611 B raw → M60 五页签+进制位运算 77,930 B raw / 17,790 B gzip）；Naive UI 组件（Alert/Tabs/Spin/Popconfirm/Tag/Button/Input/InputNumber/Radio）与 `@lucide/vue` 图标（含 `Copy`/`RefreshCw`/`KeyRound`）均落共享 vendor chunk，不计入增量。主进程 `server.ts` 走 `out/main/index.js`，不属 R5 renderer 口径。
 
 ## 5. 验收命令记录（2026-11-21，含 M48 复测）
 
@@ -81,3 +81,38 @@ JWT 页签为纯 renderer 同步计算，不读文件、不写盘、不发网络
 | `pnpm exec vitest run packages/tools/dev-toolbox --coverage`（限定本包 include） | Statements 93.00% · Branches 83.05% · Functions 92.04% · Lines 94.68% |
 | `pnpm --filter @lumin/desktop typecheck`                                         | 通过                                                                  |
 | `pnpm --filter @lumin/desktop build`                                             | 通过（chunk 59,611 B raw / 14,203 B gzip）                            |
+
+## 6. M60 进制与位运算增量（2026-11-23）
+
+> 范围：`base.ts`（`convertBase` / `parseBitInput` / `bitwise` / `groupDigits` / `bitWidth`）纯 renderer 零 IPC，UI 为「进制与位运算」页签（区 A 进制互转 + 区 B 64 位无符号位运算）；错误码复用既有 `DT_INVALID_PAYLOAD`。
+
+### 6.1 冒烟记录
+
+| 项          | 方式                                                           | 结果                                                                                                                                                                                                                          |
+| ----------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 单测        | `pnpm exec vitest run packages/tools/dev-toolbox`              | ✅ 11 files / **149 tests** 全通过（新增 `base.test.ts` 16 例：0xFF 四进制互转、0b1010/0o17 前缀、下划线与空格分组、`2^64-1` 边界、负十进制 `asUintN(64)` 补码视图、NOT 单目口径、非法字符、小数拒绝、分组宽度 ≤4、最少位宽） |
+| typecheck   | `pnpm --filter @lumin/tool-dev-toolbox typecheck`              | ✅ 通过                                                                                                                                                                                                                       |
+| eslint      | `pnpm exec eslint packages/tools/dev-toolbox --max-warnings 0` | ✅ 通过                                                                                                                                                                                                                       |
+| e2e（R3）   | `apps/desktop/e2e/dev-toolbox-smoke.spec.ts` 追加用例          | ✅ 已执行通过（2026-11-23，随 5 套定向 e2e 汇总 32/32；用例 B 值修正为 240——原用例「255 AND 15 = 240」算错，255 AND 15 = 15，组件计算正确）                          |
+| 构建 / 门禁 | `pnpm build` / `pnpm gate`                                     | ✅ build 通过（2026-11-23），`dev-toolbox-*.js` = **77,930 B raw / 17,790 B gzip**（M60 后）；gate 由主会话统一执行（2026-11-24 全绿：lint/typecheck/test 283 文件/audit 无 high/boundary 无违规）                                                             |
+
+### 6.2 R2 八类（进制与位运算增量适用性）
+
+| 类别             | 场景与验证                                                                                                                                    | 结果     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| 1. 中文/空格路径 | 不适用（无文件路径）；等价：输入剥离空格/下划线分组后解析                                                                                     | 不适用   |
+| 2. 文件被占用    | 不适用（无文件 IO）                                                                                                                           | 不适用   |
+| 3. 加密文件      | 不适用（无文件 IO）                                                                                                                           | 不适用   |
+| 4. 超大文件      | 等价边界：互转超 `2^63-1`、位运算输入超 `2^64-1`、非法字符/小数 → `DT_INVALID_PAYLOAD` 中文 detail，读数恢复上一有效值（`base.test.ts` 覆盖） | 单测通过 |
+| 5. 任务取消      | 不适用（全同步纯函数 <1ms，无任务队列）                                                                                                       | 不适用   |
+| 6. 并发溢出      | 不适用（无队列；输入即时重算，`watch` 结果幂等）                                                                                              | 不适用   |
+| 7. 磁盘满        | 不适用（不落盘）                                                                                                                              | 不适用   |
+| 8. 断电恢复      | 不适用（无持久化；重开页签恢复默认输入与 0 AND 0 结果）                                                                                       | 不适用   |
+
+### 6.3 人工目视（待补录）
+
+- [ ] 打开「进制与位运算」页签：区 A 空态引导可见；输入 `255`（十进制）→ BIN `1111 1111` / OCT `377` / DEC `255` / HEX `FF`，徽标「最少 8 位」
+- [ ] 进制切 16 并输入 `0xFF` / `DE_AD_BEEF` → 正确采纳前缀与分组；输入 `3.14` → `DT_INVALID_PAYLOAD` 不支持小数，读数保留上一有效值
+- [ ] 十进制输入 `-1` → HEX `FFFF FFFF FFFF FFFF`（64 位补码视图）
+- [ ] 区 B：A=255、B=15 → AND 结果 DEC `240`、HEX `F0`；切 NOT → B 输入隐藏、结果按 64 位无符号（如 A=0 → `18446744073709551615`）
+- [ ] 64 位无符号口径提示文案在界面可见；A/B 超 `2^64-1` → 报错且保留上一有效结果
