@@ -408,6 +408,18 @@ const workspaceAlias = [
   {
     find: /^@lumin\/tool-unit-converter\/renderer\/(.+)$/,
     replacement: r('../../packages/tools/unit-converter/src/renderer/$1')
+  },
+  {
+    find: /^@lumin\/tool-mindmap\/manifest$/,
+    replacement: r('../../packages/tools/mindmap/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-mindmap\/node$/,
+    replacement: r('../../packages/tools/mindmap/src/node.ts')
+  },
+  {
+    find: /^@lumin\/tool-mindmap\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/mindmap/src/renderer/$1')
   }
 ]
 

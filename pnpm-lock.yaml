@@ -320,6 +320,9 @@ importers:
       '@lumin/tool-media-convert':
         specifier: workspace:*
         version: link:../../packages/tools/media-convert
+      '@lumin/tool-mindmap':
+        specifier: workspace:*
+        version: link:../../packages/tools/mindmap
       '@lumin/tool-misc-toolbox':
         specifier: workspace:*
         version: link:../../packages/tools/misc-toolbox
@@ -1115,6 +1118,40 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+
+  packages/tools/mindmap:
+    dependencies:
+      '@lucide/vue':
+        specifier: 1.72.0
+        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
+      '@lumin/node-kit':
+        specifier: workspace:*
+        version: link:../../node-kit
+      '@lumin/plugin-api':
+        specifier: workspace:*
+        version: link:../../plugin-api
+      '@lumin/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@lumin/ui':
+        specifier: workspace:*
+        version: link:../../ui
+      mind-elixir:
+        specifier: 6.0.3
+        version: 6.0.3
+      naive-ui:
+        specifier: 2.45.3
+        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
+      vue:
+        specifier: 3.5.45
+        version: 3.5.45(typescript@6.0.3)
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      electron:
+        specifier: 45.3.1
+        version: 45.3.1(supports-color@7.2.0)
 
   packages/tools/misc-toolbox:
     dependencies:
@@ -3633,6 +3670,9 @@ packages:
   mimic-response@3.1.0:
     resolution: {integrity: sha512-z0yWI+4FDrrweS8Zmt4Ej5HdJmky15+L2e6Wgn3+iK5fWzb6T3fhNFq2+MeTRb064c6Wr4N/wv0DzQTjNzHNGQ==}
     engines: {node: '>=10'}
+
+  mind-elixir@6.0.3:
+    resolution: {integrity: sha512-rsReFKTxfrcAuWjhfslY/9szWa0hyrMcO1hzG8kl74mLiTcXgZXKCksb8QR8B6VUA5EzDOrOQdxGoR83plQT5w==}
 
   minimatch@10.2.6:
     resolution: {integrity: sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A==}
@@ -6816,6 +6856,8 @@ snapshots:
   mimic-response@1.0.1: {}
 
   mimic-response@3.1.0: {}
+
+  mind-elixir@6.0.3: {}
 
   minimatch@10.2.6:
     dependencies:

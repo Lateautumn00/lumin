@@ -23,6 +23,7 @@ import { manifest as imageWatermarkManifest } from '@lumin/tool-image-watermark/
 import { manifest as lifeCalculatorManifest } from '@lumin/tool-life-calculator/manifest'
 import { manifest as markdownToolManifest } from '@lumin/tool-markdown-tool/manifest'
 import { manifest as mediaConvertManifest } from '@lumin/tool-media-convert/manifest'
+import { manifest as mindmapManifest } from '@lumin/tool-mindmap/manifest'
 import { manifest as miscToolboxManifest } from '@lumin/tool-misc-toolbox/manifest'
 import { manifest as ocrTextManifest } from '@lumin/tool-ocr-text/manifest'
 import { manifest as passwordGeneratorManifest } from '@lumin/tool-password-generator/manifest'
@@ -59,6 +60,7 @@ export const toolManifests: readonly ToolManifest[] = [
   fileRenamerManifest,
   textToolboxManifest,
   textEditorManifest,
+  mindmapManifest,
   markdownToolManifest,
   textDiffManifest,
   videoDownloadManifest,

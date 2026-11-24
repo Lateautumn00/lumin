@@ -43,6 +43,7 @@
 | 文件预览      | 本地预览文本 / Markdown / HTML / JSON / CSV / PDF / 图片 / Office（经 LibreOffice 转 PDF）；PDF 逐页渲染，Markdown/HTML 走 sandbox 隔离预览                                                             |
 | 文本编辑器    | 纯文本编辑：UTF-8/UTF-16/GBK 编码识别与保存、CRLF/LF、行号与当前行高亮、只读与 5MiB 大文件保护、外部修改冲突检测                                                                                        |
 | 视频播放器    | 本地播放 mp4/webm/ogv/ogg（浏览器原生解码，倍速与全屏，不转码、不复制文件）                                                                                                                             |
+| 思维导图      | 树形导图编辑（拖拽重排、折叠展开、主题样式）、Markdown/OPML/JSON 导入导出、PNG/SVG 导出、本地 .json 打开另存与草稿恢复                                                                                  |
 | 视频下载      | B 站/抖音/YouTube 等站点下载（联网、仅本地解析，请遵守平台条款与版权）                                                                                                                                  |
 | 外观主题      | 跟随系统 / 浅色 / 深色切换，全工具统一生效（tokens 单源，无逐工具适配）                                                                                                                                 |
 

@@ -292,6 +292,12 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
+        'packages/tools/mindmap/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
         'packages/tools/video-player/src/**/*.ts': {
           lines: 80,
           functions: 80,

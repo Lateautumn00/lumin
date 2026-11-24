@@ -20,6 +20,7 @@ import { registerMain as imageStitchRegisterMain } from '@lumin/tool-image-stitc
 import { registerMain as imageWatermarkRegisterMain } from '@lumin/tool-image-watermark/node'
 import { registerMain as markdownToolRegisterMain } from '@lumin/tool-markdown-tool/node'
 import { registerMain as mediaConvertRegisterMain } from '@lumin/tool-media-convert/node'
+import { registerMain as mindmapRegisterMain } from '@lumin/tool-mindmap/node'
 import { registerMain as miscToolboxRegisterMain } from '@lumin/tool-misc-toolbox/node'
 import { registerMain as ocrTextRegisterMain } from '@lumin/tool-ocr-text/node'
 import { registerMain as pdfImagesRegisterMain } from '@lumin/tool-pdf-images/node'
@@ -54,6 +55,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'image-watermark': imageWatermarkRegisterMain,
   'markdown-tool': markdownToolRegisterMain,
   'media-convert': mediaConvertRegisterMain,
+  mindmap: mindmapRegisterMain,
   'misc-toolbox': miscToolboxRegisterMain,
   'ocr-text': ocrTextRegisterMain,
   'pdf-images': pdfImagesRegisterMain,
