@@ -351,6 +351,12 @@ export default defineConfig({
           functions: 80,
           statements: 80,
           branches: 80
+        },
+        'apps/desktop/src/renderer/src/layout/tool-search.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
         }
       }
     }

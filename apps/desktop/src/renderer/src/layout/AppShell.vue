@@ -7,18 +7,21 @@
  *              <768px 改为顶栏 + 抽屉。用户手动收起/展开偏好写入 localStorage（仅壳状态）。
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Lightbulb, Menu, PanelLeftClose, PanelLeftOpen, X } from '@lucide/vue'
 import { t } from '../i18n/zh-CN'
 import AppSidebar from './AppSidebar.vue'
 import StatusBar from './StatusBar.vue'
+import ToolSearchOverlay from './ToolSearchOverlay.vue'
 
 /** 侧栏展开偏好（仅 UI 状态，不涉及主进程设置） */
 const NAV_PREF_KEY = 'lumin.shell.nav.collapsed'
 
 const route = useRoute()
+const router = useRouter()
 const viewportWidth = ref(window.innerWidth)
 const overlayOpen = ref(false)
+const searchOpen = ref(false)
 const manualCollapsed = ref<boolean | null>(readNavPreference())
 const menuButtonRef = ref<HTMLElement | null>(null)
 const drawerRef = ref<HTMLElement | null>(null)
@@ -96,7 +99,25 @@ function onResize(): void {
   if (!isCompact.value) overlayOpen.value = false
 }
 
+/** 打开工具搜索浮层（侧栏按钮入口） */
+function openSearch(): void {
+  searchOpen.value = true
+}
+
+/** 打开搜索结果：关闭浮层与窄屏抽屉，跳转到对应工具 */
+function selectTool(id: string): void {
+  searchOpen.value = false
+  closeOverlay()
+  void router.push(`/tools/${id}`)
+}
+
 function onKeydown(event: KeyboardEvent): void {
+  // Ctrl/Cmd + K：任意位置唤起工具搜索（输入框内同样生效）
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    searchOpen.value = !searchOpen.value
+    return
+  }
   if (!overlayOpen.value || !isCompact.value) return
   if (event.key === 'Escape') {
     event.preventDefault()
@@ -241,9 +262,13 @@ onUnmounted(() => {
             :collapsed="!isCompact && collapsed"
             @navigate="closeOverlay"
             @expand="expandNav"
+            @search="openSearch"
           />
         </aside>
       </Transition>
+
+      <!-- 工具搜索浮层：结果来自清单，支持模糊匹配与键盘选择 -->
+      <ToolSearchOverlay v-model:show="searchOpen" @select="selectTool" />
 
       <!-- 内容区：窗口变化时由 flex 自动重排；超宽屏限制阅读宽度 -->
       <main class="relative min-w-0 flex-1 overflow-auto">
