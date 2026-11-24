@@ -28,6 +28,20 @@ const pickDirectorySchema = z.object({
   title: z.string().min(1).optional()
 })
 
+const pickSaveFileSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  defaultName: z.string().min(1).max(255).optional(),
+  filters: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(60),
+        extensions: z.array(z.string().min(1).max(20)).min(1).max(10)
+      })
+    )
+    .max(5)
+    .optional()
+})
+
 const trashPathsSchema = z.object({
   paths: z.array(z.string().min(1)).min(1).max(200)
 })
@@ -85,6 +99,22 @@ export function registerShellChannels(bus: IpcBus, deps: ShellChannelDeps): void
         properties: ['openDirectory', 'createDirectory']
       })
       return result.canceled ? null : (result.filePaths[0] ?? null)
+    }
+  )
+
+  bus.registerSync(
+    'lumin:shell:pick-save-file',
+    'lumin',
+    'shell:pick-save-file',
+    async ({ payload }) => {
+      const parsed = pickSaveFileSchema.safeParse(payload ?? {})
+      if (!parsed.success) throw makeError('INVALID_PAYLOAD', '保存文件参数无效')
+      const result = await dialog.showSaveDialog({
+        title: parsed.data.title ?? '保存文件',
+        ...(parsed.data.defaultName === undefined ? {} : { defaultPath: parsed.data.defaultName }),
+        ...(parsed.data.filters === undefined ? {} : { filters: parsed.data.filters })
+      })
+      return result.canceled ? null : (result.filePath ?? null)
     }
   )
 

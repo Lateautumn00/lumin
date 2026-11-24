@@ -324,7 +324,13 @@ function loadSample(): void {
             <NButton size="small" secondary :disabled="mdHtml === ''" @click="copyText('md', mdHtml)">
               <Copy class="mr-1 h-3 w-3" />{{ copiedKey === 'md' ? '已复制' : '复制 HTML' }}
             </NButton>
-            <NInput v-model:value="mdFileName" size="small" class="w-48" placeholder="文件名" />
+            <NInput
+              v-model:value="mdFileName"
+              size="small"
+              class="w-48"
+              placeholder="文件名"
+              data-testid="md-file-name"
+            />
             <NButton
               size="small"
               type="primary"
@@ -393,7 +399,13 @@ function loadSample(): void {
             <NButton size="small" secondary :disabled="tsCode === ''" @click="copyText('ts', tsCode)">
               <Copy class="mr-1 h-3 w-3" />{{ copiedKey === 'ts' ? '已复制' : '复制代码' }}
             </NButton>
-            <NInput v-model:value="tsFileName" size="small" class="w-48" placeholder="文件名" />
+            <NInput
+              v-model:value="tsFileName"
+              size="small"
+              class="w-48"
+              placeholder="文件名"
+              data-testid="ts-file-name"
+            />
             <NButton
               size="small"
               type="primary"
@@ -466,7 +478,13 @@ function loadSample(): void {
             >
               <Copy class="mr-1 h-3 w-3" />{{ copiedKey === 'yaml' ? '已复制' : '复制结果' }}
             </NButton>
-            <NInput v-model:value="yamlFileName" size="small" class="w-48" placeholder="文件名" />
+            <NInput
+              v-model:value="yamlFileName"
+              size="small"
+              class="w-48"
+              placeholder="文件名"
+              data-testid="yaml-file-name"
+            />
             <NButton
               size="small"
               type="primary"

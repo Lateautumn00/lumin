@@ -10,7 +10,7 @@
 
 **不做**：三路合并、语法高亮、行折叠、历史记录持久化、联网、编码探测与转码（仅按 BOM 判定，UTF-16/32 等非 UTF-8 编码直接报 `TD_UNSUPPORTED_ENCODING`，不自动转码）。
 
-**形态**：**文本比较纯 renderer；文件比较经 2 个同步主进程通道**（`text-diff:pick-file` / `text-diff:compare-files`，zod schema 归包 `src/schema.ts`，通道实现 `src/node.ts`）；零新增运行时第三方依赖（`zod` / `electron` 为项目既有基线声明，`node:fs` / `node:crypto` / Electron `dialog` 均为内置）。文本比较仅复用 vue / naive-ui / `@lucide/vue` / `@lumin/shared`（`StructuredError`）；对比为同步纯函数，输入变更即时重算；LCS 设单元格预算，超预算降级为整块删除 + 整块插入，保证大文本下有界耗时。文件比较为同步短阻塞通道（最坏 200MB 流式约 1–2s），**不走** invoke→progress→cancel 三段式任务模型。
+**形态**：**文本比较纯 renderer；文件比较与剪贴板经 3 个同步主进程通道**（`text-diff:pick-file` / `text-diff:compare-files` / `text-diff:copy-text`，zod schema 归包 `src/schema.ts`，通道实现 `src/node.ts`）；零新增运行时第三方依赖（`zod` / `electron` 为项目既有基线声明，`node:fs` / `node:crypto` / Electron `dialog` / `clipboard` 均为内置）。文本比较仅复用 vue / naive-ui / `@lucide/vue` / `@lumin/shared`（`StructuredError`）；对比为同步纯函数，输入变更即时重算；LCS 设单元格预算，超预算降级为整块删除 + 整块插入，保证大文本下有界耗时。文件比较为同步短阻塞通道（最坏 200MB 流式约 1–2s），**不走** invoke→progress→cancel 三段式任务模型。
 
 ## 2. 页面字段清单
 
@@ -104,8 +104,9 @@
 | ------------------------ | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `text-diff:pick-file`    | `{}`（空对象）                                                                   | `{ path: string \| null }`                                                                                      | `dialog.showOpenDialogSync` 单文件选择；用户取消 → `path: null`；非法载荷 → `INVALID_INPUT`                                                                  |
 | `text-diff:compare-files` | `{ left: string, right: string }`（均非空）；可选 `ignoreWhitespace` / `ignoreCase`（默认 `false`） | 文本：`{ mode: 'text', changes, stats, leftLabel, rightLabel, leftLines, rightLines }`；二进制：`{ mode: 'binary', same, firstDiffOffset?, totalChunks }` | `stat` 预检（>200MB → `TD_FILE_TOO_LARGE`；不存在/不可读 → `TD_FILE_READ_FAILED`）→ `classifyFile` 分支 → 文本模式剥 UTF-8 BOM 读入复用 `diffLines`（忽略选项取 payload，缺省 false）返回行级结果（`leftLabel`/`rightLabel` = 文件名）；二进制模式 `node:crypto` 1MB/块流式 SHA-256 两文件逐块同位比对，块不同 → 块内字节级定位首个差异偏移（内存 O(1)）；行数超限由 `diffLines` 兜底报 `TD_TOO_LARGE` |
+| `text-diff:copy-text`    | `{ text: string }`（非空，≤4,000,000 字符）                                      | `{ ok: true }`                                                                                                   | **M63 修复**：统一 diff 复制改由主进程 `clipboard.writeText` 写入（renderer `navigator.clipboard` 在窗口未聚焦/权限受限时静默失败）；空文本/超限 → `INVALID_INPUT`，写入异常 → `TD_CLIPBOARD_FAILED` |
 
-注：两通道均为同步短阻塞通道（最坏约 1–2s），不走三段式任务模型；所有入参经 zod `safeParse` 后才进 handler，失败抛 `INVALID_INPUT`。
+注：三通道均为同步短阻塞通道（最坏约 1–2s），不走三段式任务模型；所有入参经 zod `safeParse` 后才进 handler，失败抛 `INVALID_INPUT`。
 
 ## 5. 错误码（`src/errors.ts`）
 

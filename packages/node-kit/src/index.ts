@@ -16,6 +16,7 @@ export { buildImageEncodeArgs, classifyFfmpegFailure } from './ffmpeg'
 export type { FfmpegImageFailure } from './ffmpeg'
 export { writeAtomic } from './atomic'
 export type { AtomicFs } from './atomic'
+export { HASH_CHUNK_BYTES, hashFileRange, hashWholeFile } from './hash'
 export { captureDisplay, selectDisplay } from './screen'
 export type {
   CaptureSourceInfo,

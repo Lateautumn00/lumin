@@ -16,9 +16,13 @@ import { isStructuredError, makeError } from '@lumin/shared'
 import type { MainPluginContext, RegisterMain, TaskHandlerContext } from '@lumin/plugin-api'
 import {
   MAX_FILE_BYTES,
+  appendHistoryPayloadSchema,
+  collectFolderPayloadSchema,
+  collectFolderResultSchema,
   configResultSchema,
   extensionOf,
   gifResultSchema,
+  historyResultSchema,
   makeGifPayloadSchema,
   probePayloadSchema,
   probeResultSchema,
@@ -34,6 +38,8 @@ import {
   type ProbeItem
 } from './schema'
 import { errnoCode, toolError } from './errors'
+import { appendHistory, parseHistory } from './history'
+import { collectImages } from './folder'
 import {
   buildEncodeArgs,
   buildEffectFilter,
@@ -200,10 +206,44 @@ export function registerWith(ctx: MainPluginContext, deps: ImageToolboxDeps): vo
     return probeResultSchema.parse({ items, failures })
   })
 
-  // —— config（sync）：输出目录记忆回填（settings `outputDir`，spec §4） ——
+  // —— config（sync）：输出目录与处理历史记忆回填（M63 追加 history） ——
   ctx.registerIpc('config', async () => {
     const saved = await ctx.settings.get<string | null>('outputDir', null)
-    return configResultSchema.parse({ outputDir: saved ?? defaultOutputDir })
+    const rawHistory = await ctx.settings.get<unknown>('history', [])
+    return configResultSchema.parse({
+      outputDir: saved ?? defaultOutputDir,
+      history: parseHistory(rawHistory)
+    })
+  })
+
+  // —— collect-folder（sync，M63）：递归收集支持图片（白名单 + 2000 上限） ——
+  ctx.registerIpc('collect-folder', async ({ payload }) => {
+    const parsed = collectFolderPayloadSchema.safeParse(payload)
+    if (!parsed.success) throw makeError('INVALID_PAYLOAD', '参数无效')
+    let collected
+    try {
+      collected = await collectImages(parsed.data.dir)
+    } catch (err) {
+      throw toolError('IT_FOLDER_EMPTY', errnoCode(err))
+    }
+    if (collected.files.length === 0) throw toolError('IT_FOLDER_EMPTY')
+    return collectFolderResultSchema.parse(collected)
+  })
+
+  // —— append-history（sync，M63）：完成一次处理后写入最近 20 条 ——
+  ctx.registerIpc('append-history', async ({ payload }) => {
+    const parsed = appendHistoryPayloadSchema.safeParse(payload)
+    if (!parsed.success) throw makeError('INVALID_PAYLOAD', '参数无效')
+    const current = parseHistory(await ctx.settings.get<unknown>('history', []))
+    const next = appendHistory(current, { ...parsed.data, at: deps.now() })
+    await ctx.settings.set('history', next)
+    return historyResultSchema.parse({ history: next })
+  })
+
+  // —— clear-history（sync，M63） ——
+  ctx.registerIpc('clear-history', async () => {
+    await ctx.settings.set('history', [])
+    return historyResultSchema.parse({ history: [] })
   })
 
   // —— set-output-dir（sync）：目录选择后即时记忆（spec §4） ——

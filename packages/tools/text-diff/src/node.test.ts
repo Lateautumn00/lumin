@@ -1,5 +1,5 @@
 /**
- * @file node.test.ts 主进程通道单测（pick-file / compare-files，deps 注入不触真实对话框/磁盘）
+ * @file node.test.ts 主进程通道单测（pick-file / compare-files / copy-text，deps 注入不触真实对话框/磁盘）
  * @author cuilanchao
  * @date 2026-11-24
  * @description 覆盖：通道注册、pick-file 回填与取消、INVALID_INPUT 信封、
@@ -11,10 +11,10 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { dialog } from 'electron'
+import { clipboard, dialog } from 'electron'
 import type { IpcHandler, MainPluginContext } from '@lumin/plugin-api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BINARY_CHUNK_BYTES, FILE_COMPARE_MAX_BYTES } from './schema'
+import { BINARY_CHUNK_BYTES, COPY_TEXT_MAX_CHARS, FILE_COMPARE_MAX_BYTES } from './schema'
 import type { CompareFilesResult, PickFileResult } from './schema'
 import { DIFF_LINE_LIMIT, TEXT_FILE_MAX_BYTES, classifyFile } from './diff'
 import { createDefaultDeps, registerMain, registerWith } from './node'
@@ -22,7 +22,8 @@ import type { TextDiffNodeDeps } from './node'
 import { toolError } from './errors'
 
 vi.mock('electron', () => ({
-  dialog: { showOpenDialogSync: vi.fn() }
+  dialog: { showOpenDialogSync: vi.fn() },
+  clipboard: { writeText: vi.fn() }
 }))
 
 /** 构造 ENOENT 异常（内存 fs 未命中时抛出） */
@@ -59,6 +60,7 @@ function makeDeps(
       if (content.length === 0) return []
       return [content]
     },
+    writeClipboard: vi.fn(),
     ...overrides
   }
   return deps
@@ -129,7 +131,7 @@ afterEach(() => {
 })
 
 describe('通道注册', () => {
-  it('registerMain 注册两同步通道并记录日志（默认依赖）', () => {
+  it('registerMain 注册三同步通道并记录日志（默认依赖）', () => {
     const handlers = new Map<string, IpcHandler>()
     const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const ctx = {
@@ -144,7 +146,7 @@ describe('通道注册', () => {
       paths: { temp: tmpdir(), userData: tmpdir(), binaries: tmpdir() }
     } as unknown as MainPluginContext
     registerMain(ctx)
-    expect([...handlers.keys()].sort()).toEqual(['compare-files', 'pick-file'])
+    expect([...handlers.keys()].sort()).toEqual(['compare-files', 'copy-text', 'pick-file'])
     expect(log.info).toHaveBeenCalledWith('text-diff registered')
   })
 })
@@ -169,6 +171,39 @@ describe('pick-file 通道', () => {
       message: '请求格式无效',
       detail: expect.any(String)
     })
+  })
+})
+
+describe('copy-text 通道', () => {
+  it('写入系统剪贴板并回包 ok', async () => {
+    const writeClipboard = vi.fn()
+    const harness = makeHarness({}, { writeClipboard })
+    await expect(invoke(harness.handlers, 'copy-text', { text: '+++ 右侧\n-香蕉' })).resolves.toEqual(
+      { ok: true }
+    )
+    expect(writeClipboard).toHaveBeenCalledWith('+++ 右侧\n-香蕉')
+  })
+
+  it('剪贴板异常 → TD_CLIPBOARD_FAILED', async () => {
+    const harness = makeHarness({}, {
+      writeClipboard: vi.fn(() => {
+        throw new Error('clipboard unavailable')
+      })
+    })
+    await expect(invoke(harness.handlers, 'copy-text', { text: 'x' })).rejects.toMatchObject({
+      code: 'TD_CLIPBOARD_FAILED',
+      detail: 'clipboard unavailable'
+    })
+  })
+
+  it('空文本 / 超长文本 → INVALID_INPUT', async () => {
+    const harness = makeHarness()
+    await expect(invoke(harness.handlers, 'copy-text', { text: '' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT'
+    })
+    await expect(
+      invoke(harness.handlers, 'copy-text', { text: 'x'.repeat(COPY_TEXT_MAX_CHARS + 1) })
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
   })
 })
 
@@ -489,6 +524,8 @@ describe('createDefaultDeps（生产依赖）', () => {
       expect(() => deps.statSize(join(dir, 'missing.txt'))).toThrow()
       expect(() => deps.readWholeFile(join(dir, 'missing.txt'))).toThrow()
       expect(() => [...deps.readChunks(join(dir, 'missing.txt'))]).toThrow()
+      deps.writeClipboard('统一 diff 文本')
+      expect(clipboard.writeText).toHaveBeenCalledWith('统一 diff 文本')
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

@@ -9,12 +9,16 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { describe, expect, it } from 'vitest'
 import {
   buildPageText,
+  buildTextLines,
   decodeRawImage,
   ExtractedImageLimitError,
   extractPdfImages,
+  extractPdfLines,
   extractPdfText,
+  toRawTextItems,
   toTextItems,
-  type PdfRawImage
+  type PdfRawImage,
+  type PdfRawTextItem
 } from './extract'
 import { openPdf, type PdfDocumentHandle, type PdfPageHandle } from './render'
 
@@ -51,6 +55,58 @@ describe('toTextItems', () => {
       { str: 'A', hasEOL: false },
       { str: '', hasEOL: false }
     ])
+  })
+})
+
+describe('toRawTextItems', () => {
+  it('保留 str/transform/height/fontName，过滤非法项', () => {
+    const items = toRawTextItems([
+      { str: 'A', transform: [1, 0, 0, 1, 10, 20], height: 12, fontName: 'F1', hasEOL: true },
+      { str: 1 },
+      null,
+      { str: '', transform: ['x', 2] }
+    ])
+    expect(items).toEqual([
+      {
+        str: 'A',
+        hasEOL: true,
+        transform: [1, 0, 0, 1, 10, 20],
+        height: 12,
+        fontName: 'F1'
+      },
+      { str: '', hasEOL: false, transform: [2] }
+    ])
+  })
+})
+
+describe('buildTextLines', () => {
+  it('hasEOL 处换行并记录行首位置/字号/字体', () => {
+    const items: PdfRawTextItem[] = [
+      { str: '第一行  ', hasEOL: true, transform: [1, 0, 0, 1, 40, 700], height: 18, fontName: 'F1' },
+      { str: '第二行', hasEOL: true, transform: [1, 0, 0, 1, 40, 680], height: 12, fontName: 'F2' }
+    ]
+    expect(buildTextLines(2, items)).toEqual([
+      { pageNumber: 2, text: '第一行', x: 40, y: 700, fontSize: 18, fontName: 'F1' },
+      { pageNumber: 2, text: '第二行', x: 40, y: 680, fontSize: 12, fontName: 'F2' }
+    ])
+  })
+
+  it('无 hasEOL 时基线跳变也会换行', () => {
+    const items: PdfRawTextItem[] = [
+      { str: 'A', transform: [1, 0, 0, 1, 40, 700], height: 12 },
+      { str: 'B', transform: [1, 0, 0, 1, 52, 700], height: 12 },
+      { str: 'C', transform: [1, 0, 0, 1, 40, 680], height: 12 }
+    ]
+    expect(buildTextLines(1, items).map((line) => line.text)).toEqual(['AB', 'C'])
+  })
+
+  it('纯空白行与空项丢弃', () => {
+    expect(
+      buildTextLines(1, [
+        { str: '   ', hasEOL: true, transform: [1, 0, 0, 1, 0, 0], height: 12 },
+        { str: '', hasEOL: true, transform: [1, 0, 0, 1, 0, 0], height: 12 }
+      ])
+    ).toEqual([])
   })
 })
 
@@ -148,6 +204,56 @@ describe('extractPdfText（真实 PDF）', () => {
     } finally {
       await opened.doc.cleanup()
     }
+  })
+})
+
+describe('extractPdfLines（真实 PDF）', () => {
+  it('按行输出位置与字号，hasText=true', async () => {
+    const pdf = await PDFDocument.create()
+    const page = pdf.addPage([200, 200])
+    const font = await pdf.embedFont(StandardFonts.Helvetica)
+    page.drawText('Title', { x: 20, y: 160, size: 18, font, color: rgb(0, 0, 0) })
+    page.drawText('Body', { x: 20, y: 130, size: 10, font, color: rgb(0, 0, 0) })
+    const opened = await openPdf(await pdf.save())
+    try {
+      const result = await extractPdfLines(opened.doc, [1])
+      expect(result.hasText).toBe(true)
+      const lines = result.pages[0]?.lines ?? []
+      expect(lines.map((item) => item.text)).toEqual(['Title', 'Body'])
+      expect(lines[0]?.fontSize).toBeCloseTo(18, 0)
+      expect(lines[0]?.y).toBeCloseTo(160, 0)
+      expect(lines[1]?.fontSize).toBeCloseTo(10, 0)
+    } finally {
+      await opened.doc.cleanup()
+    }
+  })
+
+  it('空白页 → hasText=false 且 lines 为空', async () => {
+    const pdf = await PDFDocument.create()
+    pdf.addPage([100, 100])
+    const opened = await openPdf(await pdf.save())
+    try {
+      await expect(extractPdfLines(opened.doc, [1])).resolves.toEqual({
+        pages: [{ pageNumber: 1, lines: [] }],
+        hasText: false
+      })
+    } finally {
+      await opened.doc.cleanup()
+    }
+  })
+
+  it('取页失败 → 空页不中断', async () => {
+    const doc: PdfDocumentHandle = {
+      numPages: 1,
+      getPage: async () => {
+        throw new Error('missing page')
+      },
+      cleanup: async () => undefined
+    }
+    await expect(extractPdfLines(doc, [1])).resolves.toEqual({
+      pages: [{ pageNumber: 1, lines: [] }],
+      hasText: false
+    })
   })
 })
 

@@ -6,11 +6,15 @@
  *              64KB 前缀 SHA-256 预筛（≤64KB 时前缀即全量），阶段三对剩余候选做全量
  *              SHA-256；单文件读写失败计入 skipped 不中断，取消由主进程 terminate。
  */
-import { createHash } from 'node:crypto'
-import { createReadStream, type Dirent } from 'node:fs'
+import { type Dirent } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { exposeTask, type TaskRunContext } from '@lumin/node-kit'
+import {
+  exposeTask,
+  hashFileRange,
+  hashWholeFile,
+  type TaskRunContext
+} from '@lumin/node-kit'
 import { toolError } from './errors'
 import {
   MAX_SCAN_FILES,
@@ -93,40 +97,6 @@ export async function collectFiles(
   return { entries, scannedFiles, skipped }
 }
 
-/**
- * 计算文件前 n 字节的 SHA-256（n ≤ 0 时返回空内容摘要）
- * @param path 文件路径
- * @param bytes 读取字节数
- */
-export function hashRange(path: string, bytes: number): Promise<string> {
-  if (bytes <= 0) return Promise.resolve(createHash('sha256').digest('hex'))
-  return new Promise<string>((resolve, reject) => {
-    const hash = createHash('sha256')
-    const stream = createReadStream(path, { start: 0, end: bytes - 1, highWaterMark: PARTIAL_BYTES })
-    stream.on('data', (chunk: Buffer | string) => hash.update(chunk))
-    stream.on('error', reject)
-    stream.on('end', () => resolve(hash.digest('hex')))
-  })
-}
-
-/**
- * 全量计算文件 SHA-256（按块回调字节数供进度推进）
- * @param path 文件路径
- * @param onBytes 每块字节数回调
- */
-export function hashWholeFile(path: string, onBytes: (bytes: number) => void): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    const hash = createHash('sha256')
-    const stream = createReadStream(path, { highWaterMark: PARTIAL_BYTES })
-    stream.on('data', (chunk: Buffer | string) => {
-      hash.update(chunk)
-      onBytes(typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length)
-    })
-    stream.on('error', reject)
-    stream.on('end', () => resolve(hash.digest('hex')))
-  })
-}
-
 /** 组装重复组（文件按修改时间升序，可释放空间 = size × (n-1)） */
 function makeGroup(size: number, hash: string, files: Entry[]): DuplicateGroup {
   const sorted: DuplicateFile[] = files
@@ -182,7 +152,7 @@ export async function runScan(
     const byPrefix = new Map<string, Entry[]>()
     for (const entry of group) {
       try {
-        const digest = await hashRange(entry.path, Math.min(PARTIAL_BYTES, entry.size))
+        const digest = await hashFileRange(entry.path, Math.min(PARTIAL_BYTES, entry.size))
         const list = byPrefix.get(digest)
         if (list === undefined) byPrefix.set(digest, [entry])
         else list.push(entry)

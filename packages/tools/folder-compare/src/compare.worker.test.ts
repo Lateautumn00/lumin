@@ -43,8 +43,13 @@ function createCtx(): { ctx: TaskRunContext; updates: TaskUpdate[] } {
   return { ctx: { emit: (update) => updates.push(update) }, updates }
 }
 
-function request(leftRoot: string, rightRoot: string, compareMtime = true): CompareRequest {
-  return { leftRoot, rightRoot, compareMtime }
+function request(
+  leftRoot: string,
+  rightRoot: string,
+  compareMtime = true,
+  compareContent = false
+): CompareRequest {
+  return { leftRoot, rightRoot, compareMtime, compareContent }
 }
 
 afterEach(async () => {
@@ -168,6 +173,74 @@ describe('runCompare 配对口径', () => {
       leftFiles: 0,
       rightFiles: 0
     })
+  })
+})
+
+describe('runCompare 内容比较', () => {
+  it('同名同大小：内容不同归入有差异，内容相同维持相同', async () => {
+    const left = await setup({ 'diff.txt': 'abcd', 'same.txt': 'hello' })
+    const right = await setup({ 'diff.txt': 'wxyz', 'same.txt': 'hello' })
+    for (const rel of ['diff.txt', 'same.txt']) {
+      await touch(left, rel, BASE)
+      await touch(right, rel, BASE)
+    }
+    const { ctx } = createCtx()
+    const result = await runCompare(request(left, right, true, true), ctx, () => 0)
+    const byPath = new Map(result.entries.map((entry) => [entry.path, entry]))
+    expect(byPath.get('diff.txt')).toMatchObject({ status: 'different', contentChanged: true })
+    expect(byPath.get('same.txt')).toMatchObject({ status: 'same', contentChanged: false })
+    expect(result).toMatchObject({ compareContent: true, contentDifferent: 1, different: 1, same: 1 })
+  })
+
+  it('大小不同不参与内容比较', async () => {
+    const left = await setup({ 'size.txt': 'abc' })
+    const right = await setup({ 'size.txt': 'abcd' })
+    await touch(left, 'size.txt', BASE)
+    await touch(right, 'size.txt', BASE)
+    const { ctx } = createCtx()
+    const result = await runCompare(request(left, right, true, true), ctx, () => 0)
+    expect(result.entries[0]).toMatchObject({
+      status: 'different',
+      sizeChanged: true,
+      contentChanged: false
+    })
+    expect(result.contentDifferent).toBe(0)
+  })
+
+  it('超过 64KB 的同大小文件走全量哈希定位差异', async () => {
+    const head = 'a'.repeat(70 * 1024 - 1)
+    const left = await setup({ 'big.txt': `${head}b` })
+    const right = await setup({ 'big.txt': `${head}c` })
+    await touch(left, 'big.txt', BASE)
+    await touch(right, 'big.txt', BASE)
+    const { ctx } = createCtx()
+    const result = await runCompare(request(left, right, true, true), ctx, () => 0)
+    expect(result.entries[0]).toMatchObject({ status: 'different', contentChanged: true })
+  })
+
+  it('内容比较阶段推送 content 进度', async () => {
+    const left = await setup({ 'a.txt': 'a' })
+    const right = await setup({ 'a.txt': 'b' })
+    await touch(left, 'a.txt', BASE)
+    await touch(right, 'a.txt', BASE)
+    const { ctx, updates } = createCtx()
+    await runCompare(request(left, right, true, true), ctx, () => 0)
+    const content = updates.filter(
+      (update) => update.kind === 'progress' && update.stage === 'content'
+    )
+    expect(content.length).toBeGreaterThanOrEqual(2)
+    expect(content.at(-1)).toMatchObject({ current: 1, total: 1 })
+  })
+
+  it('关闭内容比较时不读取内容', async () => {
+    const left = await setup({ 'a.txt': 'abcd' })
+    const right = await setup({ 'a.txt': 'wxyz' })
+    await touch(left, 'a.txt', BASE)
+    await touch(right, 'a.txt', BASE)
+    const { ctx } = createCtx()
+    const result = await runCompare(request(left, right), ctx, () => 0)
+    expect(result.entries[0]).toMatchObject({ status: 'same', contentChanged: false })
+    expect(result).toMatchObject({ compareContent: false, contentDifferent: 0 })
   })
 })
 

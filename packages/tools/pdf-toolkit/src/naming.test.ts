@@ -4,6 +4,7 @@ import {
   deleteDesiredPath,
   extractImagesDesiredDir,
   extractTextDesiredPath,
+  exportHtmlDesiredPath,
   mergeDesiredPath,
   metadataDesiredPath,
   pageNumbersDesiredPath,
@@ -51,5 +52,10 @@ describe('pdf-toolkit naming（spec §6）', () => {
     expect(extractTextDesiredPath('C:/a/卷.pdf')).toBe('C:/a/卷_文本.txt')
     expect(extractImagesDesiredDir('C:/a/卷.pdf')).toBe('C:/a/卷_图片')
     expect(compressDesiredPath('C:/a/卷.pdf')).toBe('C:/a/卷_压缩.pdf')
+  })
+
+  it('PDF→HTML 同名换扩展名（M63）', () => {
+    expect(exportHtmlDesiredPath('C:/a/卷.pdf')).toBe('C:/a/卷.html')
+    expect(exportHtmlDesiredPath('C:/a/无扩展名')).toBe('C:/a/无扩展名.html')
   })
 })

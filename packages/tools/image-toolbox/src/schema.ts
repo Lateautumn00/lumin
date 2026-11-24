@@ -25,8 +25,8 @@ export type SupportedExtension = (typeof SUPPORTED_EXTENSIONS)[number]
 /** 单文件体积上限（字节，spec §1：200MB） */
 export const MAX_FILE_BYTES = 200 * 1024 * 1024
 
-/** 单批文件数上限（防误拖整个目录；渲染层提示） */
-export const MAX_BATCH_FILES = 500
+/** 单批文件数上限（M63：与文件夹递归收集上限一致，2000 张） */
+export const MAX_BATCH_FILES = 2000
 
 /**
  * 扩展名归一（小写、剥点、jpeg→jpg）；不在白名单 → null
@@ -272,8 +272,52 @@ export type ProcessResult = z.infer<typeof processResultSchema>
 
 // —— config（sync） ——
 
-export const configResultSchema = z.object({ outputDir: z.string() })
+/** 处理历史保留条数（M63：最近 20 条 FIFO） */
+export const HISTORY_LIMIT = 20
+
+/** 处理模式（历史记录用；与 Tab 一一对应） */
+export const historyModeSchema = z.enum(['compress', 'convert', 'resize', 'effect', 'gif'])
+export type HistoryMode = z.infer<typeof historyModeSchema>
+
+/** 处理历史条目（M63：时间戳 + 模式 + 成功/失败 + 输出目录 + 首个产物） */
+export const historyEntrySchema = z.object({
+  at: z.number().int().nonnegative(),
+  mode: historyModeSchema,
+  success: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  outputDir: z.string().min(1),
+  firstOutput: z.string().min(1).nullable()
+})
+export type HistoryEntry = z.infer<typeof historyEntrySchema>
+
+/** 追加历史入参（时间戳由主进程补齐） */
+export const appendHistoryPayloadSchema = historyEntrySchema.omit({ at: true })
+export type AppendHistoryPayload = z.infer<typeof appendHistoryPayloadSchema>
+
+/** 历史列表回包（config / append / clear 共用） */
+export const historyResultSchema = z.object({
+  history: z.array(historyEntrySchema).max(HISTORY_LIMIT)
+})
+export type HistoryResult = z.infer<typeof historyResultSchema>
+
+export const configResultSchema = z.object({
+  outputDir: z.string(),
+  history: z.array(historyEntrySchema).max(HISTORY_LIMIT)
+})
 export type ConfigResult = z.infer<typeof configResultSchema>
+
+// —— collect-folder（sync，M63 文件夹递归） ——
+
+/** 递归收集文件夹内支持图片的入参 */
+export const collectFolderPayloadSchema = z.object({ dir: z.string().min(1).max(32767) })
+export type CollectFolderPayload = z.infer<typeof collectFolderPayloadSchema>
+
+/** 收集结果：绝对路径（已排序/去重）与是否触达上限 */
+export const collectFolderResultSchema = z.object({
+  files: z.array(z.string().min(1)).max(MAX_BATCH_FILES),
+  truncated: z.boolean()
+})
+export type CollectFolderResult = z.infer<typeof collectFolderResultSchema>
 
 // —— set-output-dir（sync，输出目录记忆） ——
 

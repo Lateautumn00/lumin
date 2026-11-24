@@ -5,9 +5,10 @@
  * @description config/set-config 同步行为 + scan 记忆/校验/错误映射/注册入口
  */
 import { mkdtempSync, rmSync } from 'node:fs'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
 import { TaskCrashError, TaskTimeoutError, type RunTaskOptions } from '@lumin/node-kit'
 import type {
   IpcHandler,
@@ -25,11 +26,13 @@ import {
   SCAN_TIMEOUT_MS,
   type DiskAnalyzerDeps
 } from './node'
-import type { ScanPayload } from './schema'
+import type { ExportCsvPayload, ScanPayload } from './schema'
 
 interface HarnessOptions {
   result?: unknown
   runError?: unknown
+  /** 模拟写盘失败 */
+  writeError?: unknown
 }
 
 interface Harness {
@@ -38,6 +41,7 @@ interface Harness {
   settings: Map<string, unknown>
   calls: RunTaskOptions<unknown>[]
   updates: TaskUpdate[]
+  written: { target: string; data: string }[]
   root: string
 }
 
@@ -55,6 +59,7 @@ function createHarness(options: HarnessOptions = {}): Harness {
   const settings = new Map<string, unknown>()
   const calls: RunTaskOptions<unknown>[] = []
   const updates: TaskUpdate[] = []
+  const written: { target: string; data: string }[] = []
 
   const deps: DiskAnalyzerDeps = {
     scanWorkerPath: join(root, 'scan.worker.js'),
@@ -62,6 +67,10 @@ function createHarness(options: HarnessOptions = {}): Harness {
       calls.push(runOptions as RunTaskOptions<unknown>)
       if (options.runError !== undefined) return Promise.reject(options.runError)
       return Promise.resolve(options.result as R)
+    },
+    writeFile: (target, data) => {
+      if (options.writeError !== undefined) throw options.writeError
+      written.push({ target, data })
     }
   }
 
@@ -94,7 +103,7 @@ function createHarness(options: HarnessOptions = {}): Harness {
     }
   }
   registerWith(ctx, deps)
-  return { ipc, tasks, settings, calls, updates, root }
+  return { ipc, tasks, settings, calls, updates, written, root }
 }
 
 function mustGet<K, V>(map: Map<K, V>, key: K): V {
@@ -236,13 +245,52 @@ describe('scan 任务', () => {
   })
 })
 
-describe('生产 deps 与注册入口', () => {
-  it('createNodeDeps 暴露 worker 运行器', () => {
-    const deps = createNodeDeps()
-    expect(typeof deps.run).toBe('function')
+describe('export-csv', () => {
+  const TARGET = 'C:\\out\\x.csv'
+
+  function exportPayload(): ExportCsvPayload {
+    return {
+      root: 'C:\\root',
+      targetPath: TARGET,
+      entries: [{ name: 'a.txt', path: 'C:\\root\\a.txt', kind: 'file', size: 10, fileCount: 0 }],
+      typeStats: [{ ext: 'txt', files: 1, bytes: 10 }]
+    }
+  }
+
+  it('正常导出：写入 BOM + CSV 并回传路径', async () => {
+    const harness = createHarness()
+    await expect(invokeIpc(harness, 'export-csv', exportPayload())).resolves.toEqual({
+      path: TARGET
+    })
+    expect(harness.written).toHaveLength(1)
+    expect(harness.written[0]?.target).toBe(TARGET)
+    expect(harness.written[0]?.data.startsWith('\uFEFF# 磁盘空间分析')).toBe(true)
+    expect(harness.written[0]?.data).toContain('文件,a.txt,a.txt,10,')
   })
 
-  it('registerMain 注册 config/set-config/scan 三通道', () => {
+  it('写盘失败 → DA_EXPORT_FAILED', async () => {
+    const harness = createHarness({ writeError: new Error('EACCES') })
+    await expect(invokeIpc(harness, 'export-csv', exportPayload())).rejects.toMatchObject({
+      code: 'DA_EXPORT_FAILED',
+      detail: 'EACCES'
+    })
+  })
+
+  it('非法入参（缺目标路径）→ DA_INVALID_PAYLOAD', async () => {
+    await expect(
+      invokeIpc(createHarness(), 'export-csv', { root: 'C:\\root', entries: [], typeStats: [] })
+    ).rejects.toMatchObject({ code: 'DA_INVALID_PAYLOAD' })
+  })
+})
+
+describe('生产 deps 与注册入口', () => {
+  it('createNodeDeps 暴露 worker 运行器与 CSV 写盘依赖', () => {
+    const deps = createNodeDeps()
+    expect(typeof deps.run).toBe('function')
+    expect(typeof deps.writeFile).toBe('function')
+  })
+
+  it('registerMain 注册 config/set-config/export-csv/scan 四通道', () => {
     const seenIpc: string[] = []
     const seenTask: string[] = []
     const ctx = {
@@ -255,7 +303,7 @@ describe('生产 deps 与注册入口', () => {
       paths: { temp: '', userData: '', binaries: '' }
     } as unknown as MainPluginContext
     registerMain(ctx)
-    expect(seenIpc).toEqual(['config', 'set-config'])
+    expect(seenIpc).toEqual(['config', 'set-config', 'export-csv'])
     expect(seenTask).toEqual(['scan'])
   })
 })

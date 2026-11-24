@@ -14,7 +14,8 @@ vi.mock('electron', () => ({
     trashItem: vi.fn(async () => undefined)
   },
   dialog: {
-    showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:\\out'] }))
+    showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ['C:\\out'] })),
+    showSaveDialog: vi.fn(async () => ({ canceled: false, filePath: 'C:\\out\\x.csv' }))
   }
 }))
 
@@ -151,6 +152,32 @@ describe('registerShellChannels', () => {
     await expect(call('lumin:shell:pick-directory', { title: '' })).rejects.toMatchObject({
       code: 'INVALID_PAYLOAD'
     })
+  })
+
+  it('shell:pick-save-file 返回保存路径；取消 → null；非法参数 → INVALID_PAYLOAD', async () => {
+    const { call } = createHarness()
+    await expect(
+      call('lumin:shell:pick-save-file', {
+        title: '导出 CSV',
+        defaultName: 'x.csv',
+        filters: [{ name: 'CSV 文件', extensions: ['csv'] }]
+      })
+    ).resolves.toBe('C:\\out\\x.csv')
+    expect(dialog.showSaveDialog).toHaveBeenCalledWith({
+      title: '导出 CSV',
+      defaultPath: 'x.csv',
+      filters: [{ name: 'CSV 文件', extensions: ['csv'] }]
+    })
+
+    vi.mocked(dialog.showSaveDialog).mockResolvedValueOnce({ canceled: true, filePath: '' })
+    await expect(call('lumin:shell:pick-save-file', {})).resolves.toBeNull()
+
+    await expect(call('lumin:shell:pick-save-file', { title: '' })).rejects.toMatchObject({
+      code: 'INVALID_PAYLOAD'
+    })
+    await expect(
+      call('lumin:shell:pick-save-file', { filters: [{ name: 'x', extensions: [] }] })
+    ).rejects.toMatchObject({ code: 'INVALID_PAYLOAD' })
   })
 
   it('shell:trash 逐条移入回收站，失败项返回原因；非法参数 → INVALID_PAYLOAD', async () => {

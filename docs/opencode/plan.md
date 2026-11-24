@@ -7,7 +7,7 @@
 
 ---
 
-## 1. 决策总表（Q1–Q60 锁定）
+## 1. 决策总表（Q1–Q65 锁定）
 
 | #   | 决策项                              | 结论                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | --- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -75,6 +75,7 @@
 | Q62 | 速赢档一（M60，2026-11-23 用户全选四组） | **四既有工具 Tab 扩展（不新建包、纯 renderer、零 IPC、零新增依赖）**：① `text-toolbox` +「URL 编码」（组件级/完整编码、编码/解码/交换/再执行）与「SQL 格式化」（美化/压缩，自写 tokenizer 零依赖）；② `time-toolbox` +「日期计算器」（间隔：总天数/工作日仅周末口径；加减：天/周/月/年日历进位、日溢出钳制月末）；③ `dev-toolbox` +「进制与位运算」（2/8/10/16 BigInt 互转 + 与/或/异或/非）；④ `misc-toolbox` +「中文信息」（脱敏预设、身份证 18 位校验+生日+性别、金额转人民币大写）；chunk 均 <200KB gzip；详见 §4.60 |
 | Q63 | 剪贴板图片（M61，2026-11-24 用户拍板三选） | **扩展 `clipboard-history` 支持图片（Q61 分期排除项的下一期）**：形态 = **同一列表混排 + 「全部/文本/图片」类型筛选**；判定 = **poll 图片优先**（`clipboard.readImage()` 非空即按图片入库，文本分支仅在无图时走，避免截图工具的路径文本污染）；**单图 ≤5MB**（超限复用 `TOO_LARGE` 跳过）、**图片独立上限 100 条**（与文本 500 分开计数，置顶永不淘汰）；原图 PNG 存 `userData/clipboard-history/images/{id}.png`，JSON 仅存元数据 + ≤160px 缩略图 dataURL；图片去重按 PNG SHA-1；**新增 2 通道** `image`（按 id 返回原图 dataURL 供预览）与 `copy`（主进程 `clipboard.writeImage` 回写，渲染端 clipboard API 写不了图）；remove/clear 同步删图片文件 + 启动加载时清理孤儿图片文件；新错误码 `CH_IMAGE_MISSING`；搜索词非空时仅过滤文本条目（图片仅在无搜索词时出现）；零新增依赖；详见 §4.61 |
 | Q64 | 文本比较能力（M62，2026-11-24 用户拍板归口） | **`text-diff` 扩展两能力（P0-8 + P1-9，研究 §3.7 归口拍板：不新建工具、不并入 folder-compare）**：①**词级高亮**——文本比较变更行内高亮粒度加「词级/字符级」开关（默认词级；中文逐字成词、拉丁按词边界、数字连续成词，词级 LCS 预算保护，字符级保留现状）；②**第三页签「文件比较」**——左右路径输入 + 文件选择 + 比较按钮；**文本模式**（≤1MB 且 ≤20,000 行且无 NUL → UTF-8 读入复用 `diffLines` 行级对比，BOM 剥离）/ **二进制模式**（其余 → node:crypto 流式分块 SHA-256，1MB/块同块比对定位首个差异块与字节偏移，内存 O(1)）；文件上限 200MB（超限 `TD_FILE_TOO_LARGE`）；**壳接线 +1**（`tool-mains.ts` 注册行 + 包 `./node` 导出，text-diff 由纯 renderer 转为带主进程通道）；**新增 2 通道** `pick-file`（`dialog.showOpenDialogSync` 选路径）与 `compare-files`（同步返回比较结果）；新错误码 `TD_FILE_READ_FAILED` / `TD_FILE_TOO_LARGE` / `TD_UNSUPPORTED_ENCODING`（UTF-16 等非 UTF-8）；零新增依赖；spec §1「不做」三项解冻；详见 §4.62 |
+| Q65 | 速赢档二（M63，2026-11-24 用户选定四项） | **四既有工具扩展（不新建包、零新增运行时第三方依赖、零新增二进制）**：① `folder-compare` +「比较文件内容」开关（两侧同名同大小两段 SHA-256：64KB 前缀预筛 → 全量；哈希原子上提 `node-kit/hash`，`duplicate-finder` 同步复用，禁止工具间互 import）；② `disk-analyzer` +文件类型统计（按扩展名聚合 Top 20 + 其余）+ CSV 导出（主进程原子写盘）；③ `pdf-toolkit` +「PDF→HTML」结构化导出（标题/段落/列表层级，复用 `node-kit/pdf` 文本原语，附件式内联样式、无外部资源）；④ `image-toolbox` +文件夹递归输入 + 处理历史列表（settings 记忆、上限 20 条、可清空）；chunk 均 <200KB gzip；详见 §4.63 |
 | —   | 硬约束                              | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -844,7 +845,7 @@ lumin/
 ### 4.62 文本比较能力：词级高亮 + 文件比较（M62，2026-11-24 R8 登记）
 
 - **总则（Q64）**：扩展既有 `text-diff`（**归口拍板**：加页签，不新建工具、不并入 folder-compare）；零新增运行时第三方依赖；纯函数限包 ≥80%、chunk <200KB gzip。
-- **解冻 spec §1**：「不做」删去 **词级 diff、文件选择与读写、二进制对比** 三项；「做」增补对应三项；形态描述由「纯 renderer、零 IPC」改为「文本比较纯 renderer；文件比较经 2 个同步主进程通道（zod 归包 `src/schema.ts`）」。
+- **解冻 spec §1**：「不做」删去 **词级 diff、文件选择与读写、二进制对比** 三项；「做」增补对应三项；形态描述由「纯 renderer、零 IPC」改为「文本比较纯 renderer；文件比较与剪贴板经 3 个同步主进程通道（zod 归包 `src/schema.ts`，M63 增 `copy-text`）」。
 - **词级高亮（P0-8，纯 renderer）**：行内高亮粒度开关 `词级/字符级`（默认**词级**）；分词规则 = 连续拉丁字母成词、连续数字成词、CJK 逐字、其余单字符；`diffWords(left, right)` 复用现有 `lcsDiff` 预算保护（词级 LCS 单元格预算 1,000,000，超限降级整词替换；单行 >2,000 词直接整行替换）；输出复用 `InlineSegment[]` 形状，渲染层零改动。
 - **文件比较页签（P1-9，新增主进程）**：
   - 通道 `text-diff:pick-file`（payload `{}` → `{ path: string | null }`，`dialog.showOpenDialogSync` 取路径；照仓内既有工具选文件惯例）与 `text-diff:compare-files`（payload `{ left, right }` → 比较结果）。
@@ -852,9 +853,46 @@ lumin/
   - 文本模式：读入后复用 `diffLines`（沿用忽略空白/大小写选项）→ 行级结果原样渲染（并排/统一/统计全复用）。
   - 二进制模式：node:crypto 流式分块 SHA-256（1MB/块，两文件逐块同位比对；块不同 → 该块内字节级定位首个差异偏移）→ `{ mode: 'binary', same: boolean, firstDiffOffset?: number, totalChunks }`；UI 展示「二进制不同，首个差异位于偏移 X（块 N/M）」或「两文件完全相同」；内存 O(1)。
   - 文件上限 200MB（`stat` 预检 → `TD_FILE_TOO_LARGE`）；不存在/不可读 → `TD_FILE_READ_FAILED`；同步通道（最坏 200MB 流式约 1–2s 短阻塞，不走三段式）。
+  - **M63 修复**：统一 diff 复制改走新增同步通道 `text-diff:copy-text`（payload `{ text }`，非空且 ≤4,000,000 字符 → `{ ok: true }`；主进程 `clipboard.writeText`），规避 renderer `navigator.clipboard` 在窗口未聚焦/权限受限时静默失败；空/超限 → `INVALID_INPUT`，写入异常 → `TD_CLIPBOARD_FAILED`。
   - 页签 UI：左右路径 `NInput`（readonly，可手输）+ 「选择」按钮 + 「比较」主按钮 + 交换；结果区复用文本比较的统计/并排/统一组件（文本模式）或二进制信息卡（二进制模式）；空态引导「选择两个文件开始比较」；报错态行内结构化码 + 中文 + 重试入口。
 - **壳接线**：`tool-mains.ts` +1 注册行（`textDiffRegisterMain`）、包 `package.json` exports 加 `./node`、`src/node.ts` 新建；manifest/清单/vite alias/workspace 依赖均不变。
-- **验收**：单测（分词规则与词级 LCS 预算降级、`classifyFile` 三条件判定、二进制首差异偏移定位、BOM/UTF-16 分支、两通道注入测试含错误码）；e2e ≥2 用例（词级开关高亮可见、文件比较文本模式出 diff / 二进制模式出偏移、错误态）；R2 八类映射记入 smoke 增量节；`pnpm gate` 全绿；文档五处同步。
+- **验收**：单测（分词规则与词级 LCS 预算降级、`classifyFile` 三条件判定、二进制首差异偏移定位、BOM/UTF-16 分支、三通道注入测试含错误码）；e2e ≥2 用例（词级开关高亮可见、文件比较文本模式出 diff / 二进制模式出偏移、错误态）；R2 八类映射记入 smoke 增量节；`pnpm gate` 全绿；文档五处同步。
+
+### 4.63 速赢档二：四项 P1 扩展（M63，2026-11-24 R8 登记）
+
+- **总则（Q65）**：四项均为既有工具扩展，不新建包；零新增运行时第三方依赖、零新增二进制；限包覆盖率 ≥80%、chunk <200KB gzip；错误码沿用各工具前缀；spec 对应「不做」条目解冻并回写字段级清单。
+
+#### 4.63.1 folder-compare 内容哈希开关（P1-10）
+
+- **解冻**：spec §1.3「文件内容哈希/逐字节比较」删除，改为「不输出差异偏移」；§1.2 增加「内容比较」行。
+- **公共上提**：新增 `packages/node-kit/src/hash.ts`（`HASH_CHUNK_BYTES = 65_536`、`hashFileRange`、`hashWholeFile`），`duplicate-finder` 删除本地实现并改用 `node-kit`，避免两工具复制粘贴。
+- **契约**：compare payload / config / done 增 `compareContent`；entry 增 `contentChanged`；done 增 `contentDifferent`；`DEFAULT_COMPARE_CONTENT = false`；settings 键 `compareContent`。
+- **算法**：仅两侧都存在且大小相同的配对参与；前缀 64KB SHA-256 不同 → 直接判内容不同；前缀相同且 >64KB → 全量 SHA-256；内容不同经纯函数 `withContentResult` 归入 `different` 并置 `contentChanged`；哈希读取失败计入 `skipped` 且保留元数据分类。
+- **进度/取消**：`{ kind:'progress', current, total, stage:'content' }`，每 20 个配对上报，首尾必报；取消由 task-queue terminate worker。
+- **UI**：空态增「比较文件内容（SHA-256，较慢）」复选框（默认不勾选）；加载态文案「正在比较文件内容 · N / M 个文件」；汇总行启用时追加「· 内容不同 C」；状态标签优先展示「内容不同」；底部声明按开关切换口径。
+- **验收**：内容不同/相同/大小不同/>64KB 尾部差异/关闭开关不读内容五组单测；e2e 追加内容比较用例；R2 八类映射记入 smoke 增量节。
+
+#### 4.63.2 disk-analyzer 类型统计 + CSV 导出（P1-7）
+
+- **解冻**：spec §1.3「文件类型统计」删除；新增「类型统计」与「CSV 导出」两项能力。
+- **类型统计**：worker 在递归扫描时按扩展名（小写、无扩展名归 `(无扩展名)`）累加字节数与文件数；结果随 done 返回 `typeStats`（全量聚合，按字节降序，Top 20 + `other` 汇总）；纯函数 `aggregateTypes` 供单测。
+- **UI**：结果态新增「类型统计」折叠区（Top 20 行：扩展名 + 文件数 + 大小 + 占比条），下钻后重新统计当前层子树。
+- **CSV 导出**：新增通道 `disk-analyzer:export-csv`（payload = 目标路径 `targetPath` + 当前扫描 done 的 entries + typeStats），主进程用 `node-kit` 原子写盘；目标路径由 renderer 经**壳通用通道** `lumin:shell:pick-save-file`（bridge `pickSaveFile`，取消返回 null）选择，工具包不直接依赖 electron；CSV 列 `类型,名称,相对路径,大小(字节),大小(可读),文件数`；UTF-8 BOM 便于 Excel 打开；路径含逗号/引号按 RFC 4180 转义；写盘失败 → 新错误码 `DA_EXPORT_FAILED`。
+- **验收**：`aggregateTypes` / CSV 转义单测；e2e 断言统计区可见 + 导出文件存在；R2 八类映射记入 smoke 增量节。
+
+#### 4.63.3 pdf-toolkit PDF→HTML 结构化导出（P1-11）
+
+- **新增页签**「PDF→HTML」：输入单 PDF → 输出同名 `.html`（源目录，冲突递增）。
+- **解析**：复用 `node-kit/pdf` 文本条目（页码、x/y、字号、字体名），纯函数 `buildHtmlDocument(lines)` 按字号分位推断标题（H1/H2/H3）、按行距与缩进合并段落、以 `•/-/数字.` 前缀识别列表；输出单文件 HTML（内联 `<style>`，无外部资源/脚本，`<meta charset="utf-8">`）。
+- **错误**：加密 PDF / 无文本层 → `PT_PDF_NO_TEXT`；写入失败 → `PT_EXPORT_FAILED`；均给出中文文案与重试入口。
+- **验收**：`buildHtmlDocument` 单测（标题分位、段落合并、列表识别、HTML 转义防注入）；e2e 用 fixture PDF 断言导出 HTML 含标题与段落文本且不含 `<script>`；R2 八类映射记入 smoke 增量节。
+
+#### 4.63.4 image-toolbox 文件夹递归 + 历史（P1-6）
+
+- **解冻**：spec「一期不做」中「文件夹递归」「处理历史」转入做；保留其余二期候选。
+- **递归输入**：文件选择区增「选择文件夹」按钮，递归收集图片（复用既有扩展名白名单，跳过符号链接，单次上限 2,000 张，超限提示）；与拖拽/多选结果合并去重。
+- **处理历史**：每次任务成功结束后写入 settings `history`（最多 20 条：时间、模式、输出目录、成功/失败数、首个产物路径）；页面底部「处理历史」折叠区，可「定位输出目录」与「清空历史」；不持久化源文件列表。
+- **验收**：目录递归收集纯函数（白名单/去重/上限）与历史裁剪（20 条 FIFO）单测；e2e 断言递归图片计数与历史条目出现；R2 八类映射记入 smoke 增量节。
 
 ---
 
@@ -965,6 +1003,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M61 v5.10** | 剪贴板图片（§4.61，2026-11-24）：`clipboard-history` 扩展图片条目——poll 图片优先、同一列表混排 + 「全部/文本/图片」筛选、原图 PNG 落盘 + JSON 内联 ≤160px 缩略图、图片独立上限 100 条、单图 ≤5MB、SHA-1 去重、孤儿文件清理；通道 5 → 7（新增 `image` 预览 / `copy` 主进程回写）、新错误码 `CH_IMAGE_MISSING`；零新增依赖 | §4.61 验收；限包覆盖率 ≥80%；e2e 图片采集/筛选/预览/复制 ≥2 用例；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5–1 天 |
 
 | **M62 v5.11** | 文本比较能力（§4.62，2026-11-24）：`text-diff` 扩展——①词级高亮（粒度开关默认词级，中文逐字/拉丁按词，LCS 预算保护）；②第三页签「文件比较」（文本模式 ≤1MB 复用 `diffLines` / 二进制模式流式分块 SHA-256 定位首差异偏移，上限 200MB）；通道 0 → 2（`pick-file` / `compare-files`，zod 归包）、壳接线 +1（`tool-mains` 注册）、新错误码 `TD_FILE_READ_FAILED`/`TD_FILE_TOO_LARGE`/`TD_UNSUPPORTED_ENCODING`；spec §1 三项解冻；零新增依赖 | §4.62 验收；纯函数限包 ≥80%；e2e ≥2 用例（词级开关、文件比较双模式与错误态）；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 2 天 |
+| **M63 v5.12** | 速赢档二（§4.63，2026-11-24）：四项 P1 扩展——①`folder-compare` +内容哈希开关（两段 SHA-256，`node-kit/hash` 上提、`duplicate-finder` 复用）；②`disk-analyzer` +类型统计 Top 20 + CSV 导出（`DA_EXPORT_FAILED`）；③`pdf-toolkit` +「PDF→HTML」结构化导出（`PT_PDF_NO_TEXT`）；④`image-toolbox` +文件夹递归 + 处理历史（20 条）；零新增依赖、零新增包 | §4.63 验收；每包限包覆盖率 ≥80%；四包 e2e 增量；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 2–3 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

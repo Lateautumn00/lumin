@@ -33,6 +33,7 @@ interface CompareEntry {
   mtimeRight: number | null
   sizeChanged: boolean
   mtimeChanged: boolean
+  contentChanged: boolean
 }
 
 interface CompareResult {
@@ -48,6 +49,8 @@ interface CompareResult {
   skipped: number
   truncated: number
   compareMtime: boolean
+  compareContent: boolean
+  contentDifferent: number
   elapsedMs: number
 }
 
@@ -87,10 +90,20 @@ function touch(root: string, rel: string, mtimeMs: number): void {
 /** 提交对比任务并等待终态（done 返回结果；error 拒绝） */
 async function runCompare(
   page: Page,
-  payload: { leftRoot: string; rightRoot: string; compareMtime: boolean }
+  payload: {
+    leftRoot: string
+    rightRoot: string
+    compareMtime: boolean
+    compareContent: boolean
+  }
 ): Promise<{ hasProgress: boolean; result: CompareResult }> {
   return page.evaluate(
-    (args: { leftRoot: string; rightRoot: string; compareMtime: boolean }) =>
+    (args: {
+      leftRoot: string
+      rightRoot: string
+      compareMtime: boolean
+      compareContent: boolean
+    }) =>
       new Promise<{ hasProgress: boolean; result: CompareResult }>((resolve, reject) => {
         let hasProgress = false
         let taskId = ''
@@ -147,13 +160,16 @@ test.describe('folder-compare（文件夹对比）冒烟', () => {
         window.lumin.invoke('folder-compare:set-config', {
           leftRoot: '',
           rightRoot: '',
-          compareMtime: true
+          compareMtime: true,
+          compareContent: false
         })
       )
       await clickSidebarTool(page, '文件夹对比')
       await expect(page.getByRole('heading', { name: '文件夹对比' })).toBeVisible()
       await expect(
-        page.getByText('先选择左右两个目录，再点击「开始对比」；仅比较文件元数据，不读取文件内容')
+        page.getByText(
+          '先选择左右两个目录，再点击「开始对比」；默认只比较元数据，勾选「比较文件内容」后对同名同大小文件做 SHA-256'
+        )
       ).toBeVisible()
       await expect(page.getByRole('button', { name: '开始对比' })).toBeDisabled()
 
@@ -163,7 +179,8 @@ test.describe('folder-compare（文件夹对比）冒烟', () => {
           window.lumin.invoke('folder-compare:set-config', {
             leftRoot: args.left,
             rightRoot: args.right,
-            compareMtime: true
+            compareMtime: true,
+            compareContent: false
           }),
         { left, right }
       )
@@ -220,7 +237,12 @@ test.describe('folder-compare（文件夹对比）冒烟', () => {
       touch(left, 'mtime.txt', BASE_MS)
       touch(right, 'mtime.txt', BASE_MS + 5000)
 
-      const outcome = await runCompare(page, { leftRoot: left, rightRoot: right, compareMtime: true })
+      const outcome = await runCompare(page, {
+        leftRoot: left,
+        rightRoot: right,
+        compareMtime: true,
+        compareContent: false
+      })
       expect(outcome.hasProgress).toBe(true)
       expect(outcome.result).toMatchObject({
         onlyLeft: 1,
@@ -239,7 +261,8 @@ test.describe('folder-compare（文件夹对比）冒烟', () => {
       expect(byPath.get('mtime.txt')).toMatchObject({
         status: 'different',
         sizeChanged: false,
-        mtimeChanged: true
+        mtimeChanged: true,
+        contentChanged: false
       })
       expect(byPath.get('sub/x.txt')).toMatchObject({ status: 'same' })
 
@@ -247,7 +270,8 @@ test.describe('folder-compare（文件夹对比）冒烟', () => {
       const ignored = await runCompare(page, {
         leftRoot: left,
         rightRoot: right,
-        compareMtime: false
+        compareMtime: false,
+        compareContent: false
       })
       expect(ignored.result).toMatchObject({ different: 0, same: 3 })
 
@@ -270,7 +294,8 @@ test.describe('folder-compare（文件夹对比）冒烟', () => {
               .invoke<{ taskId: string }>('folder-compare:compare', {
                 leftRoot: args.leftRoot,
                 rightRoot: args.rightRoot,
-                compareMtime: true
+                compareMtime: true,
+                compareContent: false
               })
               .then((value) => {
                 taskId = value.taskId
@@ -283,6 +308,65 @@ test.describe('folder-compare（文件夹对比）冒烟', () => {
         { leftRoot: missing, rightRoot: right }
       )
       expect(code).toBe('FC_ROOT_INVALID')
+    } finally {
+      fs.rmSync(left, { recursive: true, force: true })
+      fs.rmSync(right, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('内容比较：同名同大小内容不同 → 内容不同（IPC + UI）', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const left = freshDir('lumin-fc-e2e-content-left')
+    const right = freshDir('lumin-fc-e2e-content-right')
+    try {
+      const bigHead = 'a'.repeat(70 * 1024 - 1)
+      writeFile(left, 'diff.txt', 'abcd')
+      writeFile(right, 'diff.txt', 'wxyz')
+      writeFile(left, 'same.txt', 'hello')
+      writeFile(right, 'same.txt', 'hello')
+      writeFile(left, 'big.txt', `${bigHead}b`)
+      writeFile(right, 'big.txt', `${bigHead}c`)
+      for (const rel of ['diff.txt', 'same.txt', 'big.txt']) {
+        touch(left, rel, BASE_MS)
+        touch(right, rel, BASE_MS)
+      }
+
+      const outcome = await runCompare(page, {
+        leftRoot: left,
+        rightRoot: right,
+        compareMtime: true,
+        compareContent: true
+      })
+      expect(outcome.result).toMatchObject({
+        compareContent: true,
+        contentDifferent: 2,
+        different: 2,
+        same: 1
+      })
+      const byPath = new Map(outcome.result.entries.map((entry) => [entry.path, entry]))
+      expect(byPath.get('diff.txt')).toMatchObject({ status: 'different', contentChanged: true })
+      expect(byPath.get('same.txt')).toMatchObject({ status: 'same', contentChanged: false })
+      expect(byPath.get('big.txt')).toMatchObject({ status: 'different', contentChanged: true })
+
+      // UI：预置内容比较开关后重进页面，点击开始对比展示「内容不同」
+      await page.evaluate(
+        (args: { left: string; right: string }) =>
+          window.lumin.invoke('folder-compare:set-config', {
+            leftRoot: args.left,
+            rightRoot: args.right,
+            compareMtime: true,
+            compareContent: true
+          }),
+        { left, right }
+      )
+      await clickSidebarTool(page, '计算器')
+      await clickSidebarTool(page, '文件夹对比')
+      await expect(page.getByText('比较文件内容（SHA-256，较慢）')).toBeVisible()
+      await page.getByRole('button', { name: '开始对比' }).click()
+      await expect(page.getByText('内容不同 2', { exact: false })).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByText('内容不同', { exact: true }).first()).toBeVisible()
     } finally {
       fs.rmSync(left, { recursive: true, force: true })
       fs.rmSync(right, { recursive: true, force: true })

@@ -681,4 +681,54 @@ test.describe('pdf-toolkit（PDF 工具集）冒烟', () => {
       await app.close()
     }
   })
+
+  test('PDF→HTML 结构化导出（M63）', async () => {
+    test.setTimeout(120_000)
+    const { app, page } = await launch()
+    const workDir = freshDir('lumin-pt-e2e-m63')
+    try {
+      // 图片型 PDF（无文本层）：中文 + 空格路径
+      const input = await makePdf(page, workDir, '网页 卷', 2)
+
+      // 无文本层 → PT_PDF_NO_TEXT
+      const noText = await runTask(page, 'pdf-toolkit:export-html', { inputPath: input })
+      expect(noText.error?.code).toBe('PT_PDF_NO_TEXT')
+
+      // 加页码产生文本层后导出指定页：同名 .html，含骨架与页码区块
+      const numbered = await runTask(page, 'pdf-toolkit:page-numbers', {
+        inputPath: input,
+        format: '{n}/{total}',
+        position: 'bottom-center',
+        startPage: 1,
+        fontSize: 12,
+        color: '#333333',
+        margin: 24
+      })
+      const numberedFile = numbered.done?.outputPaths?.[0] ?? ''
+      expect(numberedFile).toBe(path.join(workDir, '网页 卷_页码.pdf'))
+
+      const exported = await runTask(page, 'pdf-toolkit:export-html', {
+        inputPath: numberedFile,
+        ranges: '1'
+      })
+      const htmlFile = exported.done?.outputPaths?.[0] ?? ''
+      expect(htmlFile).toBe(path.join(workDir, '网页 卷_页码.html'))
+      const html = fs.readFileSync(htmlFile, 'utf8')
+      expect(html.startsWith('<!doctype html>')).toBe(true)
+      expect(html).toContain('<title>网页 卷_页码</title>')
+      expect(html).toContain('<div class="page-label">第 1 页</div>')
+      expect(html).not.toContain('<div class="page-label">第 2 页</div>')
+      expect(html).not.toContain('<script')
+
+      // UI：PDF→HTML 页签可见；未选 PDF 时按钮禁用 + 页码范围输入可见
+      await clickSidebarTool(page, 'PDF 工具集')
+      await expect(page.getByText('PDF→HTML', { exact: true }).first()).toBeVisible()
+      await page.getByText('PDF→HTML', { exact: true }).first().click()
+      await expect(page.getByRole('button', { name: '导出 HTML' })).toBeDisabled()
+      await expect(page.getByPlaceholder('留空 = 全部页（如 1-3,5）')).toBeVisible()
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
 })

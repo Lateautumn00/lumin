@@ -15,7 +15,8 @@ export const DISK_ANALYZER_ERROR_CODES = [
   'DA_INVALID_PAYLOAD',
   'DA_ROOT_INVALID',
   'DA_TOO_MANY_FILES',
-  'DA_SCAN_FAILED'
+  'DA_SCAN_FAILED',
+  'DA_EXPORT_FAILED'
 ] as const
 
 export type DiskAnalyzerErrorCode = (typeof DISK_ANALYZER_ERROR_CODES)[number]
@@ -25,11 +26,16 @@ const MESSAGES: Record<DiskAnalyzerErrorCode, string> = {
   DA_INVALID_PAYLOAD: '参数无效',
   DA_ROOT_INVALID: '无法读取扫描目录（不存在、不是目录或无权限）',
   DA_TOO_MANY_FILES: '目录文件超过 20 万个，请缩小扫描范围',
-  DA_SCAN_FAILED: '扫描失败（任务超时或异常中断）'
+  DA_SCAN_FAILED: '扫描失败（任务超时或异常中断）',
+  DA_EXPORT_FAILED: '导出 CSV 失败（目标不可写或已取消）'
 }
 
 /** 可重试错误码（renderer 据此显示 [重试]） */
-const RETRYABLE = new Set<DiskAnalyzerErrorCode>(['DA_ROOT_INVALID', 'DA_SCAN_FAILED'])
+const RETRYABLE = new Set<DiskAnalyzerErrorCode>([
+  'DA_ROOT_INVALID',
+  'DA_SCAN_FAILED',
+  'DA_EXPORT_FAILED'
+])
 
 /**
  * 构造结构化错误（detail 缺省时不带字段）

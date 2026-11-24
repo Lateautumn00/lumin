@@ -23,6 +23,7 @@ import {
   cancelTask as requestCancel,
   compress,
   deletePages,
+  exportHtml,
   extractImages,
   extractText,
   info,
@@ -50,6 +51,7 @@ type TabId =
   | 'extract-text'
   | 'extract-images'
   | 'compress'
+  | 'export-html'
 
 /** 任务种类（重试入口据此复放上一次提交） */
 type Action = TabId
@@ -88,7 +90,8 @@ const BUTTON_TEXT: Record<Action, string> = {
   'page-numbers': '添加页码',
   'extract-text': '提取文本',
   'extract-images': '提取图片',
-  compress: '开始压缩'
+  compress: '开始压缩',
+  'export-html': '导出 HTML'
 }
 
 const activeTab = ref<TabId>('merge')
@@ -396,6 +399,10 @@ async function submitTask(action: Action): Promise<{ taskId: string }> {
         ...(text === '' ? {} : { ranges: text })
       })
     }
+    case 'export-html': {
+      const text = exRanges.value.trim()
+      return exportHtml({ inputPath: path, ...(text === '' ? {} : { ranges: text }) })
+    }
   }
 }
 
@@ -453,7 +460,7 @@ onUnmounted(detach)
     <div>
       <h1 class="text-base font-semibold">PDF 工具集</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        合并、拆分、删页、旋转、重排、元数据、水印、页码、文本/图片提取与压缩，产物写到源文件同目录
+        合并、拆分、删页、旋转、重排、元数据、水印、页码、文本/图片提取、压缩与 PDF→HTML，产物写到源文件同目录
       </p>
     </div>
 
@@ -491,6 +498,9 @@ onUnmounted(detach)
       </NTabPane>
       <NTabPane name="compress">
         <template #tab>压缩</template>
+      </NTabPane>
+      <NTabPane name="export-html">
+        <template #tab>PDF→HTML</template>
       </NTabPane>
     </NTabs>
 
@@ -971,6 +981,20 @@ onUnmounted(detach)
           <p class="text-xs text-[var(--lumin-color-warning, #f0a020)]">
             压缩为有损处理（逐页栅格化），文字选择、链接与表单将丢失，建议保留原件
           </p>
+        </template>
+        <template v-if="activeTab === 'export-html'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">页码范围</NText>
+            <NInput
+              v-model:value="exRanges"
+              :disabled="phase === 'running'"
+              placeholder="留空 = 全部页（如 1-3,5）"
+              class="flex-1"
+            />
+          </div>
+          <NText depth="3" class="text-xs">
+            输出为同名 HTML 文件（写到源文件同目录），按字号/行距区分标题与段落，无外部资源
+          </NText>
         </template>
       </NSpace>
     </template>

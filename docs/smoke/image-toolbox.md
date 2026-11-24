@@ -89,3 +89,30 @@
 - `image-toolbox-*.js`：**55,320 B raw / 12,541 B gzip**（新增两页签后）。
 - `NTabs` / `NSlider` 现由 image-toolbox 与 image-stitch 共用，按 R5 口径属共享 vendor，**不计入工具专属增量**；独占依赖 chunk 仍为 0。
 - 无新增运行时资产；仍走 `binaries/download/ffmpeg.exe`。**12.5KB gzip ≪ 200KB，达标**。
+
+## 9. M63 增量（2026-11-24）：文件夹递归 + 处理历史
+
+### 9.1 功能与验收
+
+- **添加文件夹**：`pickDirectory` → `image-toolbox:collect-folder` 递归（白名单 + 跳过符号链接 + 2000 上限）；合并去重；`folderHint` 提示新增数/截断/已存在。
+- **处理历史**：`process` / `make-gif` 成功后追加 `{ at, mode, success, failed, outputDir, firstOutput }` 至 settings `history`，FIFO 20；`config` 回填；底部 `<details data-testid="history-panel">` 展示并可「清空历史」。
+- **单测**：新增 `folder.test.ts`（3）+ `history.test.ts`（6）；schema/node/client 增量；本包 **160 tests / 8 文件全绿**。
+- **e2e**：新增「M63 文件夹递归收集 + 处理历史（最近 20 条）」——嵌套目录收集 2 张 + 过滤 txt、空目录 → `IT_FOLDER_EMPTY`、21 次追加 → config 保留 20 条且 `success=20` 置顶、UI 历史面板/「添加文件夹」可见、清空后面板消失。
+
+### 9.2 R2 八类映射（增量）
+
+| 类别         | 验证                                                                 |
+| ------------ | -------------------------------------------------------------------- |
+| 中文/空格路径 | e2e 收集目录含 `子目录`、文件 `a 图.png`；历史 `outputDir` 中文正常 |
+| 文件被占用   | 收集只 `readdir`/`Dirent`，不打开文件内容；处理阶段沿用既有占用归类 |
+| 加密文件     | 收集不看内容；处理阶段沿用 `IT_FILE_CORRUPT`                        |
+| 超大文件     | 收集上限 2000 张（`truncated`）；单文件 >200MB 沿用既有拒入          |
+| 任务取消     | 收集为 sync IPC，不占任务队列；历史写入失败静默不影响主流程          |
+| 并发溢出     | 收集/历史为 sync IPC；批量处理仍走壳队列串行                         |
+| 磁盘满       | 历史写入 settings 失败静默（下次进入回落旧值），主流程不受影响        |
+| 断电恢复     | 历史为 settings 原子写；收集无写盘、无中间产物                        |
+
+### 9.3 R5 体积记录（增量）
+
+- 新增 `folder.ts` / `history.ts` 与 UI（按钮 + 折叠面板），无新增依赖；`pnpm build` 实测 `out/renderer/assets/image-toolbox-JKju8iGS.js` **70,248 B raw / 15,381 B gzip**（M40 基线 55,320 / 12,541，增量约 2.8KB gzip；远低于 200KB，R5 达标）。
+- 零新增运行时资产。

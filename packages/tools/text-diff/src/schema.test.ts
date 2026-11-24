@@ -9,8 +9,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   BINARY_CHUNK_BYTES,
+  COPY_TEXT_MAX_CHARS,
   FILE_COMPARE_MAX_BYTES,
   compareFilesPayloadSchema,
+  copyTextPayloadSchema,
   pickFilePayloadSchema
 } from './schema'
 
@@ -62,6 +64,17 @@ describe('compareFilesPayloadSchema', () => {
   it('非布尔忽略选项失败', () => {
     expect(
       compareFilesPayloadSchema.safeParse({ left: 'a', right: 'b', ignoreCase: 'yes' }).success
+    ).toBe(false)
+  })
+})
+
+describe('copyTextPayloadSchema', () => {
+  it('非空文本通过、空文本与超限文本失败', () => {
+    expect(copyTextPayloadSchema.safeParse({ text: '-a\n+b' }).success).toBe(true)
+    expect(copyTextPayloadSchema.safeParse({ text: '' }).success).toBe(false)
+    expect(copyTextPayloadSchema.safeParse(null).success).toBe(false)
+    expect(
+      copyTextPayloadSchema.safeParse({ text: 'x'.repeat(COPY_TEXT_MAX_CHARS + 1) }).success
     ).toBe(false)
   })
 })

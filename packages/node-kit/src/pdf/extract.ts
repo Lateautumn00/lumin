@@ -15,6 +15,42 @@ export interface PdfTextItem {
   hasEOL?: boolean
 }
 
+/** pdfjs 文本项的版面字段（transform 为 6 元仿射矩阵，e=x、f=y） */
+export interface PdfRawTextItem {
+  str: string
+  hasEOL?: boolean
+  transform?: readonly number[]
+  /** 文本项高度（≈ 字号） */
+  height?: number
+  /** 字体资源名（如 F1） */
+  fontName?: string
+}
+
+/** 版面文本行（供 PDF→HTML 结构化导出按字号/位置推断标题与段落） */
+export interface PdfTextLine {
+  pageNumber: number
+  text: string
+  /** 行首 x（PDF 坐标） */
+  x: number
+  /** 基线 y（PDF 坐标，值越大越靠上） */
+  y: number
+  /** 估算字号（取行内首个文本项 height） */
+  fontSize: number
+  fontName: string
+}
+
+/** 单页版面行抽取结果 */
+export interface ExtractedLinesPage {
+  pageNumber: number
+  lines: PdfTextLine[]
+}
+
+/** 版面行抽取汇总 */
+export interface ExtractedLines {
+  pages: ExtractedLinesPage[]
+  hasText: boolean
+}
+
 /** 单页文本抽取结果 */
 export interface ExtractedTextPage {
   pageNumber: number
@@ -147,6 +183,119 @@ export async function extractPdfText(
     }
     if (text.trim() !== '') hasText = true
     pages.push({ pageNumber, text })
+  }
+  return { pages, hasText }
+}
+
+/** 统一收窄 pdfjs 文本项（缺 str 的标记项跳过；transform 仅保留数字） */
+export function toRawTextItems(items: readonly unknown[]): PdfRawTextItem[] {
+  const result: PdfRawTextItem[] = []
+  for (const item of items) {
+    if (typeof item !== 'object' || item === null) continue
+    const record = item as {
+      str?: unknown
+      hasEOL?: unknown
+      transform?: unknown
+      height?: unknown
+      fontName?: unknown
+    }
+    if (typeof record.str !== 'string') continue
+    const transform = Array.isArray(record.transform)
+      ? record.transform.filter((value): value is number => typeof value === 'number')
+      : undefined
+    result.push({
+      str: record.str,
+      hasEOL: record.hasEOL === true,
+      ...(transform === undefined ? {} : { transform }),
+      ...(typeof record.height === 'number' ? { height: record.height } : {}),
+      ...(typeof record.fontName === 'string' ? { fontName: record.fontName } : {})
+    })
+  }
+  return result
+}
+
+/** 行基线 y 变化超过字号该比例即视为换行（pdfjs 未给 hasEOL 时的兜底） */
+const LINE_Y_RATIO = 0.6
+
+/** 取文本项 x（transform[4]） */
+function itemX(item: PdfRawTextItem): number {
+  return item.transform?.[4] ?? 0
+}
+
+/** 取文本项 y（transform[5]） */
+function itemY(item: PdfRawTextItem): number {
+  return item.transform?.[5] ?? 0
+}
+
+/**
+ * 将一页文本项重建为版面行：hasEOL 或基线明显跳变时换行，行尾空白裁掉，空行丢弃。
+ * @param pageNumber 1-based 页码
+ * @param items 已收窄的文本项
+ */
+export function buildTextLines(
+  pageNumber: number,
+  items: readonly PdfRawTextItem[]
+): PdfTextLine[] {
+  const lines: PdfTextLine[] = []
+  let text = ''
+  let x = 0
+  let y = 0
+  let fontSize = 0
+  let fontName = ''
+  let active = false
+
+  const flush = (): void => {
+    if (!active) return
+    const trimmed = text.replace(/\s+$/, '')
+    if (trimmed.trim() !== '') {
+      lines.push({ pageNumber, text: trimmed, x, y, fontSize, fontName })
+    }
+    text = ''
+    active = false
+  }
+
+  for (const item of items) {
+    const currentY = itemY(item)
+    const currentSize = item.height ?? 0
+    if (active) {
+      const threshold = Math.max(fontSize, currentSize, 1) * LINE_Y_RATIO
+      if (Math.abs(currentY - y) > threshold) flush()
+    }
+    if (!active) {
+      active = true
+      x = itemX(item)
+      y = currentY
+      fontSize = currentSize
+      fontName = item.fontName ?? ''
+    }
+    text += item.str
+    if (item.hasEOL === true) flush()
+  }
+  flush()
+  return lines
+}
+
+/** 逐页抽取版面行（单页失败记空页，不中断） */
+export async function extractPdfLines(
+  doc: PdfDocumentHandle,
+  pageNumbers: readonly number[]
+): Promise<ExtractedLines> {
+  const pages: ExtractedLinesPage[] = []
+  let hasText = false
+  for (const pageNumber of pageNumbers) {
+    let lines: PdfTextLine[] = []
+    try {
+      const page = await doc.getPage(pageNumber)
+      if (page.getTextContent !== undefined) {
+        const content = await page.getTextContent()
+        lines = buildTextLines(pageNumber, toRawTextItems(content.items))
+      }
+      page.cleanup()
+    } catch {
+      lines = []
+    }
+    if (lines.length > 0) hasText = true
+    pages.push({ pageNumber, lines })
   }
   return { pages, hasText }
 }

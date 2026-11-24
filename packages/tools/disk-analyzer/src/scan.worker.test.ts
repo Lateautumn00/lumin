@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import type { TaskRunContext } from '@lumin/node-kit'
 import type { TaskUpdate } from '@lumin/shared'
 import { afterEach, describe, expect, it } from 'vitest'
-import { aggregateDirectory, runScan, type ScanCounters } from './scan.worker'
+import { accumulateType, aggregateDirectory, runScan, type ScanCounters } from './scan.worker'
 import type { ScanRequest } from './schema'
 
 /** 临时目录列表（afterEach 清理） */
@@ -49,6 +49,17 @@ afterEach(async () => {
 function request(root: string, minFileBytes = 0): ScanRequest {
   return { root, minFileBytes }
 }
+
+describe('accumulateType', () => {
+  it('按小写扩展名累计文件数与字节，无扩展名归 (无扩展名)', () => {
+    const totals = new Map<string, { files: number; bytes: number }>()
+    accumulateType(totals, 'A.TXT', 10)
+    accumulateType(totals, 'b.txt', 5)
+    accumulateType(totals, 'README', 3)
+    expect(totals.get('txt')).toEqual({ files: 2, bytes: 15 })
+    expect(totals.get('(无扩展名)')).toEqual({ files: 1, bytes: 3 })
+  })
+})
 
 describe('aggregateDirectory', () => {
   it('递归汇总后代文件大小与文件数，访问目录计数', async () => {
@@ -93,6 +104,26 @@ describe('runScan', () => {
       skipped: 0,
       elapsedMs: 0
     })
+    expect(result.typeStats).toEqual([
+      { ext: 'txt', files: 3, bytes: 10 },
+      { ext: 'bin', files: 1, bytes: 10 }
+    ])
+  })
+
+  it('类型统计覆盖子目录与无扩展名文件', async () => {
+    const root = await setup({
+      'a.txt': 'abc',
+      'b.TXT': 'de',
+      'README': 'x',
+      'sub/c.png': '12345'
+    })
+    const { ctx } = createCtx()
+    const result = await runScan(request(root), ctx, () => 0)
+    expect(result.typeStats).toEqual([
+      { ext: 'txt', files: 2, bytes: 5 },
+      { ext: 'png', files: 1, bytes: 5 },
+      { ext: '(无扩展名)', files: 1, bytes: 1 }
+    ])
   })
 
   it('空目录返回空条目与 0 汇总，并推送起始进度', async () => {

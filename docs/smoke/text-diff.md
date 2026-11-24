@@ -1,7 +1,7 @@
 # 文本对比（text-diff）冒烟记录 — M32 / M62
 
 > 版本：v0.2.0 · 日期：2026-11-20（M32）/ 2026-11-24（M62 增量）· 关联：`docs/spec/text-diff.md`
-> 工具形态：M32 纯 renderer；**M62 起文本比较纯 renderer + 文件比较 2 同步主进程通道**（`pick-file` / `compare-files`），零新增第三方运行时依赖（zod 为 IPC schema 既有依赖）。
+> 工具形态：M32 纯 renderer；**M62 起文本比较纯 renderer + 文件比较 2 同步主进程通道**（`pick-file` / `compare-files`）；**M63 增 `copy-text`（3 通道）**，零新增第三方运行时依赖（zod 为 IPC schema 既有依赖）。
 
 ## 1. 环境
 
@@ -98,7 +98,7 @@
 
 | 项                             | 实测                                                 | 上限       | 结论 |
 | ------------------------------ | ---------------------------------------------------- | ---------- | ---- |
-| 工具 chunk（renderer）         | 41,849 B raw / **10,782 B gzip**（M32 +3,008 gzip）  | 200KB gzip | 达标 |
+| 工具 chunk（renderer）         | 41,909 B raw / **10,903 B gzip**（M63 copy-text 后；M62 为 10,782） | 200KB gzip | 达标 |
 | 独占依赖 chunk                 | 0（zod 仅主进程，不进 renderer）                     | —          | 达标 |
 | 运行时资产（worker/wasm/模型） | 无                                                   | —          | —    |
 
@@ -119,9 +119,16 @@
 
 | 命令                                                   | 结果                                     |
 | ------------------------------------------------------ | ---------------------------------------- |
-| `pnpm exec vitest run packages/tools/text-diff`        | 78/78 通过                               |
+| `pnpm exec vitest run packages/tools/text-diff`        | 82/82 通过（M63 增 copy-text 后）        |
 | `pnpm -C packages/tools/text-diff typecheck`           | 通过                                     |
 | `pnpm eslint packages/tools/text-diff …`               | 通过                                     |
 | e2e `text-diff-smoke.spec.ts`                          | 6/6 通过                                 |
-| `pnpm build`                                           | 通过（工具 chunk 10,782 B gzip）         |
+| `pnpm build`                                           | 通过（工具 chunk 10,903 B gzip）         |
 | `pnpm gate`（lint→typecheck→test→audit:high→boundary） | 见 MR 记录                               |
+
+## 7. M63 附带修复（2026-11-24）：统一 diff 复制改主进程剪贴板
+
+- **现象**：e2e 点击「复制统一 diff」后主进程 `clipboard.readText()` 仍为旧内容，用例失败；真实窗口未聚焦时同样可能静默失败（`NotAllowedError: Document is not focused`）。
+- **根因**：复制走 renderer `navigator.clipboard.writeText`，依赖窗口焦点与剪贴板权限。
+- **修复**：新增同步通道 `text-diff:copy-text`（`{ text }` 非空且 ≤4,000,000 字符 → `{ ok: true }`），主进程 `clipboard.writeText` 写入；空/超限 → `INVALID_INPUT`，写入异常 → `TD_CLIPBOARD_FAILED`（沿用既有错误码）。
+- **回归**：`text-diff` 单测全绿（新增 copy-text 三用例 + schema 校验 + 默认依赖断言）；`text-diff-smoke.spec.ts` 6/6 通过。

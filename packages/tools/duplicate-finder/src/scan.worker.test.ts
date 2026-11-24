@@ -8,10 +8,10 @@ import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { TaskRunContext } from '@lumin/node-kit'
+import { hashFileRange, type TaskRunContext } from '@lumin/node-kit'
 import type { TaskUpdate } from '@lumin/shared'
 import { afterEach, describe, expect, it } from 'vitest'
-import { collectFiles, hashRange, runScan } from './scan.worker'
+import { collectFiles, runScan } from './scan.worker'
 import { PARTIAL_BYTES, type ScanRequest } from './schema'
 
 /** 临时目录列表（afterEach 清理） */
@@ -173,13 +173,13 @@ describe('runScan', () => {
   })
 })
 
-describe('hashRange', () => {
+describe('hashFileRange', () => {
   it('0 字节返回空内容摘要', async () => {
-    await expect(hashRange('不存在的路径', 0)).resolves.toBe(sha256(''))
+    await expect(hashFileRange('不存在的路径', 0)).resolves.toBe(sha256(''))
   })
 
   it('只读取指定前缀范围', async () => {
     const root = await setup({ 'a.txt': 'abcdef' })
-    await expect(hashRange(join(root, 'a.txt'), 3)).resolves.toBe(sha256('abc'))
+    await expect(hashFileRange(join(root, 'a.txt'), 3)).resolves.toBe(sha256('abc'))
   })
 })

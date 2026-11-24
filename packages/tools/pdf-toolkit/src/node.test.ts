@@ -244,7 +244,7 @@ describe('pdf-toolkit node:任务通道', () => {
     ])
   })
 
-  it('extract-text/extract-images/compress 映射到同名 op', async () => {
+  it('extract-text/extract-images/compress/export-html 映射到同名 op', async () => {
     const { ctx, harness } = makeCtx()
     const { deps, runs } = makeDeps()
     registerWith(ctx, deps)
@@ -258,10 +258,12 @@ describe('pdf-toolkit node:任务通道', () => {
     })
     await getTask(harness, 'extract-images')({ ...base, payload: { inputPath: input } })
     await getTask(harness, 'compress')({ ...base, payload: { inputPath: input, level: 'low' } })
+    await getTask(harness, 'export-html')({ ...base, payload: { inputPath: input, ranges: '1' } })
     expect(runs.map((run) => run.payload.op)).toEqual([
       'extract-text',
       'extract-images',
-      'compress'
+      'compress',
+      'export-html'
     ])
   })
 
@@ -461,7 +463,7 @@ describe('pdf-toolkit node:错误分类与默认依赖', () => {
     expect(typeof deps.checkExclusive).toBe('function')
   })
 
-  it('registerMain 注册 info + 十一个任务通道', () => {
+  it('registerMain 注册 info + 十二个任务通道', () => {
     const { ctx, harness } = makeCtx()
     registerMain(ctx)
     expect([...harness.ipc.keys()]).toEqual(['info'])
@@ -476,7 +478,8 @@ describe('pdf-toolkit node:错误分类与默认依赖', () => {
       'page-numbers',
       'extract-text',
       'extract-images',
-      'compress'
+      'compress',
+      'export-html'
     ])
   })
 })

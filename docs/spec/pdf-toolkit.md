@@ -427,3 +427,98 @@ CHANGELOG.md / README.md / README.en.md          工具描述补三项能力
 * 文本产物为 UTF-8 且含 `===== 第 N 页 =====` 分隔；图片产物均为可解码 PNG；压缩产物页数与源一致。
 * 空文本层 → `PT_NO_TEXT_LAYER`；无图片 → `PT_NO_IMAGES`；越界页码 → `PT_RANGE_INVALID`。
 * `pnpm gate` 退出码 0；三次提交（feat / test / docs）。
+
+---
+
+## 11.11 M63 增量：PDF→HTML 结构化导出（P1-11）
+
+> R8 登记：`docs/opencode/plan.md` §1 Q65 / §4.63.3 / §6 M63（2026-11-24）。
+> 边界：仅扩展 `pdf-toolkit` 与 `@lumin/node-kit/pdf`，**零新包、零新增依赖**；单文件 JSON/YAML 工具不能替代本功能，故落在 PDF 工具集内。
+
+### 11.11.1 界面（第十二 Tab）
+
+| Tab      | 输入                   | 提交按钮    | 载荷                       |
+| -------- | ---------------------- | ----------- | -------------------------- |
+| PDF→HTML | 单个 PDF + 页码范围（可空） | `导出 HTML` | `{ inputPath, ranges? }`   |
+
+* 页签名 `PDF→HTML`；说明文案「输出为同名 HTML 文件（写到源文件同目录），按字号/行距区分标题与段落，无外部资源」。
+* 结果区复用既有单产物列表；产物链接可直接 `revealPath`。
+* 三态与其他 Tab 一致：空态提示先选 PDF；加载态显示「重建版面… / 写出文件…」；报错态显示结构化错误码与重试。
+
+### 11.11.2 通道（AGENTS §6）
+
+| 通道                     | 类型 | 入参                     | 返回                          |
+| ------------------------ | ---- | ------------------------ | ----------------------------- |
+| `pdf-toolkit:export-html` | 任务 | `{ inputPath, ranges? }` | `{ outputPaths: string[] }`   |
+
+* 走既有三段式；`WorkerRequest` 增加 `{ op: 'export-html' }`，`runOp` 增加对应 case。
+* 主进程 `precheckInputs` 复用既有输入预检（存在性/只读/占用）。
+
+### 11.11.3 数据契约（`src/schema.ts`）
+
+```ts
+const exportHtmlPayloadSchema = z.object({
+  inputPath: pdfPathSchema,
+  ranges: optionalRangesSchema
+})
+```
+
+### 11.11.4 版面抽取原语（`packages/node-kit/src/pdf/extract.ts`）
+
+| 导出                                 | 语义                                                                 |
+| ------------------------------------ | -------------------------------------------------------------------- |
+| `PdfRawTextItem` / `PdfTextLine`     | 文本项（str/hasEOL/transform/height/fontName）与版面行（text/x/y/fontSize/fontName） |
+| `toRawTextItems(items)`              | 收窄 pdfjs 文本项；缺 `str` 的标记项跳过，transform 仅保留数字         |
+| `buildTextLines(pageNumber, items)`  | `hasEOL` 或基线跳变（> 字号 × 0.6）换行；行尾空白裁掉、空行丢弃        |
+| `extractPdfLines(doc, pageNumbers)`  | 逐页抽取版面行；单页失败记空页不中断，返回 `{ pages, hasText }`        |
+
+### 11.11.5 HTML 构建（`src/pdf-html.ts`，纯函数）
+
+| 函数                              | 语义                                                                 |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `escapeHtml(value)`               | `& < > " '` 转义（防注入标签/脚本）                                   |
+| `joinText(left, right)`           | 两侧均为 ASCII 单词字符时补空格，其余直接拼接（适配中文）              |
+| `headingSizes(pages)`             | 统计字号；**排除出现最频繁的正文字号**，其余降序取前三级作为 h1–h3    |
+| `buildHtmlDocument({ title, pages })` | 输出单文件 HTML：doctype/lang=zh-CN/内联样式/`section.pdf-page`/页码标签 |
+
+* 段落合并：同页相邻行基线差值 ≤ 1.8×字号且缩进增量 ≤ 2×字号时并入同一 `<p>`，否则分段。
+* 列表识别：`• · ▪ ◦ * -` 前缀 → `<ul>`；`1.` / `1)` / `1、` 前缀 → `<ol>`（连续同类合并）。
+* 标题长度 > 120 字符一律按正文处理；空页不输出 section；无任何外部资源与 `<script>`。
+* 明文样式含 `prefers-color-scheme: dark` 适配（独立文件，不占用应用 tokens）。
+
+### 11.11.6 处理语义（`src/pdf-ops.ts`）
+
+```
+openPdf（加密 → PT_PDF_NO_TEXT；其他失败 → PT_OP_FAILED）
+→ selectPages（越界 → PT_RANGE_INVALID）
+→ extractPdfLines（无文本层 → PT_PDF_NO_TEXT）
+→ buildHtmlDocument
+→ resolveOutput(exportHtmlDesiredPath) → writeFile utf8
+→ 写盘失败（含被占用/磁盘满）→ 删除半成品 → PT_EXPORT_FAILED
+```
+
+### 11.11.7 错误码增量（`src/errors.ts`）
+
+| 码                | 文案                                         | 可重试 |
+| ----------------- | -------------------------------------------- | ------ |
+| `PT_PDF_NO_TEXT`  | 未检测到可导出的文本层（可能为扫描件或已加密） | 否     |
+| `PT_EXPORT_FAILED`| 导出 HTML 失败，请检查目录权限与剩余空间       | 是     |
+
+### 11.11.8 命名（`src/naming.ts`）
+
+`exportHtmlDesiredPath(inputPath)` → `{基名}.html`（同名换扩展名；冲突由 `resolveConflictPath` 追加 `(1)`）。
+
+### 11.11.9 测试与验收（M63）
+
+1. 单测：
+   * `node-kit`：`toRawTextItems` 过滤、`buildTextLines` 换行/裁空白/空行、`extractPdfLines` 真实 PDF + 空白页 + 取页失败。
+   * `pdf-toolkit`：`escapeHtml`/`joinText`/`headingSizes`/`buildHtmlDocument`（标题分位、超长行、段落分段、列表、转义、空页）；schema/naming/errors 增量；`pdf-ops` 真实 PDF 导出（转义/指定页/无文本层/重名递增）；node 通道映射；client 通道名。
+2. e2e（追加至 `pdf-toolkit-smoke.spec.ts`）：图片型 PDF → `PT_PDF_NO_TEXT`；加页码后导出第 1 页 → 产物 `网页 卷_页码.html`，断言 doctype/title/page-label/无 `<script>`；UI 第十二页签与按钮禁用态。
+3. `docs/smoke/pdf-toolkit.md` 增 M63 增量（R2 映射 + e2e 结果 + chunk）。
+4. `pnpm coverage`（包 80% / 全仓 60%）、`pnpm gate` 全绿。
+
+### 11.11.10 风险与回滚
+
+* 风险：字号/行距启发式对多栏、旋转文本、扫描件精度有限 → 仅承诺「结构化近似」，不做版式还原；无文本层直接报错引导先 OCR。
+* 风险：HTML 体量随页数增长（纯文本，通常远小于原 PDF）→ 不设硬上限，进度可见可取消。
+* 回滚：删除 `pdf-html.ts`、`export-html` 分支、第十二页签与两个错误码即可，无数据迁移。

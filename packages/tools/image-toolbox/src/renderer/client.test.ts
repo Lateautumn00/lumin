@@ -6,7 +6,17 @@
  *              锁定 probe/process/config 通道拼写与 revealPath 壳通道复用
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { config, makeGif, process, probe, revealPath, saveOutputDir } from './client'
+import {
+  appendHistory,
+  clearHistory,
+  collectFolder,
+  config,
+  makeGif,
+  process,
+  probe,
+  revealPath,
+  saveOutputDir
+} from './client'
 
 const invoke = vi.fn(async () => ({ echoed: true }))
 const reveal = vi.fn(async () => undefined)
@@ -72,5 +82,26 @@ describe('client 通道封装（AGENTS §6 白名单 bridge）', () => {
     await expect(revealPath('E:\\out\\a.jpg')).resolves.toBeUndefined()
     expect(reveal).toHaveBeenCalledOnce()
     expect(reveal).toHaveBeenCalledWith('E:\\out\\a.jpg')
+  })
+
+  it('collectFolder sync（M63）：通道名与负载透传', async () => {
+    stubBridge()
+    await expect(collectFolder({ dir: 'E:\\pics' })).resolves.toEqual({ echoed: true })
+    expect(invoke).toHaveBeenCalledWith('image-toolbox:collect-folder', { dir: 'E:\\pics' })
+  })
+
+  it('appendHistory / clearHistory（M63）', async () => {
+    stubBridge()
+    const payload = {
+      mode: 'compress' as const,
+      success: 2,
+      failed: 0,
+      outputDir: 'E:\\out',
+      firstOutput: 'E:\\out\\a.jpg'
+    }
+    await appendHistory(payload)
+    expect(invoke).toHaveBeenCalledWith('image-toolbox:append-history', payload)
+    await clearHistory()
+    expect(invoke).toHaveBeenLastCalledWith('image-toolbox:clear-history', {})
   })
 })

@@ -226,6 +226,13 @@ export const compressPayloadSchema = z.object({
 })
 export type CompressPayload = z.infer<typeof compressPayloadSchema>
 
+/** PDF→HTML 结构化导出（M63）：ranges 留空 = 全部页 */
+export const exportHtmlPayloadSchema = z.object({
+  inputPath: pdfPathSchema,
+  ranges: optionalRangesSchema
+})
+export type ExportHtmlPayload = z.infer<typeof exportHtmlPayloadSchema>
+
 /** PDF 元数据快照（缺省字段归一为空串） */
 export interface PdfMetadata {
   title: string

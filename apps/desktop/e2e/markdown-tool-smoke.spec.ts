@@ -97,7 +97,7 @@ test.describe('markdown-tool（Markdown 工具）冒烟', () => {
       const input = page.locator('[data-testid="ts-input"] textarea')
       const output = page.locator('[data-testid="ts-output"] textarea')
       const style = page.getByTestId('ts-style')
-      const fileName = page.getByPlaceholder('文件名')
+      const fileName = page.getByTestId('ts-file-name').locator('input')
 
       await input.fill('{"id":1,"user":{"name":"a"}}')
       await expect(output).toHaveValue(/export interface Root/)
@@ -156,7 +156,7 @@ test.describe('markdown-tool（Markdown 工具）冒烟', () => {
         outputDir
       )
       await page.getByTestId('load-sample').click()
-      await page.getByPlaceholder('文件名').first().fill('中文 空格')
+      await page.getByTestId('md-file-name').locator('input').fill('中文 空格')
       await page.getByTestId('export-html').click()
 
       const first = path.join(outputDir, '中文 空格.html')

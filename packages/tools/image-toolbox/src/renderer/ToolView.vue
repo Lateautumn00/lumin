@@ -16,14 +16,31 @@ import {
   NTag,
   NText
 } from 'naive-ui'
-import { ArrowDownAZ, ChevronDown, ChevronUp, FolderOpen, Images, X } from '@lucide/vue'
+import { ArrowDownAZ, ChevronDown, ChevronUp, FolderOpen, FolderPlus, History, Images, X } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
-import { config, makeGif, process, probe, revealPath, saveOutputDir } from './client'
+import {
+  appendHistory,
+  clearHistory,
+  collectFolder,
+  config,
+  makeGif,
+  process,
+  probe,
+  revealPath,
+  saveOutputDir
+} from './client'
 import { planGifCanvas } from '../gif'
-import { extensionOf } from '../schema'
-import type { MakeGifResult, OutputItem, ProbeItem, TargetFormat } from '../schema'
+import { MAX_BATCH_FILES, extensionOf } from '../schema'
+import type {
+  HistoryEntry,
+  HistoryMode,
+  MakeGifResult,
+  OutputItem,
+  ProbeItem,
+  TargetFormat
+} from '../schema'
 
 /** Tab 标识（spec §2；M40 增补 effect/gif） */
 type TabId = 'compress' | 'convert' | 'resize' | 'effect' | 'gif'
@@ -104,6 +121,11 @@ const probing = ref(false)
 const outputDir = ref('')
 /** 拖拽非法文件行内提示（自动清除） */
 const invalidHint = ref('')
+/** 文件夹递归收集中的提示（M63） */
+const folderHint = ref('')
+const collecting = ref(false)
+/** 处理历史（最近 20 条，新 → 旧；M63） */
+const history = ref<HistoryEntry[]>([])
 
 // —— 任务与结果 ——
 const phase = ref<'idle' | 'running'>('idle')
@@ -117,6 +139,43 @@ let unsubscribe: (() => void) | null = null
 let currentTaskId = ''
 /** 当前运行的任务类型（done 结果形状不同：process 批量结果 / gif 单文件结果） */
 const taskKind = ref<'process' | 'gif'>('process')
+/** 当前运行任务的模式（写入处理历史用；M63） */
+let taskMode: HistoryMode = 'compress'
+
+/** 处理模式中文名（历史列表展示；M63） */
+const MODE_LABEL: Record<HistoryMode, string> = {
+  compress: '压缩',
+  convert: '格式转换',
+  resize: '缩放',
+  effect: '效果',
+  gif: 'GIF 合成'
+}
+
+/** 历史时间戳格式化（本地时区，24 小时制） */
+function formatHistoryTime(at: number): string {
+  return new Date(at).toLocaleString('zh-CN', { hour12: false })
+}
+
+/** 写入一条处理历史（失败不影响主流程；M63） */
+function recordHistory(
+  mode: HistoryMode,
+  success: number,
+  failed: number,
+  firstOutput: string | null
+): void {
+  const dir = outputDir.value.trim()
+  void appendHistory({
+    mode,
+    success,
+    failed,
+    outputDir: dir === '' ? '默认目录' : dir,
+    firstOutput
+  })
+    .then((result) => {
+      history.value = result.history
+    })
+    .catch(() => undefined)
+}
 
 /** 无损格式忽略质量：对应 Tab 的质量滑杆置灰（spec §2.2） */
 const compressIsLossless = computed(() => LOSSLESS_FORMATS.has(compressTarget.value))
@@ -252,7 +311,9 @@ function onEvent(event: TaskEvent): void {
   progress.value = null
   if (event.kind === 'done') {
     if (taskKind.value === 'gif') {
-      gifResult.value = (event.result as MakeGifResult | undefined) ?? null
+      const gif = (event.result as MakeGifResult | undefined) ?? null
+      gifResult.value = gif
+      if (gif !== null) recordHistory('gif', 1, 0, gif.outputPath)
       return
     }
     const result = event.result as {
@@ -261,6 +322,12 @@ function onEvent(event: TaskEvent): void {
     }
     results.value = result.outputs ?? []
     resultFailures.value = result.failures ?? []
+    recordHistory(
+      taskMode,
+      results.value.length,
+      resultFailures.value.length,
+      results.value[0]?.output ?? null
+    )
     return
   }
   if (event.error.code === 'CANCELLED' || event.error.code === 'IT_CANCELLED') return
@@ -280,6 +347,7 @@ async function runProcess(): Promise<void> {
     return
   }
   taskKind.value = 'process'
+  taskMode = tab.value === 'gif' ? 'compress' : tab.value
   phase.value = 'running'
   progress.value = { current: 0, total: rows.value.length }
   try {
@@ -427,10 +495,58 @@ async function chooseDir(): Promise<void> {
   }
 }
 
+/** 递归添加文件夹内图片（M63，P1-6）：白名单过滤 + 去重合并 + 上限提示 */
+async function addFolder(): Promise<void> {
+  invalidHint.value = ''
+  folderHint.value = ''
+  let dir: string | null = null
+  try {
+    dir = await window.lumin.pickDirectory('选择图片文件夹')
+  } catch (err) {
+    showError(err)
+    return
+  }
+  if (dir === null) return
+  collecting.value = true
+  try {
+    const result = await collectFolder({ dir })
+    const room = MAX_BATCH_FILES - rows.value.length
+    if (room <= 0) {
+      folderHint.value = `列表已达 ${MAX_BATCH_FILES} 张上限，请先移除部分图片`
+      return
+    }
+    const before = rows.value.length
+    await onAdd(result.files.slice(0, room))
+    const added = rows.value.length - before
+    if (result.truncated) {
+      folderHint.value = `已达 ${MAX_BATCH_FILES} 张上限，仅收集部分图片（新增 ${added} 张）`
+    } else if (added === 0) {
+      folderHint.value = '所选文件夹内的图片已在列表中'
+    } else {
+      folderHint.value = `已从文件夹新增 ${added} 张图片`
+    }
+  } catch (err) {
+    showError(err)
+  } finally {
+    collecting.value = false
+  }
+}
+
+/** 清空处理历史（M63） */
+async function clearAllHistory(): Promise<void> {
+  try {
+    const result = await clearHistory()
+    history.value = result.history
+  } catch (err) {
+    showError(err)
+  }
+}
+
 onMounted(() => {
   void config()
     .then((result) => {
       outputDir.value = result.outputDir
+      history.value = result.history
     })
     .catch((err) => showError(err))
 })
@@ -487,6 +603,21 @@ onUnmounted(detach)
       @invalid="onInvalid"
     />
     <NText v-if="invalidHint !== ''" type="warning" class="text-xs">{{ invalidHint }}</NText>
+    <div class="flex flex-wrap items-center gap-2">
+      <NButton
+        size="small"
+        secondary
+        data-testid="add-folder"
+        :disabled="phase === 'running' || collecting"
+        @click="addFolder"
+      >
+        <FolderPlus class="mr-1 h-4 w-4" />{{ collecting ? '正在收集…' : '添加文件夹' }}
+      </NButton>
+      <NText depth="3" class="text-xs">递归收集子目录内支持的图片（上限 {{ MAX_BATCH_FILES }} 张）</NText>
+    </div>
+    <NText v-if="folderHint !== ''" depth="3" class="text-xs" data-testid="folder-hint">
+      {{ folderHint }}
+    </NText>
     <div v-if="rows.length > 0" class="flex flex-col gap-2">
       <div class="flex items-center justify-between">
         <NText depth="2" class="text-sm font-medium">
@@ -979,6 +1110,47 @@ onUnmounted(detach)
       </div>
       <NText depth="3" class="break-all text-xs">{{ gifResult.outputPath }}</NText>
     </div>
+
+    <!-- 处理历史（M63，P1-6）：最近 20 条，可定位首个产物 / 清空 -->
+    <details
+      v-if="history.length > 0"
+      data-testid="history-panel"
+      class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-2"
+    >
+      <summary class="flex cursor-pointer items-center justify-between text-sm">
+        <span class="flex items-center gap-1">
+          <History class="h-4 w-4" />处理历史（最近 {{ history.length }} 条）
+        </span>
+        <NButton size="tiny" quaternary type="error" @click.prevent="clearAllHistory">
+          清空历史
+        </NButton>
+      </summary>
+      <div class="mt-2 flex flex-col gap-1">
+        <div
+          v-for="(entry, index) in history"
+          :key="`${entry.at}-${index}`"
+          class="flex items-center justify-between gap-2 rounded-[var(--lumin-radius-sm)] px-1 py-1"
+        >
+          <div class="min-w-0 flex-1">
+            <div class="truncate text-xs">
+              {{ formatHistoryTime(entry.at) }} · {{ MODE_LABEL[entry.mode] }} · 成功
+              {{ entry.success }}<template v-if="entry.failed > 0"> · 失败 {{ entry.failed }}</template>
+            </div>
+            <div class="truncate text-xs text-[var(--lumin-color-text-secondary)]">
+              {{ entry.outputDir }}
+            </div>
+          </div>
+          <NButton
+            v-if="entry.firstOutput !== null"
+            size="tiny"
+            quaternary
+            @click="revealPath(entry.firstOutput)"
+          >
+            <FolderOpen class="h-3.5 w-3.5" />
+          </NButton>
+        </div>
+      </div>
+    </details>
 
     <!-- 报错态：结构化错误码 → 中文文案 + 详情 -->
     <div v-if="error !== null" class="flex flex-col gap-1">

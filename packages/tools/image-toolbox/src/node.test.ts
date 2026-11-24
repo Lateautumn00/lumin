@@ -333,10 +333,14 @@ describe('probe', () => {
 })
 
 describe('config', () => {
-  it('未保存过 → userData/images 缺省', async () => {
+  it('未保存过 → userData/images 缺省且历史为空', async () => {
     const harness = createHarness()
-    const result = (await invokeIpc(harness, 'config', {})) as { outputDir: string }
+    const result = (await invokeIpc(harness, 'config', {})) as {
+      outputDir: string
+      history: unknown[]
+    }
     expect(result.outputDir).toBe(join(harness.userData, 'images'))
+    expect(result.history).toEqual([])
   })
 
   it('处理过 → 记忆目录回填', async () => {
@@ -369,6 +373,69 @@ describe('set-output-dir', () => {
     await expect(invokeIpc(harness, 'set-output-dir', { outputDir: '' })).rejects.toMatchObject({
       code: 'INVALID_PAYLOAD'
     })
+  })
+})
+
+describe('collect-folder（M63）', () => {
+  it('递归收集支持图片（白名单过滤）', async () => {
+    const harness = createHarness()
+    const root = mkdtempSync(join(tmpdir(), 'lumin-it-collect-'))
+    roots.push(root)
+    mkdirSync(join(root, 'sub'), { recursive: true })
+    writeFileSync(join(root, 'a.jpg'), 'x')
+    writeFileSync(join(root, 'note.txt'), 'x')
+    writeFileSync(join(root, 'sub', 'b.png'), 'x')
+    const result = (await invokeIpc(harness, 'collect-folder', { dir: root })) as {
+      files: string[]
+      truncated: boolean
+    }
+    expect(result.files).toEqual([join(root, 'a.jpg'), join(root, 'sub', 'b.png')])
+    expect(result.truncated).toBe(false)
+  })
+
+  it('空文件夹 / 目录不存在 → IT_FOLDER_EMPTY', async () => {
+    const harness = createHarness()
+    const empty = mkdtempSync(join(tmpdir(), 'lumin-it-empty-'))
+    roots.push(empty)
+    await expect(invokeIpc(harness, 'collect-folder', { dir: empty })).rejects.toMatchObject({
+      code: 'IT_FOLDER_EMPTY'
+    })
+    await expect(
+      invokeIpc(harness, 'collect-folder', { dir: join(empty, 'missing') })
+    ).rejects.toMatchObject({ code: 'IT_FOLDER_EMPTY' })
+  })
+})
+
+describe('history（M63）', () => {
+  it('append 置顶并回填 config；超过 20 条截断；clear 清空', async () => {
+    const harness = createHarness()
+    for (let index = 0; index < 21; index += 1) {
+      await invokeIpc(harness, 'append-history', {
+        mode: 'compress',
+        success: index,
+        failed: 0,
+        outputDir: 'E:\\out',
+        firstOutput: null
+      })
+    }
+    const config = (await invokeIpc(harness, 'config', {})) as {
+      history: { success: number }[]
+    }
+    expect(config.history).toHaveLength(20)
+    expect(config.history[0]?.success).toBe(20)
+    expect(config.history[19]?.success).toBe(1)
+
+    const cleared = (await invokeIpc(harness, 'clear-history', {})) as { history: unknown[] }
+    expect(cleared.history).toEqual([])
+    const after = (await invokeIpc(harness, 'config', {})) as { history: unknown[] }
+    expect(after.history).toEqual([])
+  })
+
+  it('非法入参 → INVALID_PAYLOAD', async () => {
+    const harness = createHarness()
+    await expect(
+      invokeIpc(harness, 'append-history', { mode: 'unknown', success: 1 })
+    ).rejects.toMatchObject({ code: 'INVALID_PAYLOAD' })
   })
 })
 

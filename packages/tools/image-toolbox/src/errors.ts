@@ -19,6 +19,7 @@ export const IMAGE_TOOLBOX_ERROR_CODES = [
   'IT_SCALE_INVALID',
   'IT_PROBE_FAILED',
   'IT_NO_FILES',
+  'IT_FOLDER_EMPTY',
   'IT_GIF_TOO_LARGE',
   'IT_CANCELLED'
 ] as const
@@ -34,6 +35,7 @@ const MESSAGES: Record<ImageToolboxErrorCode, string> = {
   IT_SCALE_INVALID: '缩放参数不正确，请检查后重试',
   IT_PROBE_FAILED: '无法读取图片信息',
   IT_NO_FILES: '请先添加图片文件',
+  IT_FOLDER_EMPTY: '文件夹不可读或未找到支持的图片',
   IT_GIF_TOO_LARGE: 'GIF 尺寸超出上限，请减小宽度或图片数量',
   IT_CANCELLED: '已取消（已完成的文件保留）'
 }

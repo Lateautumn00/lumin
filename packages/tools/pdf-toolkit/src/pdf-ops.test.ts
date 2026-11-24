@@ -19,7 +19,8 @@ import {
   runOp,
   splitPdf,
   watermarkPdf,
-  writeMetadata
+  writeMetadata,
+  exportHtml
 } from './pdf-ops'
 
 /** 1×1 透明 PNG（免 fixture） */
@@ -700,6 +701,58 @@ describe('pdf-ops 压缩（M38）', () => {
     expect(output.getPageCount()).toBe(1)
     expect(output.getPage(0)?.getWidth()).toBeCloseTo(400, 1)
     expect(output.getPage(0)?.getHeight()).toBeCloseTo(600, 1)
+  })
+})
+
+describe('pdf-ops PDF→HTML（M63）', () => {
+  it('写出同名 HTML，含 doctype/标题/页码区块与转义文本', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '样本.pdf')
+    await makeTextPdf(input, ['Page <Title> & more', 'Second page'])
+    const result = await runOp({ op: 'export-html', payload: { inputPath: input } }, noEmit)
+    expect(result.outputPaths).toEqual([join(dir, '样本.html')])
+    const html = await readFile(result.outputPaths[0] as string, 'utf8')
+    expect(html.startsWith('<!doctype html>')).toBe(true)
+    expect(html).toContain('<html lang="zh-CN">')
+    expect(html).toContain('<title>样本</title>')
+    expect(html).toContain('<div class="page-label">第 1 页</div>')
+    expect(html).toContain('<div class="page-label">第 2 页</div>')
+    expect(html).toContain('Page &lt;Title&gt; &amp; more')
+    expect(html).not.toContain('<Title>')
+    expect(html).not.toContain('<script')
+  })
+
+  it('ranges 仅导出指定页', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '样本.pdf')
+    await makeTextPdf(input, ['Alpha content', 'Beta content'])
+    const result = await runOp(
+      { op: 'export-html', payload: { inputPath: input, ranges: '2' } },
+      noEmit
+    )
+    const html = await readFile(result.outputPaths[0] as string, 'utf8')
+    expect(html).toContain('Beta content')
+    expect(html).not.toContain('Alpha content')
+    expect(html).not.toContain('第 1 页')
+  })
+
+  it('无文本层 → PT_PDF_NO_TEXT', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '空白.pdf')
+    await makePdf(input, 2)
+    await expect(
+      runOp({ op: 'export-html', payload: { inputPath: input } }, noEmit)
+    ).rejects.toMatchObject({ code: 'PT_PDF_NO_TEXT' })
+  })
+
+  it('同名文件已存在 → 递增 (1)', async () => {
+    const dir = await tempDir()
+    const input = join(dir, '样本.pdf')
+    await makeTextPdf(input, ['content'])
+    const first = await exportHtml({ inputPath: input }, noEmit)
+    const second = await runOp({ op: 'export-html', payload: { inputPath: input } }, noEmit)
+    expect(first.outputPaths).toEqual([join(dir, '样本.html')])
+    expect(second.outputPaths).toEqual([join(dir, '样本(1).html')])
   })
 })
 

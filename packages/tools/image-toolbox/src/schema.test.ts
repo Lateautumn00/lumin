@@ -6,10 +6,15 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  appendHistoryPayloadSchema,
+  collectFolderPayloadSchema,
+  collectFolderResultSchema,
   compressOptionsSchema,
+  configResultSchema,
   effectOptionsSchema,
   extensionOf,
   gifOptionsSchema,
+  historyEntrySchema,
   makeGifPayloadSchema,
   normalizeExtension,
   processPayloadSchema,
@@ -225,8 +230,8 @@ describe('processPayloadSchema（spec §4 discriminated union）', () => {
     ).toThrow()
   })
 
-  it('文件数超上限 500 拒绝', () => {
-    const many = Array.from({ length: 501 }, (_, i) => `C:\\f${i}.jpg`)
+  it('文件数超上限 2000 拒绝（M63 与文件夹递归同口径）', () => {
+    const many = Array.from({ length: 2001 }, (_, i) => `C:\\f${i}.jpg`)
     expect(() =>
       processPayloadSchema.parse({
         mode: 'convert',
@@ -352,5 +357,43 @@ describe('gifOptionsSchema / makeGifPayloadSchema（M40，spec §2.5）', () => 
         options: { durationMs: 500, loop: 0, width: 0 }
       })
     ).toThrow()
+  })
+})
+
+describe('M63 增补 schema（文件夹递归 + 处理历史）', () => {
+  it('collect-folder 入参非空目录，结果上限 2000', () => {
+    expect(collectFolderPayloadSchema.parse({ dir: 'E:\\pics' })).toEqual({ dir: 'E:\\pics' })
+    expect(() => collectFolderPayloadSchema.parse({ dir: '' })).toThrow()
+    const tooMany = Array.from({ length: 2001 }, (_, i) => `E:\\p\\${i}.jpg`)
+    expect(() =>
+      collectFolderResultSchema.parse({ files: tooMany, truncated: true })
+    ).toThrow()
+  })
+
+  it('history 条目字段与上限', () => {
+    const entry = {
+      at: 1_700_000_000_000,
+      mode: 'compress' as const,
+      success: 3,
+      failed: 1,
+      outputDir: 'E:\\out',
+      firstOutput: 'E:\\out\\a.jpg'
+    }
+    expect(historyEntrySchema.parse(entry)).toEqual(entry)
+    expect(() => historyEntrySchema.parse({ ...entry, mode: 'other' })).toThrow()
+    expect(() => historyEntrySchema.parse({ ...entry, success: -1 })).toThrow()
+    const many = Array.from({ length: 21 }, () => entry)
+    expect(() => configResultSchema.parse({ outputDir: 'E:\\out', history: many })).toThrow()
+  })
+
+  it('append-history 入参不含时间戳', () => {
+    const parsed = appendHistoryPayloadSchema.parse({
+      mode: 'gif',
+      success: 1,
+      failed: 0,
+      outputDir: 'E:\\out',
+      firstOutput: null
+    })
+    expect(parsed).not.toHaveProperty('at')
   })
 })

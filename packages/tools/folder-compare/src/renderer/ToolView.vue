@@ -29,10 +29,11 @@ type Side = 'left' | 'right'
 const leftRoot = ref('')
 const rightRoot = ref('')
 const compareMtime = ref(true)
+const compareContent = ref(false)
 
 // —— 任务与结果 ——
 const phase = ref<'idle' | 'running'>('idle')
-const progress = ref<{ current: number; stage?: string } | null>(null)
+const progress = ref<{ current: number; total?: number; stage?: string } | null>(null)
 const result = ref<CompareResult | null>(null)
 const error = ref<StructuredError | null>(null)
 const errorDetail = ref('')
@@ -70,6 +71,9 @@ const visible = computed(() => limitEntries(matched.value, MAX_VISIBLE_ENTRIES))
 const progressMessage = computed(() => {
   const current = progress.value
   if (current === null) return ''
+  if (current.stage === 'content') {
+    return `正在比较文件内容 · ${current.current} / ${current.total ?? 0} 个文件`
+  }
   const side = current.stage === 'right' ? '右侧' : '左侧'
   return `正在扫描${side}目录 · 已检查 ${current.current} 个文件`
 })
@@ -78,7 +82,8 @@ const summaryText = computed(() => {
   const done = result.value
   if (done === null) return ''
   const skipped = done.skipped > 0 ? ` · 跳过 ${done.skipped}` : ''
-  return `仅左侧 ${done.onlyLeft} · 仅右侧 ${done.onlyRight} · 有差异 ${done.different} · 相同 ${done.same}${skipped} · 耗时 ${(done.elapsedMs / 1000).toFixed(1)}s`
+  const content = done.compareContent ? ` · 内容不同 ${done.contentDifferent}` : ''
+  return `仅左侧 ${done.onlyLeft} · 仅右侧 ${done.onlyRight} · 有差异 ${done.different} · 相同 ${done.same}${content}${skipped} · 耗时 ${(done.elapsedMs / 1000).toFixed(1)}s`
 })
 
 const scaleText = computed(() => {
@@ -116,7 +121,8 @@ async function persist(): Promise<void> {
     await setConfig({
       leftRoot: leftRoot.value,
       rightRoot: rightRoot.value,
-      compareMtime: compareMtime.value
+      compareMtime: compareMtime.value,
+      compareContent: compareContent.value
     })
   } catch {
     // 记忆失败不影响本次对比
@@ -193,7 +199,8 @@ async function start(): Promise<void> {
     const { taskId } = await compare({
       leftRoot: leftRoot.value,
       rightRoot: rightRoot.value,
-      compareMtime: compareMtime.value
+      compareMtime: compareMtime.value,
+      compareContent: compareContent.value
     })
     currentTaskId = taskId
     // 回放提交期间已到达的事件（小目录瞬间完成时 done 早于 invoke 返回）
@@ -231,6 +238,7 @@ function retry(): void {
 function statusText(entry: CompareEntry): string {
   if (entry.status === 'only-left') return '仅左侧'
   if (entry.status === 'only-right') return '仅右侧'
+  if (entry.contentChanged) return '内容不同'
   if (entry.status === 'same') return '相同'
   if (entry.sizeChanged && entry.mtimeChanged) return '大小/时间不同'
   return entry.sizeChanged ? '大小不同' : '时间不同'
@@ -253,12 +261,17 @@ watch(compareMtime, () => {
   void persist()
 })
 
+watch(compareContent, () => {
+  void persist()
+})
+
 onMounted(() => {
   void config()
     .then((saved) => {
       leftRoot.value = saved.leftRoot ?? ''
       rightRoot.value = saved.rightRoot ?? ''
       compareMtime.value = saved.compareMtime
+      compareContent.value = saved.compareContent
     })
     .catch(() => undefined)
 })
@@ -295,6 +308,9 @@ onUnmounted(detach)
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <NCheckbox v-model:checked="compareMtime" :disabled="busy">比较修改时间（容差 2 秒）</NCheckbox>
+        <NCheckbox v-model:checked="compareContent" :disabled="busy">
+          比较文件内容（SHA-256，较慢）
+        </NCheckbox>
         <NButton type="primary" :disabled="!canStart" @click="start">开始对比</NButton>
       </div>
     </div>
@@ -302,7 +318,7 @@ onUnmounted(detach)
     <!-- 空态：未选齐目录 / 筛选无匹配 -->
     <NEmpty
       v-if="leftRoot === '' || rightRoot === ''"
-      description="先选择左右两个目录，再点击「开始对比」；仅比较文件元数据，不读取文件内容"
+      description="先选择左右两个目录，再点击「开始对比」；默认只比较元数据，勾选「比较文件内容」后对同名同大小文件做 SHA-256"
     />
     <NEmpty
       v-else-if="result !== null && matched.length === 0 && !busy"
@@ -405,8 +421,11 @@ onUnmounted(detach)
         其余 {{ visible.hiddenCount }} 条未展示（单页最多 {{ MAX_VISIBLE_ENTRIES }} 条，请用筛选缩小范围）
       </NText>
 
-      <NText depth="3" class="text-xs">
-        「相同」表示大小与修改时间一致（元数据比较），不代表文件内容逐字节相同；本工具不读取文件内容。
+      <NText v-if="result.compareContent" depth="3" class="text-xs">
+        「相同」表示大小与文件内容（SHA-256）一致；修改时间比较{{ result.compareMtime ? '已开启' : '已关闭' }}。
+      </NText>
+      <NText v-else depth="3" class="text-xs">
+        「相同」表示大小与修改时间一致（元数据比较），不代表文件内容逐字节相同；勾选「比较文件内容」可校验 SHA-256。
       </NText>
     </template>
   </div>

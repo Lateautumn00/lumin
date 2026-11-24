@@ -2,7 +2,7 @@
  * @file node.ts disk-analyzer 主进程通道注册
  * @author cuilanchao
  * @date 2026-11-20
- * @description 三通道：config / set-config 同步；scan 长任务在 worker 线程执行（runTask）。
+ * @description 四通道：config / set-config / export-csv 同步；scan 长任务在 worker 线程执行（runTask）。
  *              deps 可注入（vitest 传假 worker 运行器）。
  */
 import scanWorkerPath from './scan.worker.ts?modulePath'
@@ -11,17 +11,24 @@ import {
   TaskCrashError,
   TaskTimeoutError,
   tail,
+  writeAtomic,
   type RunTaskOptions
 } from '@lumin/node-kit'
 import type { MainPluginContext, RegisterMain } from '@lumin/plugin-api'
 import type { ZodType } from 'zod'
+import { buildCsv } from './contract'
 import { toolError } from './errors'
 import {
+  CSV_BOM,
   DEFAULT_MIN_FILE_BYTES,
   configResultSchema,
+  exportCsvPayloadSchema,
+  exportCsvResultSchema,
   scanPayloadSchema,
   setConfigPayloadSchema,
   type ConfigResult,
+  type ExportCsvPayload,
+  type ExportCsvResult,
   type ScanPayload,
   type ScanResult,
   type SetConfigPayload
@@ -39,6 +46,8 @@ export interface DiskAnalyzerDeps {
   /** 扫描 worker 绝对路径（生产 = electron-vite `?modulePath` 构建产物） */
   scanWorkerPath: string
   run<P, R>(options: RunTaskOptions<P>): Promise<R>
+  /** CSV 原子写盘（生产 = node-kit writeAtomic；目标路径由 renderer 经壳 pickSaveFile 选定） */
+  writeFile?(target: string, data: string): void
 }
 
 /** worker 错误映射：超时/崩溃 → DA_SCAN_FAILED；结构化错误原样透传（队列再归一 CANCELLED） */
@@ -52,6 +61,11 @@ export function mapWorkerError(err: unknown): unknown {
     return toolError('DA_SCAN_FAILED', tail(detail))
   }
   return err
+}
+
+/** 错误摘要（优先 Error.message，供 detail 用） */
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
 }
 
 /** zod 校验：失败统一 DA_INVALID_PAYLOAD（取首条 issue 文案） */
@@ -87,6 +101,17 @@ export function registerWith(ctx: MainPluginContext, deps: DiskAnalyzerDeps): vo
     return readConfig(ctx)
   })
 
+  ctx.registerIpc('export-csv', async ({ payload }): Promise<ExportCsvResult> => {
+    const parsed = parseOrThrow<ExportCsvPayload>(exportCsvPayloadSchema, payload)
+    if (deps.writeFile === undefined) throw toolError('DA_EXPORT_FAILED', '导出依赖未配置')
+    try {
+      deps.writeFile(parsed.targetPath, `${CSV_BOM}${buildCsv(parsed)}`)
+    } catch (err) {
+      throw toolError('DA_EXPORT_FAILED', errorText(err))
+    }
+    return exportCsvResultSchema.parse({ path: parsed.targetPath })
+  })
+
   ctx.registerTask<ScanPayload, ScanResult>('scan', async (taskCtx) => {
     const parsed = parseOrThrow<ScanPayload>(scanPayloadSchema, taskCtx.payload)
     // 扫描即记忆：下次打开沿用目录与阈值（失败不阻塞本次任务）
@@ -110,7 +135,11 @@ export function registerWith(ctx: MainPluginContext, deps: DiskAnalyzerDeps): vo
 
 /** 生产实现：node-kit worker 运行器 */
 export function createNodeDeps(): DiskAnalyzerDeps {
-  return { scanWorkerPath, run: runTask }
+  return {
+    scanWorkerPath,
+    run: runTask,
+    writeFile: (target, data) => writeAtomic(target, data)
+  }
 }
 
 export const registerMain: RegisterMain = (ctx) => {

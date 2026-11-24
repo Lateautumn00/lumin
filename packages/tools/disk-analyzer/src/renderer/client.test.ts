@@ -4,7 +4,7 @@
  * @date 2026-11-20
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { config, scan, setConfig } from './client'
+import { config, exportCsv, scan, setConfig } from './client'
 
 const invoke = vi.fn()
 
@@ -30,5 +30,17 @@ describe('client', () => {
       root: 'D:\\data',
       minFileBytes: 102400
     })
+  })
+
+  it('exportCsv 走 disk-analyzer:export-csv 并透传 payload', async () => {
+    invoke.mockResolvedValue({ path: 'C:\\out.csv' })
+    const payload = {
+      root: 'C:\\卷',
+      targetPath: 'C:\\out.csv',
+      entries: [{ name: 'a.txt', path: 'C:\\卷\\a.txt', kind: 'file' as const, size: 1, fileCount: 0 }],
+      typeStats: [{ ext: 'txt', files: 1, bytes: 1 }]
+    }
+    await expect(exportCsv(payload)).resolves.toEqual({ path: 'C:\\out.csv' })
+    expect(invoke).toHaveBeenCalledWith('disk-analyzer:export-csv', payload)
   })
 })

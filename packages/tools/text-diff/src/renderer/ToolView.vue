@@ -154,7 +154,8 @@ async function copyUnified(): Promise<void> {
   resetFeedback()
   if (unifiedText.value === '') return
   try {
-    await navigator.clipboard.writeText(unifiedText.value)
+    // 主进程写剪贴板：避免 renderer 在窗口未聚焦/权限受限时 writeText 静默失败
+    await window.lumin.invoke('text-diff:copy-text', { text: unifiedText.value })
     copied.value = true
     copiedTimer = setTimeout(() => {
       copied.value = false

@@ -72,3 +72,8 @@ export function extractImagesDesiredDir(inputPath: string): string {
 export function compressDesiredPath(inputPath: string): string {
   return `${baseName(inputPath)}_压缩.pdf`
 }
+
+/** PDF→HTML：`{基名}.html`（M63，同名换扩展名） */
+export function exportHtmlDesiredPath(inputPath: string): string {
+  return `${baseName(inputPath)}.html`
+}

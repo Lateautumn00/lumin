@@ -5,6 +5,7 @@
  * @description 图片按列表顺序单页嵌入：png/jpg 直嵌，其余格式经 ffmpeg 转 PNG 中间件；
  *              auto 跟随图片尺寸、a4 等比居中留边距；单张失败不中断整批、原子写。
  */
+import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
@@ -138,7 +139,9 @@ export async function runImagesToPdf(
     throw classifyWriteError(err)
   }
 
-  const tmpDir = join(tmpdir(), `lumin-pdf-images-${process.pid}-${Date.now()}`)
+  // worker 线程共享主进程 pid，并发任务同毫秒启动时 Date.now() 会碰撞导致共用临时目录，
+  // 因此必须用 UUID 保证每任务独立（否则一方 finally 清理会打断另一方 → EPERM）
+  const tmpDir = join(tmpdir(), `lumin-pdf-images-${randomUUID()}`)
   const pdf = await PDFDocument.create()
   const failures: PdfImagesFailure[] = []
   let pages = 0
@@ -173,7 +176,8 @@ export async function runImagesToPdf(
       })
     }
   } finally {
-    await rm(tmpDir, { recursive: true, force: true })
+    // 临时目录清理失败不应影响任务结果（如杀毒软件短暂占用）
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => undefined)
   }
 
   if (pages === 0) {

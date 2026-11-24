@@ -10,7 +10,7 @@ import { type Dirent } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { exposeTask, type TaskRunContext } from '@lumin/node-kit'
-import { sortEntries } from './contract'
+import { extensionOf, sortEntries, summarizeTypes, type TypeTotals } from './contract'
 import { toolError } from './errors'
 import {
   MAX_SCAN_FILES,
@@ -51,17 +51,40 @@ async function readFileSize(path: string): Promise<number | null> {
 }
 
 /**
+ * 累加单个文件的类型统计（扩展名小写聚合）
+ * @param totals 扩展名 → 累计值
+ * @param name 文件名
+ * @param bytes 文件大小
+ */
+export function accumulateType(
+  totals: Map<string, TypeTotals>,
+  name: string,
+  bytes: number
+): void {
+  const ext = extensionOf(name)
+  const total = totals.get(ext)
+  if (total === undefined) {
+    totals.set(ext, { files: 1, bytes })
+    return
+  }
+  total.files += 1
+  total.bytes += bytes
+}
+
+/**
  * 递归汇总单个子目录（迭代栈，避免深目录爆栈）
  * @param dir 子目录
  * @param counters 全局计数（原地累加）
  * @param emit 进度回调（已检查文件数）
  * @param maxFiles 普通文件上限（测试可注入）
+ * @param typeTotals 类型统计（原地累加，可缺省）
  */
 export async function aggregateDirectory(
   dir: string,
   counters: ScanCounters,
   emit: (seen: number) => void,
-  maxFiles: number = MAX_SCAN_FILES
+  maxFiles: number = MAX_SCAN_FILES,
+  typeTotals?: Map<string, TypeTotals>
 ): Promise<DirectoryAggregate> {
   const stack: string[] = [dir]
   let size = 0
@@ -95,6 +118,7 @@ export async function aggregateDirectory(
         size += bytes
         fileCount += 1
         counters.files += 1
+        if (typeTotals !== undefined) accumulateType(typeTotals, dirent.name, bytes)
       }
       if (counters.seen % SCAN_PROGRESS_STEP === 0) emit(counters.seen)
     }
@@ -117,6 +141,7 @@ export async function runScan(
 ): Promise<ScanResult> {
   const started = now()
   const counters: ScanCounters = { seen: 0, files: 0, dirs: 0, skipped: 0 }
+  const typeTotals = new Map<string, TypeTotals>()
   const emit = (seen: number): void => {
     ctx.emit({ kind: 'progress', current: seen, stage: 'scan' })
   }
@@ -133,7 +158,7 @@ export async function runScan(
   for (const dirent of dirents) {
     const path = join(request.root, dirent.name)
     if (dirent.isDirectory()) {
-      const aggregate = await aggregateDirectory(path, counters, emit, maxFiles)
+      const aggregate = await aggregateDirectory(path, counters, emit, maxFiles, typeTotals)
       entries.push({
         name: dirent.name,
         path,
@@ -151,6 +176,7 @@ export async function runScan(
       counters.skipped += 1
     } else {
       counters.files += 1
+      accumulateType(typeTotals, dirent.name, bytes)
       entries.push({ name: dirent.name, path, kind: 'file', size: bytes, fileCount: 0 })
     }
     if (counters.seen % SCAN_PROGRESS_STEP === 0) emit(counters.seen)
@@ -164,6 +190,7 @@ export async function runScan(
     fileCount: counters.files,
     dirCount: counters.dirs,
     skipped: counters.skipped,
+    typeStats: summarizeTypes(typeTotals),
     elapsedMs: now() - started
   })
 }

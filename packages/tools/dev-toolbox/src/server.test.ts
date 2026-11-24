@@ -148,6 +148,9 @@ describe('createStaticServer', () => {
     const { server, port } = await start(root)
 
     await request(port, '/a.txt')
+    // 等首条访问日志落账再发第二次请求：服务端 finish 事件与客户端响应完成无严格先后，
+    // 全量并发跑测时否则会出现两条日志顺序互换的偶发失败
+    await waitForRequests(server, 1)
     await request(port, '/missing.txt')
 
     const status = server.status()

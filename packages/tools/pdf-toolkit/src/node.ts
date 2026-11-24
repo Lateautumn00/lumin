@@ -30,6 +30,7 @@ import { inspectPdf, type OpResult, type WorkerRequest } from './pdf-ops'
 import {
   compressPayloadSchema,
   deletePayloadSchema,
+  exportHtmlPayloadSchema,
   extractImagesPayloadSchema,
   extractTextPayloadSchema,
   infoPayloadSchema,
@@ -210,6 +211,12 @@ export function registerWith(ctx: MainPluginContext, deps: PdfToolkitDeps): void
     const parsed = parseOrThrow(compressPayloadSchema, payload)
     await precheckInputs([parsed.inputPath])
     return runWorker({ op: 'compress', payload: parsed }, { signal, emit })
+  })
+
+  ctx.registerTask('export-html', async ({ payload, signal, emit }) => {
+    const parsed = parseOrThrow(exportHtmlPayloadSchema, payload)
+    await precheckInputs([parsed.inputPath])
+    return runWorker({ op: 'export-html', payload: parsed }, { signal, emit })
   })
 }
 

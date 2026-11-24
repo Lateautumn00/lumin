@@ -51,6 +51,8 @@ const bridge: LuminBridge = {
   trashPaths: (paths) => invoke('lumin:shell:trash', { paths: [...paths] }),
   pickDirectory: (title) =>
     invoke<string | null>('lumin:shell:pick-directory', title === undefined ? {} : { title }),
+  pickSaveFile: (options) =>
+    invoke<string | null>('lumin:shell:pick-save-file', options === undefined ? {} : options),
   settings: {
     get: <T>(key: string, defaultValue: T): Promise<T> =>
       invoke<T>('lumin:settings:get', { key, defaultValue }),

@@ -120,7 +120,13 @@ function runTask(harness: Harness, action: string, payload: unknown): Promise<un
 }
 
 function payload(overrides: Partial<ComparePayload> = {}): ComparePayload {
-  return { leftRoot: 'C:\\左', rightRoot: 'D:\\右', compareMtime: true, ...overrides }
+  return {
+    leftRoot: 'C:\\左',
+    rightRoot: 'D:\\右',
+    compareMtime: true,
+    compareContent: false,
+    ...overrides
+  }
 }
 
 describe('config / set-config', () => {
@@ -128,7 +134,8 @@ describe('config / set-config', () => {
     await expect(invokeIpc(createHarness(), 'config', {})).resolves.toEqual({
       leftRoot: null,
       rightRoot: null,
-      compareMtime: true
+      compareMtime: true,
+      compareContent: false
     })
   })
 
@@ -137,10 +144,12 @@ describe('config / set-config', () => {
     harness.settings.set('leftRoot', 'C:\\左')
     harness.settings.set('rightRoot', 'D:\\右')
     harness.settings.set('compareMtime', false)
+    harness.settings.set('compareContent', true)
     await expect(invokeIpc(harness, 'config', {})).resolves.toEqual({
       leftRoot: 'C:\\左',
       rightRoot: 'D:\\右',
-      compareMtime: false
+      compareMtime: false,
+      compareContent: true
     })
   })
 
@@ -149,10 +158,12 @@ describe('config / set-config', () => {
     harness.settings.set('leftRoot', '')
     harness.settings.set('rightRoot', 42)
     harness.settings.set('compareMtime', 'x')
+    harness.settings.set('compareContent', 'x')
     await expect(invokeIpc(harness, 'config', {})).resolves.toEqual({
       leftRoot: null,
       rightRoot: null,
-      compareMtime: true
+      compareMtime: true,
+      compareContent: false
     })
   })
 
@@ -162,26 +173,46 @@ describe('config / set-config', () => {
       invokeIpc(harness, 'set-config', {
         leftRoot: 'C:\\左',
         rightRoot: 'D:\\右',
-        compareMtime: false
+        compareMtime: false,
+        compareContent: true
       })
-    ).resolves.toEqual({ leftRoot: 'C:\\左', rightRoot: 'D:\\右', compareMtime: false })
+    ).resolves.toEqual({
+      leftRoot: 'C:\\左',
+      rightRoot: 'D:\\右',
+      compareMtime: false,
+      compareContent: true
+    })
     expect(harness.settings.get('leftRoot')).toBe('C:\\左')
     expect(harness.settings.get('rightRoot')).toBe('D:\\右')
     expect(harness.settings.get('compareMtime')).toBe(false)
+    expect(harness.settings.get('compareContent')).toBe(true)
   })
 
   it('set-config 省略目录时保留上次；空串清空', async () => {
     const harness = createHarness()
     harness.settings.set('leftRoot', 'C:\\old')
     harness.settings.set('rightRoot', 'D:\\old')
-    await expect(invokeIpc(harness, 'set-config', { compareMtime: true })).resolves.toEqual({
+    await expect(
+      invokeIpc(harness, 'set-config', { compareMtime: true, compareContent: false })
+    ).resolves.toEqual({
       leftRoot: 'C:\\old',
       rightRoot: 'D:\\old',
-      compareMtime: true
+      compareMtime: true,
+      compareContent: false
     })
     await expect(
-      invokeIpc(harness, 'set-config', { leftRoot: '', rightRoot: '', compareMtime: true })
-    ).resolves.toEqual({ leftRoot: null, rightRoot: null, compareMtime: true })
+      invokeIpc(harness, 'set-config', {
+        leftRoot: '',
+        rightRoot: '',
+        compareMtime: true,
+        compareContent: false
+      })
+    ).resolves.toEqual({
+      leftRoot: null,
+      rightRoot: null,
+      compareMtime: true,
+      compareContent: false
+    })
   })
 
   it('非法入参 → FC_INVALID_PAYLOAD', async () => {
@@ -206,6 +237,8 @@ describe('compare 任务', () => {
       skipped: 0,
       truncated: 0,
       compareMtime: true,
+      compareContent: false,
+      contentDifferent: 0,
       elapsedMs: 1
     }
     const harness = createHarness({ result })
@@ -217,6 +250,7 @@ describe('compare 任务', () => {
     expect(harness.settings.get('leftRoot')).toBe('C:\\左')
     expect(harness.settings.get('rightRoot')).toBe('D:\\右')
     expect(harness.settings.get('compareMtime')).toBe(true)
+    expect(harness.settings.get('compareContent')).toBe(false)
   })
 
   it('非法入参 → FC_INVALID_PAYLOAD（不触 run）', async () => {

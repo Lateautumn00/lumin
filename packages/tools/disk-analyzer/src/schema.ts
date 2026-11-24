@@ -18,6 +18,15 @@ export const MAX_SCAN_FILES = 200_000
 /** 单层最多展示条数（其余折叠） */
 export const MAX_VISIBLE_ENTRIES = 100
 
+/** 类型统计最多展示行数（其余合并为「其他」） */
+export const MAX_TYPE_ROWS = 20
+
+/** CSV 导出单次最多条目数（防 IPC 大包） */
+export const MAX_CSV_ENTRIES = 10_000
+
+/** CSV 文件 UTF-8 BOM（便于 Excel 识别编码） */
+export const CSV_BOM = '\uFEFF'
+
 export const scanPayloadSchema = z.object({
   root: z.string().min(1).max(32767),
   minFileBytes: z.number().int().min(0).max(1024 ** 4)
@@ -40,6 +49,15 @@ export const diskEntrySchema = z.object({
 export type DiskEntry = z.infer<typeof diskEntrySchema>
 export type EntryKind = DiskEntry['kind']
 
+/** 按扩展名聚合的类型统计行 */
+export const typeStatSchema = z.object({
+  ext: z.string().min(1),
+  files: z.number().int().nonnegative(),
+  bytes: z.number().int().nonnegative()
+})
+
+export type TypeStat = z.infer<typeof typeStatSchema>
+
 export const scanDoneSchema = z.object({
   root: z.string().min(1),
   entries: z.array(diskEntrySchema),
@@ -50,6 +68,8 @@ export const scanDoneSchema = z.object({
   dirCount: z.number().int().nonnegative(),
   /** stat/读取失败被跳过（文件或子目录）数 */
   skipped: z.number().int().nonnegative(),
+  /** 按扩展名聚合的文件类型统计（字节降序，Top 20 + 「其他」） */
+  typeStats: z.array(typeStatSchema),
   elapsedMs: z.number().nonnegative()
 })
 
@@ -69,3 +89,19 @@ export const setConfigPayloadSchema = z.object({
 })
 
 export type SetConfigPayload = z.infer<typeof setConfigPayloadSchema>
+
+/** CSV 导出入参：目标路径（renderer 经壳 pickSaveFile 选择）+ 当前层条目 + 类型统计 */
+export const exportCsvPayloadSchema = z.object({
+  root: z.string().min(1).max(32767),
+  targetPath: z.string().min(1).max(32767),
+  entries: z.array(diskEntrySchema).max(MAX_CSV_ENTRIES),
+  typeStats: z.array(typeStatSchema).max(MAX_TYPE_ROWS + 1)
+})
+
+export type ExportCsvPayload = z.infer<typeof exportCsvPayloadSchema>
+
+export const exportCsvResultSchema = z.object({
+  path: z.string().min(1)
+})
+
+export type ExportCsvResult = z.infer<typeof exportCsvResultSchema>

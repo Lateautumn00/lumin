@@ -26,7 +26,9 @@ export const PDF_TOOLKIT_ERROR_CODES = [
   'PT_PAGE_NUMBER_INVALID',
   'PT_NO_TEXT_LAYER',
   'PT_NO_IMAGES',
-  'PT_TOO_MANY_IMAGES'
+  'PT_TOO_MANY_IMAGES',
+  'PT_PDF_NO_TEXT',
+  'PT_EXPORT_FAILED'
 ] as const
 
 export type PdfToolkitErrorCode = (typeof PDF_TOOLKIT_ERROR_CODES)[number]
@@ -47,7 +49,9 @@ const MESSAGES: Record<PdfToolkitErrorCode, string> = {
   PT_PAGE_NUMBER_INVALID: '页码参数无效，请检查格式、位置与起始页',
   PT_NO_TEXT_LAYER: '未检测到文本层（可能为扫描件）',
   PT_NO_IMAGES: '未找到可提取的图片',
-  PT_TOO_MANY_IMAGES: '图片数量超过 2000 张上限，请缩小页码范围'
+  PT_TOO_MANY_IMAGES: '图片数量超过 2000 张上限，请缩小页码范围',
+  PT_PDF_NO_TEXT: '未检测到可导出的文本层（可能为扫描件或已加密）',
+  PT_EXPORT_FAILED: '导出 HTML 失败，请检查目录权限与剩余空间'
 }
 
 /** 可重试错误码（renderer 据此显示 [重试]） */
@@ -58,7 +62,8 @@ const RETRYABLE = new Set<PdfToolkitErrorCode>([
   'PT_ORDER_INVALID',
   'PT_OUTPUT_WRITE_FAILED',
   'PT_TIMEOUT',
-  'PT_OP_FAILED'
+  'PT_OP_FAILED',
+  'PT_EXPORT_FAILED'
 ])
 
 /**

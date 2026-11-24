@@ -84,7 +84,8 @@ export function classifyPair(
       mtimeLeft: left.mtimeMs,
       mtimeRight: null,
       sizeChanged: false,
-      mtimeChanged: false
+      mtimeChanged: false,
+      contentChanged: false
     }
   }
   if (left === null && right !== null) {
@@ -96,7 +97,8 @@ export function classifyPair(
       mtimeLeft: null,
       mtimeRight: right.mtimeMs,
       sizeChanged: false,
-      mtimeChanged: false
+      mtimeChanged: false,
+      contentChanged: false
     }
   }
   if (left === null || right === null) return null
@@ -111,8 +113,20 @@ export function classifyPair(
     mtimeLeft: left.mtimeMs,
     mtimeRight: right.mtimeMs,
     sizeChanged,
-    mtimeChanged
+    mtimeChanged,
+    contentChanged: false
   }
+}
+
+/**
+ * 合并内容比较结果：仅两侧均存在且大小相同的配对有意义
+ * @param entry 元数据分类结果
+ * @param contentSame 两侧 SHA-256 是否一致
+ * @returns 内容不同时置 `contentChanged` 并归入「有差异」；内容一致保持原分类
+ */
+export function withContentResult(entry: CompareEntry, contentSame: boolean): CompareEntry {
+  if (contentSame || entry.sizeLeft === null || entry.sizeRight === null) return entry
+  return { ...entry, status: 'different', contentChanged: true }
 }
 
 /** 四类计数 */

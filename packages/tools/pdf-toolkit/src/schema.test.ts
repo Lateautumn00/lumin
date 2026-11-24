@@ -4,6 +4,7 @@ import {
   COMPRESS_PRESETS,
   compressPayloadSchema,
   deletePayloadSchema,
+  exportHtmlPayloadSchema,
   extractImagesPayloadSchema,
   extractTextPayloadSchema,
   infoPayloadSchema,
@@ -231,5 +232,18 @@ describe('extract / compress schema（M38）', () => {
     expect(COMPRESS_PRESETS.low).toEqual({ dpi: 96, quality: 60 })
     expect(COMPRESS_PRESETS.medium).toEqual({ dpi: 150, quality: 75 })
     expect(COMPRESS_PRESETS.high).toEqual({ dpi: 200, quality: 85 })
+  })
+})
+
+describe('PDF→HTML schema（M63）', () => {
+  it('合法载荷且 ranges 可缺省/可空串', () => {
+    expect(exportHtmlPayloadSchema.parse({ inputPath: PDF })).toEqual({ inputPath: PDF })
+    expect(exportHtmlPayloadSchema.parse({ inputPath: PDF, ranges: '1-3,5' }).ranges).toBe('1-3,5')
+    expect(exportHtmlPayloadSchema.parse({ inputPath: PDF, ranges: '' }).ranges).toBe('')
+  })
+
+  it('拒绝非 PDF 与非法页码语法', () => {
+    expect(exportHtmlPayloadSchema.safeParse({ inputPath: 'a.txt' }).success).toBe(false)
+    expect(exportHtmlPayloadSchema.safeParse({ inputPath: PDF, ranges: '1;2' }).success).toBe(false)
   })
 })

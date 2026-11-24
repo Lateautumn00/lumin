@@ -27,6 +27,21 @@ export const compareFilesPayloadSchema = z.object({
 
 export type CompareFilesPayload = z.infer<typeof compareFilesPayloadSchema>
 
+/** 复制文本字符上限（unified diff 两侧各 ≤1MB，留足冗余；超过 → INVALID_INPUT） */
+export const COPY_TEXT_MAX_CHARS = 4 * 1024 * 1024
+
+/** copy-text 载荷（复制统一 diff 到系统剪贴板） */
+export const copyTextPayloadSchema = z.object({
+  text: z.string().min(1).max(COPY_TEXT_MAX_CHARS)
+})
+
+export type CopyTextPayload = z.infer<typeof copyTextPayloadSchema>
+
+/** copy-text 回包 */
+export interface CopyTextResult {
+  ok: true
+}
+
 /** pick-file 回包（用户取消 → path 为 null） */
 export interface PickFileResult {
   path: string | null

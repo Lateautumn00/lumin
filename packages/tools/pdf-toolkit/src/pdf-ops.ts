@@ -7,7 +7,7 @@
  */
 import { existsSync } from 'node:fs'
 import { mkdir, open, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, extname, join } from 'node:path'
 import {
   errnoCode,
   formatBytes,
@@ -20,15 +20,18 @@ import {
   encodeCanvas,
   ExtractedImageLimitError,
   extractPdfImages,
+  extractPdfLines,
   extractPdfText,
   openPdf,
-  renderPageToCanvas
+  renderPageToCanvas,
+  type OpenedPdf
 } from '@lumin/node-kit/pdf'
 import { degrees, PDFDocument, rgb, StandardFonts, type PDFImage } from 'pdf-lib'
 import { toolError } from './errors'
 import {
   compressDesiredPath,
   deleteDesiredPath,
+  exportHtmlDesiredPath,
   extractImagesDesiredDir,
   extractTextDesiredPath,
   mergeDesiredPath,
@@ -39,10 +42,12 @@ import {
   splitDesiredPaths,
   watermarkDesiredPath
 } from './naming'
+import { buildHtmlDocument } from './pdf-html'
 import {
   COMPRESS_PRESETS,
   type CompressPayload,
   type DeletePayload,
+  type ExportHtmlPayload,
   type ExtractImagesPayload,
   type ExtractTextPayload,
   type MetadataPatch,
@@ -88,6 +93,7 @@ export type WorkerRequest =
   | { op: 'extract-text'; payload: ExtractTextPayload }
   | { op: 'extract-images'; payload: ExtractImagesPayload }
   | { op: 'compress'; payload: CompressPayload }
+  | { op: 'export-html'; payload: ExportHtmlPayload }
 
 /** 读入并解析源 PDF；不存在/占用/加密/损坏 → 结构化错误 */
 async function loadSource(inputPath: string): Promise<PDFDocument> {
@@ -696,6 +702,47 @@ export async function compressPdf(
   }
 }
 
+/** 打开 PDF 供版面抽取：加密 → PT_PDF_NO_TEXT；其他 → PT_OP_FAILED（M63） */
+async function openForExport(inputPath: string): Promise<OpenedPdf> {
+  try {
+    return await openPdf(inputPath)
+  } catch (err) {
+    const message = messageOf(err)
+    // 计划口径（plan §4.63.3）：加密与无文本层统一 PT_PDF_NO_TEXT
+    if (/password|encrypt/i.test(message)) throw toolError('PT_PDF_NO_TEXT', tail(message))
+    throw toolError('PT_OP_FAILED', tail(message) || errnoCode(err))
+  }
+}
+
+/** PDF→HTML：抽取版面行 → 结构化 HTML；无文本层/加密 → PT_PDF_NO_TEXT（M63） */
+export async function exportHtml(
+  payload: ExportHtmlPayload,
+  progress: EmitProgress
+): Promise<OpResult> {
+  progress({ stage: 'load', current: 0, message: '读取 PDF…' })
+  const opened = await openForExport(payload.inputPath)
+  try {
+    const targets = selectPages(payload.ranges, opened.pageCount)
+    const total = targets.length
+    progress({ stage: 'process', current: 0, total, message: '重建版面…' })
+    const { pages, hasText } = await extractPdfLines(opened.doc, targets)
+    if (!hasText) throw toolError('PT_PDF_NO_TEXT')
+    const html = buildHtmlDocument({ title: basename(payload.inputPath, extname(payload.inputPath)), pages })
+    const outputPath = resolveOutput(exportHtmlDesiredPath(payload.inputPath))
+    progress({ stage: 'write', current: total, total, message: '写出文件…' })
+    try {
+      await writeFile(outputPath, html, 'utf8')
+    } catch (err) {
+      await unlink(outputPath).catch(() => undefined)
+      throw toolError('PT_EXPORT_FAILED', errnoCode(err) || tail(messageOf(err)))
+    }
+    progress({ stage: 'done', current: total, total, message: '完成' })
+    return { outputPaths: [outputPath] }
+  } finally {
+    await opened.doc.cleanup().catch(() => undefined)
+  }
+}
+
 /** 载荷分发（worker 唯一入口；zod 校验已在 node.ts 完成） */
 export async function runOp(request: WorkerRequest, progress: EmitProgress): Promise<OpResult> {
   switch (request.op) {
@@ -726,5 +773,7 @@ export async function runOp(request: WorkerRequest, progress: EmitProgress): Pro
       return extractImages(request.payload, progress)
     case 'compress':
       return compressPdf(request.payload, progress)
+    case 'export-html':
+      return exportHtml(request.payload, progress)
   }
 }

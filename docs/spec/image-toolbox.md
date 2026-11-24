@@ -14,7 +14,7 @@
 | 文件列表 | 多选文件（拖拽 + 选择器） | 扩展名白名单 `jpg/jpeg/png/webp/avif/gif/bmp/tiff`（zod 校验，大小写不敏感）；自动去重；拖拽非法文件即时行内提示并过滤 | 空                |
 | 输出目录 | string（目录路径）        | 必须存在且可写（precheck）；`lumin:shell:pick-directory` 系统选择器 + 手输双入口，选中即记忆（`set-output-dir`）       | `userData/images` |
 
-- 单文件体积上限 200MB（超出 → `IT_FILE_UNSUPPORTED` 专项文案）；一期不做文件夹递归（二期候选）。
+- 单文件体积上限 200MB（超出 → `IT_FILE_UNSUPPORTED` 专项文案）；文件夹递归已于 M63 解冻（见文末 M63 追加节）。
 
 ## 2. 三 Tab 参数
 
@@ -95,7 +95,7 @@
 
 - 长任务三段式（提交 → progress/done/error 事件 → cancel 取消）：批量逐文件串行执行（单文件 ffmpeg 秒级，无需并发；取消 = AbortSignal 杀进程树，已完成文件保留）。
 - 入参全部 zod 校验；错误 `makeError`/`toolError` 结构化；输出命名与编码参数映射均为纯函数（可测）。
-- settings 只记忆 `tools.image-toolbox.outputDir`（下次进入回填）；一期不做历史列表（结果会话内展示，二期候选）。
+- settings 记忆 `tools.image-toolbox.outputDir`（下次进入回填）与 `tools.image-toolbox.history`（M63：最近 20 条处理历史）。
 
 ## 5. 编码参数映射（纯函数 `buildEncodeArgs`，ffmpeg 命令按格式分发）
 
@@ -177,3 +177,82 @@
   7. 无新错误码（ffmpeg 参数由 zod 值域保证）；无参/全 0 路径输出与 M40 逐字节一致（回归零风险）
 - **实现**：`effectOptionsSchema` 增 5 个可选数值字段（默认 0）；`buildEffectFilter` 改滤镜链拼接（`eq`/`unsharp`/`gblur`），与既有 `hue=s=0`/`negate`/阈值串联
 - **验收**：`buildEffectFilter` 链式单测（全 0 链 == 旧输出、单参、多参串联、越界钳制）本包 ≥80%；e2e 像素断言新增「亮度 +50 变亮」用例；R2 八类映射记入 `docs/smoke/image-toolbox.md` M55 增量节；chunk <200KB gzip、零新增依赖
+
+---
+
+## M63 追加节（2026-11-24 R8 登记：plan Q65 / §4.63.4）
+
+> 状态：一期「不做文件夹递归 / 不做历史列表」解除（本节即字段级清单）。
+> 边界：只扩展本包（`schema.ts` / `folder.ts` / `history.ts` / `node.ts` / `ToolView.vue`），**零新增依赖**。
+
+### 字段级清单
+
+1. **添加文件夹（递归）**
+   * 入口：文件列表上方「添加文件夹」按钮（`data-testid="add-folder"`）；运行/收集中禁用，文案切换「正在收集…」。
+   * 交互：`window.lumin.pickDirectory('选择图片文件夹')` → `image-toolbox:collect-folder` → 结果并入列表（已有路径去重）。
+   * 收集规则：仅白名单扩展名（沿用 `extensionOf`）；跳过符号链接；子目录递归；结果按路径本地化排序；上限 `MAX_BATCH_FILES = 2000`，触达即停并回传 `truncated`。
+   * 提示：`folderHint` 显示「已新增 N 张 / 已在列表中 / 已达 2000 张上限 / 列表已达上限」；空目录或不可读 → `IT_FOLDER_EMPTY`。
+   * 列表容量：合并后行数不得超过 2000（超出部分丢弃并提示），与 `process` 载荷上限同口径。
+2. **处理历史（最近 20 条）**
+   * 记录时机：`process` / `make-gif` 任务 `done` 后追加（失败/取消不记录）。
+   * 条目：`{ at, mode, success, failed, outputDir, firstOutput }`；`mode ∈ compress|convert|resize|effect|gif`；`at` 由主进程 `Date.now()` 补齐；`firstOutput` 为首个产物绝对路径或 `null`。
+   * 存储：settings `tools.image-toolbox.history`，FIFO 20（新 → 旧），非法存量逐条丢弃。
+   * UI：底部 `<details data-testid="history-panel">`「处理历史（最近 N 条）」，每行「时间 · 模式 · 成功 x（失败 y）+ 输出目录」，首个产物存在时显示定位按钮；「清空历史」二次操作即清空并折叠面板。
+3. **设置**：`config` 回包增 `history`，其余不变。
+
+### 契约（`schema.ts`）
+
+```ts
+export const MAX_BATCH_FILES = 2000
+export const HISTORY_LIMIT = 20
+export const historyModeSchema = z.enum(['compress', 'convert', 'resize', 'effect', 'gif'])
+export const historyEntrySchema = z.object({
+  at: z.number().int().nonnegative(),
+  mode: historyModeSchema,
+  success: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  outputDir: z.string().min(1),
+  firstOutput: z.string().min(1).nullable()
+})
+export const configResultSchema = z.object({
+  outputDir: z.string(),
+  history: z.array(historyEntrySchema).max(20)
+})
+export const collectFolderPayloadSchema = z.object({ dir: z.string().min(1).max(32767) })
+export const collectFolderResultSchema = z.object({
+  files: z.array(z.string().min(1)).max(2000),
+  truncated: z.boolean()
+})
+```
+
+### IPC
+
+| 通道 | 类型 | 入参 | 回包 |
+| --- | --- | --- | --- |
+| `image-toolbox:collect-folder` | sync | `{ dir }` | `{ files, truncated }`；空/不可读 → `IT_FOLDER_EMPTY` |
+| `image-toolbox:append-history` | sync | `{ mode, success, failed, outputDir, firstOutput }` | `{ history }`（20 条） |
+| `image-toolbox:clear-history` | sync | `{}` | `{ history: [] }` |
+
+### 纯函数
+
+| 文件 | 函数 | 语义 |
+| --- | --- | --- |
+| `folder.ts` | `collectImages(root)` | 迭代递归 + 白名单 + 跳过符号链接 + 2000 上限 + 排序 |
+| `history.ts` | `appendHistory(current, entry, limit=20)` | 置顶追加 + 截断（不改原数组） |
+| `history.ts` | `parseHistory(raw)` | 逐条 zod 校验 + 上限截断 |
+
+### 错误码
+
+| 码 | 文案 | 可重试 |
+| --- | --- | --- |
+| `IT_FOLDER_EMPTY` | 文件夹不可读或未找到支持的图片 | 否 |
+
+### 验收
+
+1. 递归收集：嵌套子目录、白名单过滤、大小写扩展名、排序稳定；空目录/不存在目录 → `IT_FOLDER_EMPTY`；2000 上限返回 `truncated`。
+2. 合并去重：重复路径不重复入列；合并后不超过 2000。
+3. 历史：21 次追加保留最近 20 条且新 → 旧；`config` 回填；`clear-history` 清空；非法存量丢弃。
+4. `process` / `make-gif` 成功后历史新增；失败/取消不新增。
+5. 单测：`folder.test.ts` / `history.test.ts` / schema / node / client；本包 ≥80%。
+6. e2e：文件夹收集 + 空目录错误 + 历史 20 条 + UI 面板/按钮/清空。
+7. chunk <200KB gzip；零新增依赖；`pnpm gate` 全绿。

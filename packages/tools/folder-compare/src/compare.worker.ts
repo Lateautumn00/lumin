@@ -9,8 +9,21 @@
 import { type Dirent } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import { exposeTask, type TaskRunContext } from '@lumin/node-kit'
-import { classifyPair, normalizeRelPath, pathKey, sortEntries, summarize } from './contract'
+import {
+  HASH_CHUNK_BYTES,
+  exposeTask,
+  hashFileRange,
+  hashWholeFile,
+  type TaskRunContext
+} from '@lumin/node-kit'
+import {
+  classifyPair,
+  normalizeRelPath,
+  pathKey,
+  sortEntries,
+  summarize,
+  withContentResult
+} from './contract'
 import { toolError } from './errors'
 import {
   MAX_FILES_PER_SIDE,
@@ -23,6 +36,9 @@ import {
 
 /** 进度推送的最小间隔（按已检查文件数节流，避免事件洪泛） */
 export const COMPARE_PROGRESS_STEP = 200
+
+/** 内容比较进度节流（每 N 个配对上报一次） */
+export const CONTENT_PROGRESS_STEP = 20
 
 /** 单侧侧别 */
 export type Side = 'left' | 'right'
@@ -113,7 +129,29 @@ export async function scanSide(
 }
 
 /**
- * 执行一次文件夹对比（两侧扫描 → 配对 → 排序 → 截断）
+ * 判断两侧同名同大小文件内容是否一致（64KB 前缀 SHA-256 预筛 → 全量 SHA-256）
+ * @param leftPath 左侧文件绝对路径
+ * @param rightPath 右侧文件绝对路径
+ * @param size 两侧相同的大小（字节）
+ */
+export async function contentEqual(
+  leftPath: string,
+  rightPath: string,
+  size: number
+): Promise<boolean> {
+  const prefixBytes = Math.min(HASH_CHUNK_BYTES, size)
+  const leftPrefix = await hashFileRange(leftPath, prefixBytes)
+  const rightPrefix = await hashFileRange(rightPath, prefixBytes)
+  if (leftPrefix !== rightPrefix) return false
+  if (size <= HASH_CHUNK_BYTES) return true
+  const noop = (): void => undefined
+  const leftHash = await hashWholeFile(leftPath, noop)
+  const rightHash = await hashWholeFile(rightPath, noop)
+  return leftHash === rightHash
+}
+
+/**
+ * 执行一次文件夹对比（两侧扫描 → 配对 → 可选内容比较 → 排序 → 截断）
  * @param request 左右目录与比较选项（node 侧已 zod 校验）
  * @param ctx 任务上下文（进度推送）
  * @param now 时钟（测试注入）
@@ -167,6 +205,38 @@ export async function runCompare(
     if (entry !== null) entries.push(entry)
   }
 
+  let hashSkipped = 0
+  let contentDifferent = 0
+  if (request.compareContent) {
+    const indexByPath = new Map(entries.map((entry, index) => [entry.path, index]))
+    const candidates = entries.filter(
+      (entry): entry is CompareEntry & { sizeLeft: number; sizeRight: number } =>
+        entry.sizeLeft !== null && entry.sizeRight !== null && entry.sizeLeft === entry.sizeRight
+    )
+    const total = candidates.length
+    ctx.emit({ kind: 'progress', current: 0, total, stage: 'content' })
+    let checked = 0
+    for (const candidate of candidates) {
+      try {
+        const same = await contentEqual(
+          join(request.leftRoot, candidate.path),
+          join(request.rightRoot, candidate.path),
+          candidate.sizeLeft
+        )
+        const merged = withContentResult(candidate, same)
+        const index = indexByPath.get(candidate.path)
+        if (index !== undefined) entries[index] = merged
+        if (merged.contentChanged) contentDifferent += 1
+      } catch {
+        hashSkipped += 1
+      }
+      checked += 1
+      if (checked % CONTENT_PROGRESS_STEP === 0 || checked === total) {
+        ctx.emit({ kind: 'progress', current: checked, total, stage: 'content' })
+      }
+    }
+  }
+
   const sorted = sortEntries(entries)
   const summary = summarize(entries)
   const limit = Math.max(0, maxResult)
@@ -177,9 +247,11 @@ export async function runCompare(
     ...summary,
     leftFiles: leftCounters.files,
     rightFiles: rightCounters.files,
-    skipped: leftCounters.skipped + rightCounters.skipped,
+    skipped: leftCounters.skipped + rightCounters.skipped + hashSkipped,
     truncated: Math.max(0, sorted.length - limit),
     compareMtime: request.compareMtime,
+    compareContent: request.compareContent,
+    contentDifferent,
     elapsedMs: now() - started
   })
 }

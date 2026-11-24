@@ -5,6 +5,7 @@ import {
   deletePages,
   extractImages,
   extractText,
+  exportHtml,
   info,
   merge,
   pageNumbers,
@@ -98,6 +99,15 @@ describe('pdf-toolkit client（通道名与壳一致）', () => {
     expect(invoke).toHaveBeenCalledWith('pdf-toolkit:compress', {
       inputPath: 'C:/a.pdf',
       level: 'high'
+    })
+  })
+
+  it('PDF→HTML 通道（M63）', async () => {
+    stubLumin()
+    await exportHtml({ inputPath: 'C:/a.pdf', ranges: '2-3' })
+    expect(invoke).toHaveBeenCalledWith('pdf-toolkit:export-html', {
+      inputPath: 'C:/a.pdf',
+      ranges: '2-3'
     })
   })
 })

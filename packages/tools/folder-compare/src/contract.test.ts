@@ -13,7 +13,8 @@ import {
   normalizeRelPath,
   pathKey,
   sortEntries,
-  summarize
+  summarize,
+  withContentResult
 } from './contract'
 import type { CompareEntry } from './schema'
 
@@ -28,6 +29,7 @@ function entry(overrides: Partial<CompareEntry>): CompareEntry {
     mtimeRight: 0,
     sizeChanged: false,
     mtimeChanged: false,
+    contentChanged: false,
     ...overrides
   }
 }
@@ -112,6 +114,20 @@ describe('classifyPair', () => {
     expect(
       classifyPair('t.txt', { size: 2, mtimeMs: 0 }, { size: 2, mtimeMs: 5 }, true, 10)
     ).toMatchObject({ status: 'same' })
+  })
+})
+
+describe('withContentResult', () => {
+  it('内容不一致 → 归入有差异并置 contentChanged', () => {
+    const merged = withContentResult(entry({ status: 'same' }), false)
+    expect(merged).toMatchObject({ status: 'different', contentChanged: true })
+  })
+
+  it('内容一致或缺失侧 → 保持原分类', () => {
+    const same = entry({ status: 'same' })
+    expect(withContentResult(same, true)).toBe(same)
+    const onlyLeft = entry({ status: 'only-left', sizeRight: null, mtimeRight: null })
+    expect(withContentResult(onlyLeft, false)).toBe(onlyLeft)
   })
 })
 

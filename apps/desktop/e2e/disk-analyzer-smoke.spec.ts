@@ -31,6 +31,12 @@ interface DiskEntry {
   fileCount: number
 }
 
+interface TypeStat {
+  ext: string
+  files: number
+  bytes: number
+}
+
 interface ScanResult {
   root: string
   entries: DiskEntry[]
@@ -38,6 +44,7 @@ interface ScanResult {
   fileCount: number
   dirCount: number
   skipped: number
+  typeStats: TypeStat[]
   elapsedMs: number
 }
 
@@ -188,6 +195,10 @@ test.describe('disk-analyzer（磁盘空间分析）冒烟', () => {
         dirCount: 3,
         skipped: 0
       })
+      expect(outcome.result.typeStats).toEqual([
+        { ext: 'txt', files: 3, bytes: 3077 },
+        { ext: 'bin', files: 1, bytes: 100 }
+      ])
 
       const missing = path.join(os.tmpdir(), 'lumin-da-not-exist-2026')
       const code = await page.evaluate(
@@ -219,6 +230,53 @@ test.describe('disk-analyzer（磁盘空间分析）冒烟', () => {
       expect(code).toBe('DA_ROOT_INVALID')
     } finally {
       fs.rmSync(dir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('类型统计区可见 + 导出 CSV 落盘（BOM/表头/两张表）', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const dir = freshDir('lumin-da-e2e-csv')
+    const csvPath = path.join(os.tmpdir(), 'lumin-da-e2e-out.csv')
+    try {
+      fs.mkdirSync(path.join(dir, 'sub'), { recursive: true })
+      fs.writeFileSync(path.join(dir, 'a.txt'), 'hello')
+      fs.writeFileSync(path.join(dir, 'sub', 'b.txt'), Buffer.alloc(2048, 1))
+      fs.writeFileSync(path.join(dir, 'sub', 'c.bin'), Buffer.alloc(100, 2))
+      fs.rmSync(csvPath, { force: true })
+
+      // 主进程内替换保存对话框，避免原生弹窗阻塞 e2e
+      await app.evaluate(({ dialog }, target) => {
+        dialog.showSaveDialog = async () => ({ canceled: false, filePath: target })
+      }, csvPath)
+
+      await page.evaluate(
+        (root: string) =>
+          window.lumin.invoke('disk-analyzer:set-config', { root, minFileBytes: 0 }),
+        dir
+      )
+      await clickSidebarTool(page, '磁盘空间分析')
+      await page.getByRole('button', { name: '开始扫描' }).click()
+      await expect(page.getByText('文件类型统计（Top 20）')).toBeVisible({ timeout: 30_000 })
+      // 统计区默认折叠，展开后断言扩展名行
+      await page.getByText('文件类型统计（Top 20）').click()
+      await expect(page.getByText('txt', { exact: true })).toBeVisible()
+      await expect(page.getByText('bin', { exact: true })).toBeVisible()
+
+      await page.getByRole('button', { name: '导出 CSV' }).click()
+      await expect(page.getByText(`已导出 CSV：${csvPath}`)).toBeVisible({ timeout: 30_000 })
+
+      expect(fs.existsSync(csvPath)).toBe(true)
+      const content = fs.readFileSync(csvPath, 'utf8')
+      expect(content.startsWith('\uFEFF# 磁盘空间分析')).toBe(true)
+      expect(content).toContain('类型,名称,相对路径,大小(字节),大小(可读),文件数')
+      expect(content).toContain('扩展名,文件数,大小(字节),大小(可读)')
+      expect(content).toContain('txt,2,')
+      expect(content).toContain('bin,1,')
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.rmSync(csvPath, { force: true })
       await app.close()
     }
   })

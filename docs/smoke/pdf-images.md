@@ -71,3 +71,10 @@
 | e2e | **6/6 通过**；新增例：Letter + 横版 + 20mm + `自定义 名称` → 2 页 MediaBox `792×612`，重名 `(1)` 递增且原文件保留 |
 | chunk | `pdf-images-*.js` **34,966 B raw / 8,712 B gzip**（R5 <200KB gzip） |
 | 兼容 | 旧请求不含 `orientation` 时 zod 默认 `auto`，`auto` 页型忽略方向/边距；未填 `outputName` 仍输出 `{首图基名}_合并.pdf` |
+
+## 7. M63 附带修复（2026-11-24）
+
+- **现象**：并发排队用例（3 任务同毫秒提交）偶发首个任务返回 `INTERNAL`，单独复跑稳定复现。
+- **根因**：`images.worker.ts` 临时目录用 `lumin-pdf-images-${process.pid}-${Date.now()}` 命名；worker 线程共享主进程 pid，同毫秒启动的任务生成同名目录，先完成方 `finally` 递归清理时另一方仍在建/用目录 → `rm` EPERM，异常冒出 `finally` 后未结构化 → 壳归为 `INTERNAL`。
+- **修复**：临时目录改 `lumin-pdf-images-${randomUUID()}`；清理改 `rm(...).catch(() => undefined)`，使清理失败不影响已完成任务的结果。
+- **回归**：`pdf-images-smoke.spec.ts` 全量通过（含并发排队 3×`done`）。

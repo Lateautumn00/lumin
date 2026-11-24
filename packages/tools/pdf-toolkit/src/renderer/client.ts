@@ -7,6 +7,7 @@
 import type {
   CompressPayload,
   DeletePayload,
+  ExportHtmlPayload,
   ExtractImagesPayload,
   ExtractTextPayload,
   InfoPayload,
@@ -78,6 +79,11 @@ export function extractImages(payload: ExtractImagesPayload): Promise<{ taskId: 
 /** 压缩（M38） */
 export function compress(payload: CompressPayload): Promise<{ taskId: string }> {
   return window.lumin.invoke('pdf-toolkit:compress', payload)
+}
+
+/** PDF→HTML 结构化导出（M63） */
+export function exportHtml(payload: ExportHtmlPayload): Promise<{ taskId: string }> {
+  return window.lumin.invoke('pdf-toolkit:export-html', payload)
 }
 
 /** 取消任务（壳通道） */

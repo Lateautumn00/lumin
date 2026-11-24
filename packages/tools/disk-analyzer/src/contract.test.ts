@@ -7,12 +7,17 @@ import { describe, expect, it } from 'vitest'
 import {
   breadcrumbParts,
   breadcrumbPath,
+  buildCsv,
+  csvCell,
+  extensionOf,
   filterEntries,
   isInside,
   limitEntries,
   percentOf,
+  relativeTo,
   sortEntries,
-  summarize
+  summarize,
+  summarizeTypes
 } from './contract'
 import type { DiskEntry } from './schema'
 
@@ -139,5 +144,78 @@ describe('breadcrumbPath', () => {
   it('POSIX 根路径保持 / 分隔符', () => {
     expect(breadcrumbPath('/home', ['me', 'docs'], 0)).toBe('/home/me')
     expect(breadcrumbPath('/', ['me'], 0)).toBe('/me')
+  })
+})
+
+describe('relativeTo', () => {
+  it('root 内返回相对路径；root 外原样返回', () => {
+    expect(relativeTo('C:\\a', 'C:\\a\\b\\c.txt')).toBe('b\\c.txt')
+    expect(relativeTo('C:\\a', 'C:\\a')).toBe('')
+    expect(relativeTo('C:\\a', 'D:\\a\\c.txt')).toBe('D:\\a\\c.txt')
+  })
+})
+
+describe('extensionOf', () => {
+  it('小写扩展名；无扩展名/隐藏文件归 (无扩展名)', () => {
+    expect(extensionOf('A.TXT')).toBe('txt')
+    expect(extensionOf('archive.tar.gz')).toBe('gz')
+    expect(extensionOf('README')).toBe('(无扩展名)')
+    expect(extensionOf('.gitignore')).toBe('(无扩展名)')
+    expect(extensionOf('trailing.')).toBe('(无扩展名)')
+  })
+})
+
+describe('summarizeTypes', () => {
+  it('字节降序 → 文件数降序 → 扩展名升序', () => {
+    const totals = new Map([
+      ['txt', { files: 2, bytes: 100 }],
+      ['png', { files: 1, bytes: 300 }],
+      ['log', { files: 2, bytes: 100 }]
+    ])
+    expect(summarizeTypes(totals).map((row) => row.ext)).toEqual(['png', 'log', 'txt'])
+    expect(summarizeTypes(new Map())).toEqual([])
+  })
+
+  it('超出 limit 合并为「其他」', () => {
+    const totals = new Map([
+      ['a', { files: 1, bytes: 500 }],
+      ['b', { files: 1, bytes: 400 }],
+      ['c', { files: 2, bytes: 200 }],
+      ['d', { files: 3, bytes: 100 }]
+    ])
+    const rows = summarizeTypes(totals, 2)
+    expect(rows).toEqual([
+      { ext: 'a', files: 1, bytes: 500 },
+      { ext: 'b', files: 1, bytes: 400 },
+      { ext: '其他', files: 5, bytes: 300 }
+    ])
+  })
+})
+
+describe('csvCell / buildCsv', () => {
+  it('含逗号/引号/换行时按 RFC 4180 转义', () => {
+    expect(csvCell('plain')).toBe('plain')
+    expect(csvCell('a,b')).toBe('"a,b"')
+    expect(csvCell('he said "hi"')).toBe('"he said ""hi"""')
+    expect(csvCell('line\nbreak')).toBe('"line\nbreak"')
+  })
+
+  it('输出条目表 + 类型统计表，CRLF 行尾且不含 BOM', () => {
+    const csv = buildCsv({
+      root: 'C:\\root',
+      entries: [
+        { name: 'sub', path: 'C:\\root\\sub', kind: 'dir', size: 1024, fileCount: 2 },
+        { name: 'a,b.txt', path: 'C:\\root\\a,b.txt', kind: 'file', size: 10, fileCount: 0 }
+      ],
+      typeStats: [{ ext: 'txt', files: 1, bytes: 10 }]
+    })
+    expect(csv.startsWith('\uFEFF')).toBe(false)
+    expect(csv).toContain('# 磁盘空间分析 - C:\\root\r\n')
+    expect(csv).toContain('类型,名称,相对路径,大小(字节),大小(可读),文件数\r\n')
+    expect(csv).toContain('目录,sub,sub,1024,')
+    expect(csv).toContain('文件,"a,b.txt","a,b.txt",10,')
+    expect(csv).toContain('\r\n扩展名,文件数,大小(字节),大小(可读)\r\n')
+    expect(csv).toContain('txt,1,10,')
+    expect(csv.endsWith('\r\n')).toBe(true)
   })
 })

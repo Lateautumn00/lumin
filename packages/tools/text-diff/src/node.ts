@@ -12,16 +12,18 @@
 import { createHash } from 'node:crypto'
 import { closeSync, openSync, readFileSync, readSync, statSync } from 'node:fs'
 import { basename } from 'node:path'
-import { dialog } from 'electron'
+import { dialog, clipboard } from 'electron'
 import type { MainPluginContext, RegisterMain } from '@lumin/plugin-api'
 import { errnoCode, isStructuredError } from '@lumin/shared'
 import {
   BINARY_CHUNK_BYTES,
   FILE_COMPARE_MAX_BYTES,
   compareFilesPayloadSchema,
+  copyTextPayloadSchema,
   pickFilePayloadSchema,
   type CompareFilesPayload,
   type CompareFilesResult,
+  type CopyTextResult,
   type PickFileResult
 } from './schema'
 import {
@@ -43,6 +45,8 @@ export interface TextDiffNodeDeps {
   readWholeFile(path: string): Buffer
   /** 二进制逐块读取（生产 = 1MB/块流式生成器，失败抛 fs 错误） */
   readChunks(path: string): Iterable<Buffer>
+  /** 写系统剪贴板（生产 = electron clipboard.writeText；主进程写不依赖窗口焦点） */
+  writeClipboard(text: string): void
 }
 
 /** zod issue 消息拼接（信封校验失败 detail） */
@@ -167,7 +171,7 @@ function compareFiles(input: CompareFilesPayload, deps: TextDiffNodeDeps): Compa
 }
 
 /**
- * 注册 2 同步通道（测试可注入 deps）
+ * 注册 3 同步通道（测试可注入 deps）
  * @param ctx 主进程插件上下文
  * @param deps 通道依赖
  */
@@ -187,6 +191,18 @@ export function registerWith(
     const parsed = compareFilesPayloadSchema.safeParse(payload)
     if (!parsed.success) throw toolError('INVALID_INPUT', invalidDetail(parsed.error.issues))
     return compareFiles(parsed.data, deps)
+  })
+
+  /** copy-text：主进程写系统剪贴板（不受 renderer 焦点/权限限制） */
+  ctx.registerIpc('copy-text', ({ payload }): CopyTextResult => {
+    const parsed = copyTextPayloadSchema.safeParse(payload)
+    if (!parsed.success) throw toolError('INVALID_INPUT', invalidDetail(parsed.error.issues))
+    try {
+      deps.writeClipboard(parsed.data.text)
+    } catch (err) {
+      throw toolError('TD_CLIPBOARD_FAILED', describeError(err))
+    }
+    return { ok: true }
   })
 
   ctx.log.info('text-diff registered')
@@ -224,6 +240,7 @@ export function createDefaultDeps(): TextDiffNodeDeps {
     },
     statSize: (path) => statSync(path).size,
     readWholeFile: (path) => readFileSync(path),
-    readChunks: (path) => readBinaryChunks(path)
+    readChunks: (path) => readBinaryChunks(path),
+    writeClipboard: (text) => clipboard.writeText(text)
   }
 }

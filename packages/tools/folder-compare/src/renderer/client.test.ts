@@ -16,7 +16,12 @@ beforeEach(() => {
 
 describe('client', () => {
   it('compare 走 folder-compare:compare 并透传 payload', async () => {
-    const payload = { leftRoot: 'C:\\a', rightRoot: 'D:\\b', compareMtime: true }
+    const payload = {
+      leftRoot: 'C:\\a',
+      rightRoot: 'D:\\b',
+      compareMtime: true,
+      compareContent: false
+    }
     await expect(compare(payload)).resolves.toEqual({ taskId: 'task-1' })
     expect(invoke).toHaveBeenCalledWith('folder-compare:compare', payload)
   })
@@ -25,11 +30,17 @@ describe('client', () => {
     await config()
     expect(invoke).toHaveBeenCalledWith('folder-compare:config', {})
 
-    await setConfig({ leftRoot: 'C:\\a', rightRoot: '', compareMtime: false })
+    await setConfig({
+      leftRoot: 'C:\\a',
+      rightRoot: '',
+      compareMtime: false,
+      compareContent: true
+    })
     expect(invoke).toHaveBeenCalledWith('folder-compare:set-config', {
       leftRoot: 'C:\\a',
       rightRoot: '',
-      compareMtime: false
+      compareMtime: false,
+      compareContent: true
     })
   })
 })

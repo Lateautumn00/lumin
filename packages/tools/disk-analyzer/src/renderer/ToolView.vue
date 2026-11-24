@@ -27,12 +27,13 @@ import {
 import { isRetryable } from '../errors'
 import {
   DEFAULT_MIN_FILE_BYTES,
+  MAX_TYPE_ROWS,
   MAX_VISIBLE_ENTRIES,
   MIN_FILE_BYTES_OPTIONS,
   type DiskEntry,
   type ScanResult
 } from '../schema'
-import { config, scan, setConfig } from './client'
+import { config, exportCsv, scan, setConfig } from './client'
 
 // —— 目录 ——
 /** 用户选择的起始目录（面包屑基准，下钻不改变） */
@@ -50,6 +51,8 @@ const scanned = ref(false)
 const error = ref<StructuredError | null>(null)
 const errorDetail = ref('')
 const notice = ref('')
+/** CSV 导出进行中（防重复点击） */
+const exporting = ref(false)
 
 let unsubscribe: (() => void) | null = null
 let currentTaskId = ''
@@ -98,6 +101,50 @@ const layerText = computed(() => `本层 ${layer.value.dirs} 个目录 · ${laye
 /** 条目占比（相对本次扫描总大小） */
 function entryPercent(entry: DiskEntry): number {
   return percentOf(entry.size, stats.value?.totalBytes ?? 0)
+}
+
+/** 类型统计占比（相对本次扫描总大小） */
+function typePercent(bytes: number): number {
+  return percentOf(bytes, stats.value?.totalBytes ?? 0)
+}
+
+/** 导出文件名（去掉 Windows 非法字符） */
+function csvFileName(): string {
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  const label = (baseLabel.value || '目录').replace(/[\\/:*?"<>|]/g, '_')
+  return `磁盘分析-${label}-${stamp}.csv`
+}
+
+/** 导出当前层条目与类型统计为 CSV */
+async function doExport(): Promise<void> {
+  const done = stats.value
+  if (done === null || exporting.value || busy.value) return
+  error.value = null
+  notice.value = ''
+  exporting.value = true
+  try {
+    const targetPath = await window.lumin.pickSaveFile({
+      title: '导出 CSV',
+      defaultName: csvFileName(),
+      filters: [{ name: 'CSV 文件', extensions: ['csv'] }]
+    })
+    if (targetPath === null) {
+      notice.value = '已取消导出'
+      return
+    }
+    const result = await exportCsv({
+      root: baseRoot.value,
+      targetPath,
+      // ref 深响应化后元素为 Proxy，跨 IPC 结构化克隆会报「could not be cloned」，导出前摊平为普通对象
+      entries: entries.value.map((entry) => ({ ...entry })),
+      typeStats: done.typeStats.map((row) => ({ ...row }))
+    })
+    notice.value = `已导出 CSV：${result.path}`
+  } catch (err) {
+    showError(err)
+  } finally {
+    exporting.value = false
+  }
 }
 
 function detach(): void {
@@ -331,7 +378,10 @@ onUnmounted(detach)
       <div class="flex flex-col gap-1">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <NText class="text-sm font-medium">{{ statsText }}</NText>
-          <NText depth="3" class="text-xs">{{ layerText }}</NText>
+          <div class="flex items-center gap-2">
+            <NButton size="tiny" :disabled="busy || exporting" @click="doExport">导出 CSV</NButton>
+            <NText depth="3" class="text-xs">{{ layerText }}</NText>
+          </div>
         </div>
         <!-- 面包屑：起始目录 / 子级… -->
         <div class="flex flex-wrap items-center gap-1">
@@ -401,6 +451,33 @@ onUnmounted(detach)
         其余 {{ visible.hiddenCount }} 项 · 共 {{ formatBytes(visible.hiddenBytes) }}（单层仅展示最大
         {{ MAX_VISIBLE_ENTRIES }} 项）
       </NText>
+
+      <!-- 文件类型统计（扩展名聚合，Top 20 + 其他） -->
+      <details v-if="stats !== null && stats.typeStats.length > 0" class="text-xs">
+        <summary class="cursor-pointer text-[var(--lumin-color-text-secondary)]">
+          文件类型统计（Top {{ MAX_TYPE_ROWS }}）
+        </summary>
+        <div class="mt-2 flex flex-col gap-1.5">
+          <div
+            v-for="row in stats.typeStats"
+            :key="row.ext"
+            class="flex items-center gap-2"
+          >
+            <NText class="w-28 shrink-0 truncate text-xs" :title="row.ext">{{ row.ext }}</NText>
+            <div class="h-1.5 min-w-0 flex-1 rounded-full bg-[var(--lumin-color-border)]">
+              <div
+                class="h-1.5 rounded-full bg-[var(--lumin-color-primary)]"
+                :style="{ width: `${typePercent(row.bytes)}%` }"
+              />
+            </div>
+            <NText depth="3" class="w-16 shrink-0 text-right text-xs">{{ row.files }} 个</NText>
+            <NText class="w-24 shrink-0 text-right text-xs">{{ formatBytes(row.bytes) }}</NText>
+            <NText depth="3" class="w-12 shrink-0 text-right text-xs">
+              {{ typePercent(row.bytes) }}%
+            </NText>
+          </div>
+        </div>
+      </details>
     </template>
   </div>
 </template>

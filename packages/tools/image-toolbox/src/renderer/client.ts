@@ -5,7 +5,11 @@
  * @description probe/config sync 通道与 process task 的提交封装，类型来自 schema.ts
  */
 import type {
+  AppendHistoryPayload,
+  CollectFolderPayload,
+  CollectFolderResult,
   ConfigResult,
+  HistoryResult,
   MakeGifPayload,
   ProbePayload,
   ProbeResult,
@@ -40,4 +44,19 @@ export function saveOutputDir(outputDir: string): Promise<void> {
 /** 打开输出文件所在文件夹（复用壳通道，壳侧 zod 校验非空） */
 export function revealPath(path: string): Promise<void> {
   return window.lumin.revealPath(path)
+}
+
+/** 递归收集文件夹内的支持图片（M63，P1-6） */
+export function collectFolder(payload: CollectFolderPayload): Promise<CollectFolderResult> {
+  return window.lumin.invoke('image-toolbox:collect-folder', payload)
+}
+
+/** 追加一条处理历史（M63：返回最新 20 条，新 → 旧） */
+export function appendHistory(payload: AppendHistoryPayload): Promise<HistoryResult> {
+  return window.lumin.invoke('image-toolbox:append-history', payload)
+}
+
+/** 清空处理历史（M63） */
+export function clearHistory(): Promise<HistoryResult> {
+  return window.lumin.invoke('image-toolbox:clear-history', {})
 }

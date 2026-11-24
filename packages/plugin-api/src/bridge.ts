@@ -18,6 +18,14 @@ export interface TrashOutcome {
   failed: { path: string; message: string }[]
 }
 
+/** 保存文件对话框参数（壳通用能力；filters 与 Electron dialog 一致） */
+export interface SaveFileOptions {
+  title?: string
+  /** 建议文件名（不含目录） */
+  defaultName?: string
+  filters?: { name: string; extensions: string[] }[]
+}
+
 /** preload 通过 contextBridge 暴露给 renderer 的唯一通道（`window.lumin`） */
 export interface LuminBridge {
   /** 调用 `{toolId}:{action}` / shell 通道，返回解包后的 data 或抛出结构化错误 */
@@ -36,6 +44,8 @@ export interface LuminBridge {
   trashPaths(paths: readonly string[]): Promise<TrashOutcome>
   /** 系统目录选择对话框；用户取消返回 null（壳通用能力，多工具复用） */
   pickDirectory(title?: string): Promise<string | null>
+  /** 系统保存文件对话框；返回目标绝对路径，取消返回 null（壳通用能力，多工具复用） */
+  pickSaveFile(options?: SaveFileOptions): Promise<string | null>
   readonly settings: {
     get<T>(key: string, defaultValue: T): Promise<T>
     set<T>(key: string, value: T): Promise<void>

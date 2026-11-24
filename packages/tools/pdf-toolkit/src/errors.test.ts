@@ -52,3 +52,19 @@ describe('M38 错误码', () => {
     expect(isRetryable('PT_TOO_MANY_IMAGES')).toBe(false)
   })
 })
+
+describe('M63 错误码', () => {
+  it('PDF→HTML 无文本层/导出失败文案', () => {
+    expect(toolError('PT_PDF_NO_TEXT').message).toBe(
+      '未检测到可导出的文本层（可能为扫描件或已加密）'
+    )
+    expect(toolError('PT_EXPORT_FAILED').message).toBe(
+      '导出 HTML 失败，请检查目录权限与剩余空间'
+    )
+  })
+
+  it('无文本层不可重试，导出失败可重试', () => {
+    expect(isRetryable('PT_PDF_NO_TEXT')).toBe(false)
+    expect(isRetryable('PT_EXPORT_FAILED')).toBe(true)
+  })
+})

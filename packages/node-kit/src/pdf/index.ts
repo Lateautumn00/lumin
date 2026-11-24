@@ -15,18 +15,25 @@ export {
 export type { OpenedPdf, PdfDocumentHandle, PdfPageHandle, RenderedCanvas } from './render'
 export {
   buildPageText,
+  buildTextLines,
   decodeRawImage,
   ExtractedImageLimitError,
   extractPdfImages,
+  extractPdfLines,
   extractPdfText,
+  toRawTextItems,
   toTextItems
 } from './extract'
 export type {
   DecodedImage,
   ExtractedImage,
+  ExtractedLines,
+  ExtractedLinesPage,
   ExtractedText,
   ExtractedTextPage,
   ExtractImageOptions,
   PdfRawImage,
-  PdfTextItem
+  PdfRawTextItem,
+  PdfTextItem,
+  PdfTextLine
 } from './extract'

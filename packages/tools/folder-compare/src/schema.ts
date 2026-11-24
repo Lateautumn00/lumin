@@ -21,10 +21,15 @@ export const MAX_VISIBLE_ENTRIES = 500
 /** 默认比较修改时间 */
 export const DEFAULT_COMPARE_MTIME = true
 
+/** 默认不比较文件内容 */
+export const DEFAULT_COMPARE_CONTENT = false
+
 export const comparePayloadSchema = z.object({
   leftRoot: z.string().min(1).max(32767),
   rightRoot: z.string().min(1).max(32767),
-  compareMtime: z.boolean()
+  compareMtime: z.boolean(),
+  /** 是否对两侧同名同大小文件做内容 SHA-256 比较 */
+  compareContent: z.boolean()
 })
 
 export type ComparePayload = z.infer<typeof comparePayloadSchema>
@@ -47,7 +52,9 @@ export const compareEntrySchema = z.object({
   mtimeRight: z.number().nonnegative().nullable(),
   /** status 为 different 时有意义 */
   sizeChanged: z.boolean(),
-  mtimeChanged: z.boolean()
+  mtimeChanged: z.boolean(),
+  /** 启用内容比较且两侧大小相同但 SHA-256 不同 */
+  contentChanged: z.boolean()
 })
 
 export type CompareEntry = z.infer<typeof compareEntrySchema>
@@ -69,6 +76,9 @@ export const compareDoneSchema = z.object({
   /** 因结果上限被省略的条目数 */
   truncated: z.number().int().nonnegative(),
   compareMtime: z.boolean(),
+  compareContent: z.boolean(),
+  /** 内容不同（SHA-256 不一致）的条目数（全量统计） */
+  contentDifferent: z.number().int().nonnegative(),
   elapsedMs: z.number().nonnegative()
 })
 
@@ -77,7 +87,8 @@ export type CompareResult = z.infer<typeof compareDoneSchema>
 export const configResultSchema = z.object({
   leftRoot: z.string().nullable(),
   rightRoot: z.string().nullable(),
-  compareMtime: z.boolean()
+  compareMtime: z.boolean(),
+  compareContent: z.boolean()
 })
 
 export type ConfigResult = z.infer<typeof configResultSchema>
@@ -86,7 +97,8 @@ export const setConfigPayloadSchema = z.object({
   /** 空串表示清空记忆目录（config 读回归一为 null） */
   leftRoot: z.string().max(32767).optional(),
   rightRoot: z.string().max(32767).optional(),
-  compareMtime: z.boolean()
+  compareMtime: z.boolean(),
+  compareContent: z.boolean()
 })
 
 export type SetConfigPayload = z.infer<typeof setConfigPayloadSchema>

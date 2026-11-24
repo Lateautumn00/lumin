@@ -506,6 +506,89 @@ test.describe('image-toolbox（图片工具箱）冒烟', () => {
       await app.close()
     }
   })
+
+  test('M63 文件夹递归收集 + 处理历史（最近 20 条）', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const workDir = path.join(os.tmpdir(), 'lumin-it-e2e-m63')
+    fs.rmSync(workDir, { recursive: true, force: true })
+    fs.mkdirSync(path.join(workDir, '子目录'), { recursive: true })
+    try {
+      const png = (out: string) => [
+        '-f',
+        'lavfi',
+        '-i',
+        'color=c=green:s=64x64',
+        '-frames:v',
+        '1',
+        out
+      ]
+      await makeImage(png(path.join(workDir, 'a 图.png')))
+      await makeImage(png(path.join(workDir, '子目录', 'b 图.png')))
+      fs.writeFileSync(path.join(workDir, '说明.txt'), 'x')
+
+      const collected = await page.evaluate(
+        (dir: string) =>
+          window.lumin.invoke<{ files: string[]; truncated: boolean }>(
+            'image-toolbox:collect-folder',
+            { dir }
+          ),
+        workDir
+      )
+      expect(collected.files).toHaveLength(2)
+      expect(collected.files).toContain(path.join(workDir, 'a 图.png'))
+      expect(collected.files).toContain(path.join(workDir, '子目录', 'b 图.png'))
+      expect(collected.truncated).toBe(false)
+
+      const emptyDir = path.join(workDir, '空目录')
+      fs.mkdirSync(emptyDir)
+      const message = await page.evaluate(async (dir: string) => {
+        try {
+          await window.lumin.invoke('image-toolbox:collect-folder', { dir })
+          return 'ok'
+        } catch (err) {
+          // 同步通道错误以结构化对象（非 Error 实例）reject，需读 code/message
+          const structured = err as { code?: string; message?: string }
+          return `${structured.code ?? ''}|${structured.message ?? ''}`
+        }
+      }, emptyDir)
+      expect(message).toContain('IT_FOLDER_EMPTY')
+
+      // 21 次追加 → 最近 20 条，新 → 旧
+      for (let index = 0; index < 21; index += 1) {
+        await page.evaluate(
+          (success: number) =>
+            window.lumin.invoke('image-toolbox:append-history', {
+              mode: 'compress',
+              success,
+              failed: 0,
+              outputDir: 'E:\\out',
+              firstOutput: null
+            }),
+          index
+        )
+      }
+      const cfg = await page.evaluate(() =>
+        window.lumin.invoke<{ history: { success: number }[] }>('image-toolbox:config', {})
+      )
+      expect(cfg.history).toHaveLength(20)
+      expect(cfg.history[0]?.success).toBe(20)
+
+      // UI：历史面板与「添加文件夹」按钮可见
+      await clickSidebarTool(page, '图片工具箱')
+      await clickSidebarTool(page, '计算器')
+      await clickSidebarTool(page, '图片工具箱')
+      await expect(page.getByTestId('history-panel')).toBeVisible()
+      await expect(page.getByTestId('add-folder')).toBeVisible()
+      await expect(page.getByText('处理历史（最近 20 条）')).toBeVisible()
+
+      await page.getByRole('button', { name: '清空历史' }).click()
+      await expect(page.getByTestId('history-panel')).toHaveCount(0)
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
 })
 
 test('页签标签可见（naive-ui 自闭合 pane 渲染回归）', async () => {

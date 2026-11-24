@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_COMPARE_CONTENT,
   DEFAULT_COMPARE_MTIME,
   MAX_FILES_PER_SIDE,
   MAX_RESULT_ENTRIES,
@@ -24,36 +25,77 @@ describe('常量', () => {
     expect(MAX_RESULT_ENTRIES).toBe(20_000)
     expect(MAX_VISIBLE_ENTRIES).toBe(500)
     expect(DEFAULT_COMPARE_MTIME).toBe(true)
+    expect(DEFAULT_COMPARE_CONTENT).toBe(false)
   })
 })
 
 describe('comparePayloadSchema', () => {
   it('合法入参通过', () => {
     expect(
-      comparePayloadSchema.parse({ leftRoot: 'C:\\a', rightRoot: 'D:\\b', compareMtime: true })
-    ).toEqual({ leftRoot: 'C:\\a', rightRoot: 'D:\\b', compareMtime: true })
+      comparePayloadSchema.parse({
+        leftRoot: 'C:\\a',
+        rightRoot: 'D:\\b',
+        compareMtime: true,
+        compareContent: false
+      })
+    ).toEqual({
+      leftRoot: 'C:\\a',
+      rightRoot: 'D:\\b',
+      compareMtime: true,
+      compareContent: false
+    })
   })
 
   it('空目录/缺字段/非布尔开关拒绝', () => {
-    expect(comparePayloadSchema.safeParse({ leftRoot: '', rightRoot: 'D:\\b', compareMtime: true }).success).toBe(false)
-    expect(comparePayloadSchema.safeParse({ leftRoot: 'C:\\a', compareMtime: true }).success).toBe(false)
     expect(
-      comparePayloadSchema.safeParse({ leftRoot: 'C:\\a', rightRoot: 'D:\\b', compareMtime: 'yes' })
+      comparePayloadSchema.safeParse({
+        leftRoot: '',
+        rightRoot: 'D:\\b',
+        compareMtime: true,
+        compareContent: false
+      }).success
+    ).toBe(false)
+    expect(
+      comparePayloadSchema.safeParse({ leftRoot: 'C:\\a', compareMtime: true, compareContent: false })
         .success
+    ).toBe(false)
+    expect(
+      comparePayloadSchema.safeParse({
+        leftRoot: 'C:\\a',
+        rightRoot: 'D:\\b',
+        compareMtime: 'yes',
+        compareContent: false
+      }).success
+    ).toBe(false)
+    expect(
+      comparePayloadSchema.safeParse({
+        leftRoot: 'C:\\a',
+        rightRoot: 'D:\\b',
+        compareMtime: true,
+        compareContent: 'no'
+      }).success
     ).toBe(false)
   })
 })
 
 describe('setConfigPayloadSchema / configResultSchema', () => {
-  it('目录可省略（保留上次），compareMtime 必填', () => {
-    expect(setConfigPayloadSchema.parse({ compareMtime: false })).toEqual({ compareMtime: false })
+  it('目录可省略（保留上次），比较开关必填', () => {
+    expect(setConfigPayloadSchema.parse({ compareMtime: false, compareContent: true })).toEqual({
+      compareMtime: false,
+      compareContent: true
+    })
     expect(setConfigPayloadSchema.safeParse({}).success).toBe(false)
   })
 
   it('config 结果允许目录为 null', () => {
-    expect(configResultSchema.parse({ leftRoot: null, rightRoot: null, compareMtime: true })).toEqual(
-      { leftRoot: null, rightRoot: null, compareMtime: true }
-    )
+    expect(
+      configResultSchema.parse({
+        leftRoot: null,
+        rightRoot: null,
+        compareMtime: true,
+        compareContent: false
+      })
+    ).toEqual({ leftRoot: null, rightRoot: null, compareMtime: true, compareContent: false })
   })
 })
 
@@ -66,7 +108,8 @@ describe('compareEntrySchema / compareDoneSchema', () => {
     mtimeLeft: 100,
     mtimeRight: 200,
     sizeChanged: true,
-    mtimeChanged: true
+    mtimeChanged: true,
+    contentChanged: false
   }
 
   it('条目允许缺失侧 null', () => {
@@ -99,8 +142,10 @@ describe('compareEntrySchema / compareDoneSchema', () => {
         skipped: 0,
         truncated: 0,
         compareMtime: true,
+        compareContent: true,
+        contentDifferent: 1,
         elapsedMs: 12
       })
-    ).toMatchObject({ different: 3, same: 4, elapsedMs: 12 })
+    ).toMatchObject({ different: 3, same: 4, contentDifferent: 1, elapsedMs: 12 })
   })
 })

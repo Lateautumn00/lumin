@@ -4,7 +4,8 @@
  * @date 2026-11-20
  * @description 无副作用、不依赖 node:path，renderer 与 worker 共用；口径见 spec §4。
  */
-import type { DiskEntry } from './schema'
+import { formatBytes } from '@lumin/shared'
+import { MAX_TYPE_ROWS, type DiskEntry, type TypeStat } from './schema'
 
 /** 当前层直接子项汇总（文件/目录按条目数计，不含后代） */
 export interface EntrySummary {
@@ -129,4 +130,99 @@ export function breadcrumbPath(root: string, parts: readonly string[], depth: nu
   const separator = root.includes('/') && !root.includes('\\') ? '/' : '\\'
   const base = root.replace(/[\\/]+$/, '')
   return `${base}${separator}${segments.join(separator)}`
+}
+
+/** 相对 root 的路径（不在 root 下时原样返回；`\` 分隔） */
+export function relativeTo(root: string, target: string): string {
+  if (!isInside(root, target)) return target
+  return splitPath(target).slice(splitPath(root).length).join('\\')
+}
+
+/**
+ * 取文件名扩展名（小写、不含点；无扩展名返回 `(无扩展名)`）
+ * @param name 文件名（不含目录）
+ */
+export function extensionOf(name: string): string {
+  const index = name.lastIndexOf('.')
+  if (index <= 0 || index === name.length - 1) return '(无扩展名)'
+  return name.slice(index + 1).toLowerCase()
+}
+
+/** 类型累计值（文件数 + 字节数） */
+export interface TypeTotals {
+  files: number
+  bytes: number
+}
+
+/**
+ * 汇总类型统计：字节降序 → 文件数降序 → 扩展名升序；超出 limit 的合并为「其他」
+ * @param totals 扩展名 → 累计值
+ * @param limit 展示行数上限（默认 spec 的 20）
+ */
+export function summarizeTypes(
+  totals: ReadonlyMap<string, TypeTotals>,
+  limit: number = MAX_TYPE_ROWS
+): TypeStat[] {
+  const rows: TypeStat[] = [...totals.entries()].map(([ext, value]) => ({
+    ext,
+    files: value.files,
+    bytes: value.bytes
+  }))
+  rows.sort((a, b) => b.bytes - a.bytes || b.files - a.files || a.ext.localeCompare(b.ext))
+  if (rows.length <= limit) return rows
+  const head = rows.slice(0, limit)
+  let files = 0
+  let bytes = 0
+  for (const row of rows.slice(limit)) {
+    files += row.files
+    bytes += row.bytes
+  }
+  head.push({ ext: '其他', files, bytes })
+  return head
+}
+
+/**
+ * CSV 单元格转义（RFC 4180：含逗号/引号/换行时加引号，内部引号翻倍）
+ * @param value 原始值
+ */
+export function csvCell(value: string | number): string {
+  const text = String(value)
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
+/** CSV 导出所需数据 */
+export interface CsvInput {
+  root: string
+  entries: readonly DiskEntry[]
+  typeStats: readonly TypeStat[]
+}
+
+/**
+ * 组装 CSV 文本（当前层条目表 + 类型统计表，CRLF 行尾，不含 BOM）
+ * @param input 根目录、当前层条目与类型统计
+ */
+export function buildCsv(input: CsvInput): string {
+  const lines: string[] = []
+  lines.push(csvCell(`# 磁盘空间分析 - ${input.root}`))
+  lines.push(['类型', '名称', '相对路径', '大小(字节)', '大小(可读)', '文件数'].join(','))
+  for (const entry of input.entries) {
+    lines.push(
+      [
+        entry.kind === 'dir' ? '目录' : '文件',
+        csvCell(entry.name),
+        csvCell(relativeTo(input.root, entry.path)),
+        entry.size,
+        csvCell(formatBytes(entry.size)),
+        entry.fileCount
+      ].join(',')
+    )
+  }
+  if (input.typeStats.length > 0) {
+    lines.push('')
+    lines.push(['扩展名', '文件数', '大小(字节)', '大小(可读)'].join(','))
+    for (const row of input.typeStats) {
+      lines.push([csvCell(row.ext), row.files, row.bytes, csvCell(formatBytes(row.bytes))].join(','))
+    }
+  }
+  return `${lines.join('\r\n')}\r\n`
 }
