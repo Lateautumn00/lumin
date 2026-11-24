@@ -11,7 +11,7 @@ import { NButton, NSelect } from 'naive-ui'
 import { AlertTriangle, Maximize, RotateCcw, Video } from '@lucide/vue'
 import { formatBytes, toStructuredError, type StructuredError } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
-import { toolError } from '../errors'
+import { isRetryable, playbackError, toolError } from '../errors'
 import { UNSUPPORTED_HINT, VIDEO_ACCEPT } from '../formats'
 import type { ResolveResult } from '../schema'
 import { resolve } from './client'
@@ -105,10 +105,11 @@ function onInvalid(reason: string): void {
 }
 
 function onVideoError(): void {
-  const code = videoEl.value?.error?.code
-  // ABORTED 多为切换 src 的正常中断，不提示
-  if (code === 1) return
-  errInfo.value = toolError('VP_PLAYBACK_FAILED', code === undefined ? '' : `MediaError ${code}`)
+  const err = videoEl.value?.error
+  // ABORTED（code 1，切换 src 的正常中断）由 playbackError 返回 null 跳过
+  const mapped = playbackError(err?.code, err?.message)
+  if (mapped === null) return
+  errInfo.value = mapped
   phase.value = 'error'
 }
 
@@ -190,7 +191,12 @@ async function toggleFullscreen(): Promise<void> {
         详情：{{ errInfo.detail }}
       </p>
       <div class="flex items-center gap-2">
-        <NButton v-if="filePath !== ''" size="small" type="primary" @click="retry">
+        <NButton
+          v-if="filePath !== '' && isRetryable(errInfo.code)"
+          size="small"
+          type="primary"
+          @click="retry"
+        >
           <template #icon><RotateCcw :size="16" /></template>
           重试
         </NButton>
