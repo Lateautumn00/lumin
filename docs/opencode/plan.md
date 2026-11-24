@@ -74,6 +74,7 @@
 | Q61 | 剪贴板历史（M59，2026-11-23 用户拍板） | **新增独立工具包 `clipboard-history`，形态 = 工具页内轮询**：仅打开本工具页时每 1s 经 sync 通道读主进程 `clipboard`，文本变化才入库（文本 V1，图片不做）；上限 500 条 + 置顶永不淘汰、搜索/单条删除/清空；`userData/clipboard-history.json` 原子持久化（node-kit `writeAtomic`）；**零全局快捷键、零托盘、壳零改动、零新增依赖**；错误码 `CH_*`；详见 §4.59 |
 | Q62 | 速赢档一（M60，2026-11-23 用户全选四组） | **四既有工具 Tab 扩展（不新建包、纯 renderer、零 IPC、零新增依赖）**：① `text-toolbox` +「URL 编码」（组件级/完整编码、编码/解码/交换/再执行）与「SQL 格式化」（美化/压缩，自写 tokenizer 零依赖）；② `time-toolbox` +「日期计算器」（间隔：总天数/工作日仅周末口径；加减：天/周/月/年日历进位、日溢出钳制月末）；③ `dev-toolbox` +「进制与位运算」（2/8/10/16 BigInt 互转 + 与/或/异或/非）；④ `misc-toolbox` +「中文信息」（脱敏预设、身份证 18 位校验+生日+性别、金额转人民币大写）；chunk 均 <200KB gzip；详见 §4.60 |
 | Q63 | 剪贴板图片（M61，2026-11-24 用户拍板三选） | **扩展 `clipboard-history` 支持图片（Q61 分期排除项的下一期）**：形态 = **同一列表混排 + 「全部/文本/图片」类型筛选**；判定 = **poll 图片优先**（`clipboard.readImage()` 非空即按图片入库，文本分支仅在无图时走，避免截图工具的路径文本污染）；**单图 ≤5MB**（超限复用 `TOO_LARGE` 跳过）、**图片独立上限 100 条**（与文本 500 分开计数，置顶永不淘汰）；原图 PNG 存 `userData/clipboard-history/images/{id}.png`，JSON 仅存元数据 + ≤160px 缩略图 dataURL；图片去重按 PNG SHA-1；**新增 2 通道** `image`（按 id 返回原图 dataURL 供预览）与 `copy`（主进程 `clipboard.writeImage` 回写，渲染端 clipboard API 写不了图）；remove/clear 同步删图片文件 + 启动加载时清理孤儿图片文件；新错误码 `CH_IMAGE_MISSING`；搜索词非空时仅过滤文本条目（图片仅在无搜索词时出现）；零新增依赖；详见 §4.61 |
+| Q64 | 文本比较能力（M62，2026-11-24 用户拍板归口） | **`text-diff` 扩展两能力（P0-8 + P1-9，研究 §3.7 归口拍板：不新建工具、不并入 folder-compare）**：①**词级高亮**——文本比较变更行内高亮粒度加「词级/字符级」开关（默认词级；中文逐字成词、拉丁按词边界、数字连续成词，词级 LCS 预算保护，字符级保留现状）；②**第三页签「文件比较」**——左右路径输入 + 文件选择 + 比较按钮；**文本模式**（≤1MB 且 ≤20,000 行且无 NUL → UTF-8 读入复用 `diffLines` 行级对比，BOM 剥离）/ **二进制模式**（其余 → node:crypto 流式分块 SHA-256，1MB/块同块比对定位首个差异块与字节偏移，内存 O(1)）；文件上限 200MB（超限 `TD_FILE_TOO_LARGE`）；**壳接线 +1**（`tool-mains.ts` 注册行 + 包 `./node` 导出，text-diff 由纯 renderer 转为带主进程通道）；**新增 2 通道** `pick-file`（`dialog.showOpenDialogSync` 选路径）与 `compare-files`（同步返回比较结果）；新错误码 `TD_FILE_READ_FAILED` / `TD_FILE_TOO_LARGE` / `TD_UNSUPPORTED_ENCODING`（UTF-16 等非 UTF-8）；零新增依赖；spec §1「不做」三项解冻；详见 §4.62 |
 | —   | 硬约束                              | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -840,6 +841,21 @@ lumin/
 - **UI 字段级**：顶栏类型筛选（全部/文本/图片 分段按钮，默认全部）；图片卡片 = 缩略图 `<img>` + 尺寸徽标（如 `1920×1080 · 2.1MB`）+ 时间 + 置顶/复制/删除按钮；点缩略图开预览 `NModal`（按需调 `image` 通道取原图 dataURL，打开时才请求）；复制按钮调 `copy` 通道，成功后按钮态「已复制」1.5s（与文本一致）；搜索词非空时仅显示文本匹配条目；空态/加载/报错三态沿用现有结构，`CH_IMAGE_MISSING` → 中文文案 + 重试。
 - **验收**：单测（图片优先判定、SHA-1 去重、按类型独立淘汰、旧 JSON 兼容、筛选、孤儿清理、image/copy 通道注入测试）；e2e ≥2 用例（`app.evaluate` 写入真实剪贴板图片 → 轮询入库 → 类型筛选 → 预览/复制；图片缺失错误态）；R2 八类映射记入 smoke；`pnpm gate` 全绿；文档五处同步。
 
+### 4.62 文本比较能力：词级高亮 + 文件比较（M62，2026-11-24 R8 登记）
+
+- **总则（Q64）**：扩展既有 `text-diff`（**归口拍板**：加页签，不新建工具、不并入 folder-compare）；零新增运行时第三方依赖；纯函数限包 ≥80%、chunk <200KB gzip。
+- **解冻 spec §1**：「不做」删去 **词级 diff、文件选择与读写、二进制对比** 三项；「做」增补对应三项；形态描述由「纯 renderer、零 IPC」改为「文本比较纯 renderer；文件比较经 2 个同步主进程通道（zod 归包 `src/schema.ts`）」。
+- **词级高亮（P0-8，纯 renderer）**：行内高亮粒度开关 `词级/字符级`（默认**词级**）；分词规则 = 连续拉丁字母成词、连续数字成词、CJK 逐字、其余单字符；`diffWords(left, right)` 复用现有 `lcsDiff` 预算保护（词级 LCS 单元格预算 1,000,000，超限降级整词替换；单行 >2,000 词直接整行替换）；输出复用 `InlineSegment[]` 形状，渲染层零改动。
+- **文件比较页签（P1-9，新增主进程）**：
+  - 通道 `text-diff:pick-file`（payload `{}` → `{ path: string | null }`，`dialog.showOpenDialogSync` 取路径；照仓内既有工具选文件惯例）与 `text-diff:compare-files`（payload `{ left, right }` → 比较结果）。
+  - 模式判定（纯函数 `classifyFile`）：文件 ≤1MB **且** 行数 ≤20,000 **且** 前 8KB 无 NUL → **文本模式**（UTF-8，剥 BOM；UTF-16 等 BOM → `TD_UNSUPPORTED_ENCODING`）；否则 → **二进制模式**。
+  - 文本模式：读入后复用 `diffLines`（沿用忽略空白/大小写选项）→ 行级结果原样渲染（并排/统一/统计全复用）。
+  - 二进制模式：node:crypto 流式分块 SHA-256（1MB/块，两文件逐块同位比对；块不同 → 该块内字节级定位首个差异偏移）→ `{ mode: 'binary', same: boolean, firstDiffOffset?: number, totalChunks }`；UI 展示「二进制不同，首个差异位于偏移 X（块 N/M）」或「两文件完全相同」；内存 O(1)。
+  - 文件上限 200MB（`stat` 预检 → `TD_FILE_TOO_LARGE`）；不存在/不可读 → `TD_FILE_READ_FAILED`；同步通道（最坏 200MB 流式约 1–2s 短阻塞，不走三段式）。
+  - 页签 UI：左右路径 `NInput`（readonly，可手输）+ 「选择」按钮 + 「比较」主按钮 + 交换；结果区复用文本比较的统计/并排/统一组件（文本模式）或二进制信息卡（二进制模式）；空态引导「选择两个文件开始比较」；报错态行内结构化码 + 中文 + 重试入口。
+- **壳接线**：`tool-mains.ts` +1 注册行（`textDiffRegisterMain`）、包 `package.json` exports 加 `./node`、`src/node.ts` 新建；manifest/清单/vite alias/workspace 依赖均不变。
+- **验收**：单测（分词规则与词级 LCS 预算降级、`classifyFile` 三条件判定、二进制首差异偏移定位、BOM/UTF-16 分支、两通道注入测试含错误码）；e2e ≥2 用例（词级开关高亮可见、文件比较文本模式出 diff / 二进制模式出偏移、错误态）；R2 八类映射记入 smoke 增量节；`pnpm gate` 全绿；文档五处同步。
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -947,6 +963,8 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M60 v5.9** | 速赢档一（§4.60，2026-11-23）：四工具 Tab 扩展——text-toolbox +URL 编码/SQL 格式化两页签；time-toolbox +日期计算器页签；dev-toolbox +进制与位运算页签；misc-toolbox +中文信息页签（脱敏/身份证/金额大写）；全部纯 renderer、零 IPC、零新增依赖 | §4.60 验收；每包限包覆盖率 ≥80%；新增单测（编解码往返/日期进位/BigInt 互转/校验向量与金额锚点）；e2e 每工具 ≥1 用例；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 1–2 天 |
 
 | **M61 v5.10** | 剪贴板图片（§4.61，2026-11-24）：`clipboard-history` 扩展图片条目——poll 图片优先、同一列表混排 + 「全部/文本/图片」筛选、原图 PNG 落盘 + JSON 内联 ≤160px 缩略图、图片独立上限 100 条、单图 ≤5MB、SHA-1 去重、孤儿文件清理；通道 5 → 7（新增 `image` 预览 / `copy` 主进程回写）、新错误码 `CH_IMAGE_MISSING`；零新增依赖 | §4.61 验收；限包覆盖率 ≥80%；e2e 图片采集/筛选/预览/复制 ≥2 用例；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5–1 天 |
+
+| **M62 v5.11** | 文本比较能力（§4.62，2026-11-24）：`text-diff` 扩展——①词级高亮（粒度开关默认词级，中文逐字/拉丁按词，LCS 预算保护）；②第三页签「文件比较」（文本模式 ≤1MB 复用 `diffLines` / 二进制模式流式分块 SHA-256 定位首差异偏移，上限 200MB）；通道 0 → 2（`pick-file` / `compare-files`，zod 归包）、壳接线 +1（`tool-mains` 注册）、新错误码 `TD_FILE_READ_FAILED`/`TD_FILE_TOO_LARGE`/`TD_UNSUPPORTED_ENCODING`；spec §1 三项解冻；零新增依赖 | §4.62 验收；纯函数限包 ≥80%；e2e ≥2 用例（词级开关、文件比较双模式与错误态）；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 2 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

@@ -4,13 +4,16 @@ import {
   DIFF_CHAR_LIMIT,
   DIFF_LINE_LIMIT,
   INLINE_CHAR_LIMIT,
+  WORD_LIMIT,
   diffChars,
   diffLines,
   diffStats,
+  diffWords,
   normalizeLine,
   prefixOf,
   sideSegments,
   splitLines,
+  tokenizeWords,
   toUnifiedDiff,
   type DiffOptions,
   type LineChange
@@ -235,5 +238,73 @@ describe('prefixOf', () => {
     expect(prefixOf('equal')).toBe(' ')
     expect(prefixOf('insert')).toBe('+')
     expect(prefixOf('delete')).toBe('-')
+  })
+})
+
+describe('tokenizeWords（M62 词级分词）', () => {
+  it('中英混排：拉丁成词、CJK 逐字、数字成词、空白与符号独立', () => {
+    expect(tokenizeWords('Hello世界 123!')).toEqual(['Hello', '世', '界', ' ', '123', '!'])
+  })
+
+  it('连续空白保留为独立 token 且串联可还原原串', () => {
+    const line = 'a  b\tc'
+    expect(tokenizeWords(line)).toEqual(['a', '  ', 'b', '\t', 'c'])
+    expect(tokenizeWords(line).join('')).toBe(line)
+  })
+
+  it('空串返回空数组', () => {
+    expect(tokenizeWords('')).toEqual([])
+  })
+
+  it('emoji 按码点成词，不拆分代理对', () => {
+    expect(tokenizeWords('👍好')).toEqual(['👍', '好'])
+  })
+})
+
+describe('diffWords（M62 词级行内对比）', () => {
+  it('中英混排公共前后缀保留、中段词级替换', () => {
+    expect(diffWords('hello brave world', 'hello new world')).toEqual([
+      { type: 'equal', text: 'hello ' },
+      { type: 'delete', text: 'brave' },
+      { type: 'insert', text: 'new' },
+      { type: 'equal', text: ' world' }
+    ])
+  })
+
+  it('完全相同合并为单个 equal 片段', () => {
+    expect(diffWords('你好 hi123', '你好 hi123')).toEqual([{ type: 'equal', text: '你好 hi123' }])
+  })
+
+  it('单侧空串', () => {
+    expect(diffWords('', 'abc')).toEqual([{ type: 'insert', text: 'abc' }])
+    expect(diffWords('abc', '')).toEqual([{ type: 'delete', text: 'abc' }])
+    expect(diffWords('', '')).toEqual([])
+  })
+
+  it('中段词级 LCS（预算内）', () => {
+    expect(diffWords('甲乙丙', '甲乙丁')).toEqual([
+      { type: 'equal', text: '甲乙' },
+      { type: 'delete', text: '丙' },
+      { type: 'insert', text: '丁' }
+    ])
+  })
+
+  it('单行超过 WORD_LIMIT 词直接整行替换', () => {
+    const left = '字'.repeat(WORD_LIMIT + 1)
+    const right = '丁'.repeat(WORD_LIMIT + 1)
+    expect(diffWords(left, right)).toEqual([
+      { type: 'delete', text: left },
+      { type: 'insert', text: right }
+    ])
+  })
+
+  it('词级 LCS 超出单元格预算降级为整词替换（交替序列无公共前后缀）', () => {
+    const left = '甲乙'.repeat(500) + '甲'
+    const right = '乙甲'.repeat(500) + '乙'
+    expect(tokenizeWords(left).length).toBe(1001)
+    expect(diffWords(left, right)).toEqual([
+      { type: 'delete', text: left },
+      { type: 'insert', text: right }
+    ])
   })
 })

@@ -1,10 +1,12 @@
 /**
- * @file 文本对比纯函数（行级 LCS + 变更行字符级 LCS；全部同步、无随机、易测）
+ * @file 文本对比纯函数（行级 LCS + 变更行词级/字符级 LCS；全部同步、无随机、易测）
  * @author cuilanchao
  * @date 2026-11-20
- * @description 行级对比（支持忽略空白/大小写）、差异统计、统一 diff 文本生成与行内字符级对比；
+ * @description 行级对比（支持忽略空白/大小写）、差异统计、统一 diff 文本生成、行内字符级
+ *              与词级对比（M62）及文件模式判定 classifyFile（M62）；
  *              超出单元格预算时降级为「整块删除 + 整块插入」，保证大文本下仍为有界耗时。
  */
+import { toolError } from './errors'
 
 /** 单侧行数上限 */
 export const DIFF_LINE_LIMIT = 20_000
@@ -20,6 +22,21 @@ export const INLINE_LCS_MAX_CELLS = 1_000_000
 
 /** 行内字符级对比的单行字符上限（超出直接整行替换） */
 export const INLINE_CHAR_LIMIT = 2_000
+
+/** 行内词级 LCS 单元格预算（M62，超限降级整词替换） */
+export const WORD_LCS_MAX_CELLS = 1_000_000
+
+/** 行内词级对比的单行词数上限（超出直接整行替换，M62） */
+export const WORD_LIMIT = 2_000
+
+/** 文件文本模式字节上限（≤1MB 才进入文本判定，否则直接按二进制对比，M62） */
+export const TEXT_FILE_MAX_BYTES = 1_048_576
+
+/** 文件 NUL 探测窗口（前 8KB，M62） */
+export const FILE_PROBE_BYTES = 8_192
+
+/** 文件对比模式（M62，spec §3） */
+export type FileClass = 'text' | 'binary'
 
 /** 对比选项 */
 export interface DiffOptions {
@@ -331,6 +348,52 @@ export function diffChars(left: string, right: string): InlineSegment[] {
 }
 
 /**
+ * 行内词级分词（M62）：连续拉丁字母成词、连续数字成词、CJK 逐字成词、
+ * 其余非空白字符单成词；空白串保留为独立 token（token 串联可还原原串）
+ * @param line 单行文本
+ */
+export function tokenizeWords(line: string): string[] {
+  // 连续拉丁字母 / 连续数字 / CJK 逐字 / 空白串 / 其余单字符（u 标志按码点匹配）
+  return line.match(/[A-Za-z]+|[0-9]+|[㐀-䶿一-鿿]|\s+|[^\s]/gu) ?? []
+}
+
+/**
+ * 行内词级对比（M62）：复用 lcsDiff 预算保护，超预算降级整词替换；
+ * 单行 >WORD_LIMIT 词直接整行替换；输出与 diffChars 同形状（渲染层零改动）
+ * @param left 左侧行文本
+ * @param right 右侧行文本
+ */
+export function diffWords(left: string, right: string): InlineSegment[] {
+  const a = tokenizeWords(left)
+  const b = tokenizeWords(right)
+  if (a.length > WORD_LIMIT || b.length > WORD_LIMIT) {
+    return [
+      { type: 'delete', text: left },
+      { type: 'insert', text: right }
+    ]
+  }
+
+  let start = 0
+  while (start < a.length && start < b.length && at(a, start) === at(b, start)) start += 1
+  let endA = a.length - 1
+  let endB = b.length - 1
+  while (endA >= start && endB >= start && at(a, endA) === at(b, endB)) {
+    endA -= 1
+    endB -= 1
+  }
+
+  const middleA = a.slice(start, endA + 1)
+  const middleB = b.slice(start, endB + 1)
+  const ops = lcsDiff(middleA, middleB, WORD_LCS_MAX_CELLS) ?? coarseDiff(middleA, middleB)
+
+  const segments: InlineSegment[] = []
+  pushSegment(segments, 'equal', a.slice(0, start).join(''))
+  for (const op of ops) pushSegment(segments, op.type, op.value)
+  pushSegment(segments, 'equal', a.slice(endA + 1).join(''))
+  return segments
+}
+
+/**
  * 行内片段 → 单侧展示文本（左侧剔除 insert，右侧剔除 delete）
  * @param segments 行内片段
  * @param side 展示侧
@@ -351,4 +414,45 @@ export function prefixOf(type: LineChangeType): string {
   if (type === 'insert') return '+'
   if (type === 'delete') return '-'
   return ' '
+}
+
+/**
+ * 文件对比模式判定（M62 纯函数，spec §3）
+ * 文本条件：size ≤1MB 且 head 行数 ≤20,000 且前 8KB 无 NUL；
+ * UTF-16/32 BOM → 抛 TD_UNSUPPORTED_ENCODING；UTF-8 BOM 视为文本（读入侧剥离）；
+ * head 行数为估算（≤1MB 文件为整读内容），全量行数由 diffLines 兜底报 TD_TOO_LARGE
+ * @param head 文件头字节（≤1MB 整读内容，更大文件为前 8KB）
+ * @param size 文件总字节数
+ * @throws 结构化错误 TD_UNSUPPORTED_ENCODING（UTF-16/32 BOM）
+ */
+export function classifyFile(head: Buffer, size: number): FileClass {
+  if (size > TEXT_FILE_MAX_BYTES) return 'binary'
+  if (hasUtf16Or32Bom(head)) throw toolError('TD_UNSUPPORTED_ENCODING')
+
+  const probe = head.subarray(0, FILE_PROBE_BYTES)
+  for (let index = 0; index < probe.length; index += 1) {
+    if (probe[index] === 0) return 'binary'
+  }
+
+  let lineFeeds = 0
+  for (let index = 0; index < head.length; index += 1) {
+    if (head[index] === 0x0a) lineFeeds += 1
+  }
+  if (lineFeeds > DIFF_LINE_LIMIT) return 'binary'
+  return 'text'
+}
+
+/** UTF-16/32 BOM 探测（32 位在前避免被 16 位前缀误判） */
+function hasUtf16Or32Bom(head: Buffer): boolean {
+  if (head.length >= 4) {
+    const isUtf32Le = head[0] === 0xff && head[1] === 0xfe && head[2] === 0x00 && head[3] === 0x00
+    const isUtf32Be = head[0] === 0x00 && head[1] === 0x00 && head[2] === 0xfe && head[3] === 0xff
+    if (isUtf32Le || isUtf32Be) return true
+  }
+  if (head.length >= 2) {
+    const isUtf16Le = head[0] === 0xff && head[1] === 0xfe
+    const isUtf16Be = head[0] === 0xfe && head[1] === 0xff
+    if (isUtf16Le || isUtf16Be) return true
+  }
+  return false
 }

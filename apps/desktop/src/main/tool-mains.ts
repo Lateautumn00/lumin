@@ -25,6 +25,7 @@ import { registerMain as pdfImagesRegisterMain } from '@lumin/tool-pdf-images/no
 import { registerMain as pdfToolkitRegisterMain } from '@lumin/tool-pdf-toolkit/node'
 import { registerMain as qrCodeRegisterMain } from '@lumin/tool-qr-code/node'
 import { registerMain as systemInfoRegisterMain } from '@lumin/tool-system-info/node'
+import { registerMain as textDiffRegisterMain } from '@lumin/tool-text-diff/node'
 import { registerMain as textEditorRegisterMain } from '@lumin/tool-text-editor/node'
 import { registerMain as videoDownloadRegisterMain } from '@lumin/tool-video-download/node'
 import { registerMain as videoPlayerRegisterMain } from '@lumin/tool-video-player/node'
@@ -57,6 +58,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'pdf-toolkit': pdfToolkitRegisterMain,
   'qr-code': qrCodeRegisterMain,
   'system-info': systemInfoRegisterMain,
+  'text-diff': textDiffRegisterMain,
   'text-editor': textEditorRegisterMain,
   'video-download': videoDownloadRegisterMain,
   'video-player': videoPlayerRegisterMain,
