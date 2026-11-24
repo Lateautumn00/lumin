@@ -2,8 +2,8 @@ import type { MainPluginContext } from '@lumin/plugin-api'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
+import { fromMediaUrl, toMediaUrl } from '@lumin/shared'
 import { UNSUPPORTED_HINT } from './formats'
 import { classifyStatError, createNodeDeps, registerMain, registerWith } from './node'
 import type { ResolveResult } from './schema'
@@ -43,7 +43,7 @@ async function tempDir(): Promise<string> {
 }
 
 describe('registerWith resolve', () => {
-  it('合法 mp4 → file:// URL + 元信息', async () => {
+  it('合法 mp4 → 媒体协议 URL + 元信息', async () => {
     const dir = await tempDir()
     const file = join(dir, '剪辑 片段.mp4')
     await writeFile(file, Buffer.from('fake-mp4'))
@@ -51,23 +51,23 @@ describe('registerWith resolve', () => {
     registerWith(harness.ctx, createNodeDeps())
     const result = (await getIpc(harness)({ payload: { path: file } })) as ResolveResult
     expect(result).toEqual({
-      url: pathToFileURL(file).href,
+      url: toMediaUrl(file),
       name: '剪辑 片段.mp4',
       size: 8,
       mime: 'video/mp4'
     })
-    expect(decodeURIComponent(result.url)).toContain('剪辑 片段.mp4')
+    expect(fromMediaUrl(result.url)).toBe(file)
   })
 
-  it('路径含空格/# 时 URL 正确转义', async () => {
+  it('路径含空格/#/中文 时 URL 可无损还原', async () => {
     const dir = await tempDir()
     const file = join(dir, '视频 #1.webm')
     await writeFile(file, Buffer.from('x'))
     const harness = makeCtx()
     registerWith(harness.ctx, createNodeDeps())
     const result = (await getIpc(harness)({ payload: { path: file } })) as ResolveResult
-    expect(result.url).toContain('%20')
-    expect(result.url).toContain('%23')
+    expect(result.url.startsWith('lumin-media://local/')).toBe(true)
+    expect(fromMediaUrl(result.url)).toBe(file)
     expect(result.mime).toBe('video/webm')
   })
 
@@ -75,7 +75,7 @@ describe('registerWith resolve', () => {
     const harness = makeCtx()
     registerWith(harness.ctx, {
       stat: async () => ({ size: 1, isFile: () => true }),
-      toFileUrl: (path) => path
+      toMediaUrl: (path) => path
     })
     await expect(getIpc(harness)({ payload: { path: 'C:\\a.mkv' } })).rejects.toMatchObject({
       code: 'VP_UNSUPPORTED_FORMAT',
@@ -110,7 +110,7 @@ describe('registerWith resolve', () => {
       stat: async () => {
         throw errnoError('EACCES')
       },
-      toFileUrl: (path) => path
+      toMediaUrl: (path) => path
     })
     await expect(getIpc(harness)({ payload: { path: 'C:\\a.mp4' } })).rejects.toMatchObject({
       code: 'VP_RESOLVE_FAILED',
@@ -122,7 +122,7 @@ describe('registerWith resolve', () => {
     const harness = makeCtx()
     registerWith(harness.ctx, {
       stat: async () => ({ size: 1, isFile: () => true }),
-      toFileUrl: () => {
+      toMediaUrl: () => {
         throw new Error('boom')
       }
     })

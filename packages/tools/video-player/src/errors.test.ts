@@ -72,6 +72,14 @@ describe('playbackError（MediaError code 分类映射）', () => {
     expect(isRetryable(err?.code ?? '')).toBe(false)
   })
 
+  it('SRC_NOT_SUPPORTED（4）但文案为 URL 安全校验拦截 → VP_READ_FAILED（可重试）', () => {
+    const raw = 'MEDIA_ELEMENT_ERROR: Media load rejected by URL safety check'
+    const err = playbackError(4, raw)
+    expect(err?.code).toBe('VP_READ_FAILED')
+    expect(err?.detail).toBe(`MediaError 4（SRC_NOT_SUPPORTED）：${raw}`)
+    expect(isRetryable(err?.code ?? '')).toBe(true)
+  })
+
   it('code 缺省 → VP_PLAYBACK_FAILED，detail 标未知', () => {
     const err = playbackError(undefined)
     expect(err?.code).toBe('VP_PLAYBACK_FAILED')

@@ -2,8 +2,8 @@
  * @file video-player（视频播放器）e2e 冒烟：真实 Electron + 真实主进程
  * @author cuilanchao
  * @date 2026-11-22
- * @description 覆盖：mp4/webm 解析、mkv 拒绝、缺失/目录、中文/空格/# 路径 URL 转义、
- *              UI 打开真实 WebM 并播放、倍速切换、不支持格式错误态。
+ * @description 覆盖：mp4/webm 解析、mkv 拒绝、缺失/目录、中文/空格/# 路径的无损编码、
+ *              UI 打开真实 WebM 并播放（原生 controls）、不支持格式错误态。
  *              前置：pnpm -F @lumin/desktop build。
  */
 import fs from 'node:fs'
@@ -83,6 +83,12 @@ async function invokeError(
   )
 }
 
+/** lumin-media://local/<base64url(UTF-16LE)> → 本地路径（与 shared toMediaUrl 同口径） */
+function decodeMediaUrl(url: string): string {
+  const token = url.replace(/^lumin-media:\/\/local\//, '')
+  return Buffer.from(token, 'base64url').toString('utf16le')
+}
+
 /**
  * 用仓库 ffmpeg（lavfi 合成）生成 1 秒 64x64 VP8 WebM（免入库 fixture）
  * @param target 输出绝对路径
@@ -116,14 +122,15 @@ function makeWebm(target: string): Promise<void> {
 }
 
 test.describe('video-player（视频播放器）冒烟', () => {
-  test('IPC：mp4/webm 解析为 file:// URL 与元信息', async () => {
+  test('IPC：mp4/webm 解析为媒体协议 URL 与元信息', async () => {
     const { app, page } = await launch()
     const workDir = freshDir('lumin-vp-e2e-resolve')
     try {
       const mp4 = path.join(workDir, '片段.mp4')
       fs.writeFileSync(mp4, Buffer.from('fake-mp4'))
       const result = await invoke<ResolveResult>(page, 'video-player:resolve', { path: mp4 })
-      expect(result.url.startsWith('file:///')).toBe(true)
+      expect(result.url.startsWith('lumin-media://local/')).toBe(true)
+      expect(decodeMediaUrl(result.url)).toBe(mp4)
       expect(result.name).toBe('片段.mp4')
       expect(result.size).toBe(8)
       expect(result.mime).toBe('video/mp4')
@@ -164,7 +171,7 @@ test.describe('video-player（视频播放器）冒烟', () => {
     }
   })
 
-  test('IPC：中文/空格/# 路径 URL 正确转义', async () => {
+  test('IPC：中文/空格/# 路径无损编码', async () => {
     const { app, page } = await launch()
     const workDir = freshDir('lumin-vp-e2e-encode')
     try {
@@ -173,16 +180,15 @@ test.describe('video-player（视频播放器）冒烟', () => {
       const file = path.join(dir, '视频 #1.webm')
       fs.writeFileSync(file, Buffer.from('x'))
       const result = await invoke<ResolveResult>(page, 'video-player:resolve', { path: file })
-      expect(result.url).toContain('%20')
-      expect(result.url).toContain('%23')
-      expect(decodeURIComponent(result.url)).toContain('视频 #1.webm')
+      expect(result.url.startsWith('lumin-media://local/')).toBe(true)
+      expect(decodeMediaUrl(result.url)).toBe(file)
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true })
       await app.close()
     }
   })
 
-  test('UI：打开真实 WebM 播放、倍速切换、换一个视频回到空态', async () => {
+  test('UI：打开真实 WebM 播放、换一个视频回到空态', async () => {
     test.skip(!fs.existsSync(ffmpeg), '需要 binaries/download/ffmpeg.exe（fetch-binaries）')
     const { app, page } = await launch()
     const workDir = freshDir('lumin-vp-e2e-play')
@@ -197,20 +203,17 @@ test.describe('video-player（视频播放器）冒烟', () => {
       await expect(page.getByRole('heading', { name: '演示 视频.webm' })).toBeVisible()
       const video = page.locator('video')
       await expect(video).toBeVisible()
-      await expect(video).toHaveAttribute('src', /\.webm$/)
+      await expect(video).toHaveAttribute('src', /^lumin-media:\/\/local\/[A-Za-z0-9_-]+$/)
       const src = await video.getAttribute('src')
-      expect(decodeURIComponent(src ?? '')).toContain('演示 视频.webm')
+      expect(decodeMediaUrl(src ?? '')).toBe(file)
+      // 倍速/全屏由原生控制栏提供，页面不再有自定义控件
+      await expect(video).toHaveAttribute('controls', '')
 
       // 真实可解码：readyState >= 2（HAVE_CURRENT_DATA）且无 MediaError
       await page.waitForFunction(() => {
         const el = document.querySelector('video')
         return el !== null && el.readyState >= 2 && el.error === null
       })
-
-      // 倍速：选 2x 后 playbackRate 同步为 2
-      await page.locator('.n-base-selection').click()
-      await page.locator('.n-base-select-option').filter({ hasText: '2x' }).click()
-      expect(await video.evaluate((el: HTMLVideoElement) => el.playbackRate)).toBe(2)
 
       await page.getByRole('button', { name: '换一个视频' }).click()
       await expect(page.getByText('拖拽视频到此处，或点击选择', { exact: false })).toBeVisible()

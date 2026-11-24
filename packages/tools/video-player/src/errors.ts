@@ -45,10 +45,17 @@ const MEDIA_ERR_LABEL: Readonly<Record<number, string>> = {
 }
 
 /**
+ * 传输层被拦截（如 Chromium URL safety check 拒绝 file:// 媒体）也报 MediaError 4，
+ * 但这不是编解码问题，不能提示「编码不受支持」。
+ */
+const LOAD_BLOCKED_PATTERN = /url safety check|media load rejected/i
+
+/**
  * `<video>` 的 MediaError → 结构化错误（spec §6：code 分支映射）
  *
  * 修复误报「损坏」：MediaError 4（SRC_NOT_SUPPORTED）是容器合法但编码不受支持
- * （如 HEVC in mp4），与文件损坏是两回事，单独映射为 VP_CODEC_UNSUPPORTED。
+ * （如 HEVC in mp4），与文件损坏是两回事，单独映射为 VP_CODEC_UNSUPPORTED；
+ * 若原始文案表明是 URL 安全校验拦截，则归入读取失败（可重试）。
  *
  * @param code `video.error?.code`（1 ABORTED / 2 NETWORK / 3 DECODE / 4 SRC_NOT_SUPPORTED）
  * @param raw 浏览器 `MediaError.message` 原始文案（可空）
@@ -63,6 +70,9 @@ export function playbackError(code: number | undefined, raw?: string): Structure
       : `MediaError ${code}${label === undefined ? '' : `（${label}）`}`
   const detail = raw === undefined || raw === '' ? head : `${head}：${raw}`
   if (code === 2) return toolError('VP_READ_FAILED', detail)
+  if (code === 4 && raw !== undefined && LOAD_BLOCKED_PATTERN.test(raw)) {
+    return toolError('VP_READ_FAILED', detail)
+  }
   if (code === 4) return toolError('VP_CODEC_UNSUPPORTED', detail)
   return toolError('VP_PLAYBACK_FAILED', detail)
 }

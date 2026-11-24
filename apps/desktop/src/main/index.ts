@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { LUMIN_INVOKE_CHANNEL, TASK_EVENT_CHANNEL, UPDATE_EVENT_CHANNEL } from '@lumin/shared'
 import { DEV_CSP, PROD_CSP } from './csp'
 import { createIpcBus } from './ipc-bus'
+import { registerMediaHandler, registerMediaScheme } from './media-protocol'
 import { loadTools, type ToolRegistration } from './plugin-host'
 import { createTaskQueue } from './task-queue'
 import { registerShellChannels } from './shell-channels'
@@ -13,6 +14,9 @@ import { createSettingsService } from './services/settings'
 import { createUpdaterService } from './services/updater'
 import { toolMains } from './tool-mains'
 import { toolManifests } from '../tool-manifests'
+
+// 自定义协议 scheme 必须在 app ready 前登记（handler 在 bootstrap 内 ready 后注册）
+registerMediaScheme()
 
 let mainWindow: BrowserWindow | null = null
 /** 与 renderer tokens 同步：暗色 --lumin-color-bg=#0b1220 / 亮色 #f8fafc（main.css 单源） */
@@ -162,6 +166,7 @@ async function bootstrap(): Promise<void> {
   // 移除 Electron 默认原生菜单栏（Q60）；dev 快捷键见 createWindow 内 before-input-event
   Menu.setApplicationMenu(null)
   applyCsp()
+  registerMediaHandler()
   createWindow()
 
   app.on('activate', () => {

@@ -1,14 +1,15 @@
 /**
- * @file video-player 主进程逻辑（resolve：校验 + file:// URL）
+ * @file video-player 主进程逻辑（resolve：校验 + lumin-media:// URL）
  * @author cuilanchao
  * @date 2026-11-22
  * @description 仅允许浏览器原生可解格式；不转码、不复制文件。renderer 用 <video> 直接播放。
+ *              URL 走壳级媒体协议（shared `toMediaUrl`）：dev 的 http origin 与 UNC 路径下
+ *              Chromium 会拒绝 file:// 媒体，协议由主进程流式回源。
  */
 import { stat } from 'node:fs/promises'
 import { basename } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import type { MainPluginContext, RegisterMain } from '@lumin/plugin-api'
-import { errnoCode, makeError, type StructuredError } from '@lumin/shared'
+import { errnoCode, makeError, toMediaUrl, type StructuredError } from '@lumin/shared'
 import type { ZodType } from 'zod'
 import { toolError } from './errors'
 import { mimeOf, UNSUPPORTED_HINT, videoExtensionOf } from './formats'
@@ -21,7 +22,7 @@ import {
 /** 工具可用的外部资源（生产实现见 createNodeDeps；测试注入假件） */
 export interface VideoPlayerDeps {
   stat(path: string): Promise<{ size: number; isFile(): boolean }>
-  toFileUrl(path: string): string
+  toMediaUrl(path: string): string
 }
 
 /**
@@ -64,7 +65,7 @@ export function registerWith(ctx: MainPluginContext, deps: VideoPlayerDeps): voi
 
     let url: string
     try {
-      url = deps.toFileUrl(path)
+      url = deps.toMediaUrl(path)
     } catch (err) {
       throw toolError('VP_RESOLVE_FAILED', errnoCode(err) || String(err))
     }
@@ -78,11 +79,11 @@ export function registerWith(ctx: MainPluginContext, deps: VideoPlayerDeps): voi
   })
 }
 
-/** 生产依赖：真实 fs + file URL */
+/** 生产依赖：真实 fs + 媒体协议 URL */
 export function createNodeDeps(): VideoPlayerDeps {
   return {
     stat: (path) => stat(path),
-    toFileUrl: (path) => pathToFileURL(path).href
+    toMediaUrl
   }
 }
 

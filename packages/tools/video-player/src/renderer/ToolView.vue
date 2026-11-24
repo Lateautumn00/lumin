@@ -2,13 +2,14 @@
   @file 视频播放器主视图（空态/加载态/报错态三态强制）
   @author cuilanchao
   @date 2026-11-22
-  @description 仅浏览器原生格式（MP4/WebM/OGV/OGG）；主进程只把路径解析为 file:// URL，
-               不复制、不转码；<video> 直接播放，支持倍速与全屏。
+  @description 仅浏览器原生格式（MP4/WebM/OGV/OGG）；主进程把路径解析为 lumin-media:// 协议 URL，
+               由壳流式回源（dev 的 http origin 与 UNC 路径下 file:// 会被 Chromium 拦截），
+               不复制、不转码；播放/暂停/进度/音量/倍速/全屏一律用原生 <video controls>。
 -->
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
-import { NButton, NSelect } from 'naive-ui'
-import { AlertTriangle, Maximize, RotateCcw, Video } from '@lucide/vue'
+import { computed, ref } from 'vue'
+import { NButton } from 'naive-ui'
+import { AlertTriangle, RotateCcw, Video } from '@lucide/vue'
 import { formatBytes, toStructuredError, type StructuredError } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
 import { isRetryable, playbackError, toolError } from '../errors'
@@ -21,25 +22,12 @@ defineOptions({ name: 'VideoPlayerToolView' })
 /** 页面阶段：空 / 解析中 / 就绪 / 报错 */
 type Phase = 'empty' | 'loading' | 'ready' | 'error'
 
-/** 倍速选项（spec §3） */
-const RATE_OPTIONS = [
-  { label: '0.5x', value: 0.5 },
-  { label: '0.75x', value: 0.75 },
-  { label: '1x', value: 1 },
-  { label: '1.25x', value: 1.25 },
-  { label: '1.5x', value: 1.5 },
-  { label: '1.75x', value: 1.75 },
-  { label: '2x', value: 2 }
-]
-
 const phase = ref<Phase>('empty')
 const filePath = ref('')
 const video = ref<ResolveResult | null>(null)
 const errInfo = ref<StructuredError | null>(null)
 const buffering = ref(false)
-const rate = ref(1)
 const videoEl = ref<HTMLVideoElement | null>(null)
-const stageEl = ref<HTMLDivElement | null>(null)
 
 const metaText = computed(() =>
   video.value === null ? '' : `${video.value.mime} · ${formatBytes(video.value.size)}`
@@ -65,8 +53,6 @@ async function openFile(path: string): Promise<void> {
     const result = await resolve({ path })
     video.value = result
     phase.value = 'ready'
-    await nextTick()
-    if (videoEl.value !== null) videoEl.value.playbackRate = rate.value
   } catch (err) {
     showError(err)
   }
@@ -119,24 +105,6 @@ function onWaiting(): void {
 
 function onPlaying(): void {
   buffering.value = false
-}
-
-/** 切换倍速并即时生效 */
-function applyRate(value: number): void {
-  rate.value = value
-  if (videoEl.value !== null) videoEl.value.playbackRate = value
-}
-
-/** 全屏播放容器 */
-async function toggleFullscreen(): Promise<void> {
-  const target = stageEl.value
-  if (target === null) return
-  try {
-    if (document.fullscreenElement === null) await target.requestFullscreen()
-    else await document.exitFullscreen()
-  } catch (err) {
-    showError(err)
-  }
 }
 </script>
 
@@ -204,45 +172,28 @@ async function toggleFullscreen(): Promise<void> {
       </div>
     </div>
 
-    <div v-else class="flex min-h-0 flex-1 flex-col gap-3">
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="text-xs text-[var(--lumin-color-text-secondary)]">倍速</span>
-        <NSelect
-          :value="rate"
-          :options="RATE_OPTIONS"
-          size="small"
-          class="w-24"
-          :aria-label="'播放倍速'"
-          @update:value="applyRate"
-        />
-        <NButton size="small" secondary @click="toggleFullscreen">
-          <template #icon><Maximize :size="16" /></template>
-          全屏
-        </NButton>
-      </div>
-      <div
-        ref="stageEl"
-        class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-black"
+    <div
+      v-else
+      class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[var(--lumin-radius-lg)] border border-[var(--lumin-color-border)] bg-black"
+    >
+      <video
+        ref="videoEl"
+        v-if="video !== null"
+        :src="video.url"
+        controls
+        class="h-full w-full"
+        @error="onVideoError"
+        @waiting="onWaiting"
+        @canplay="onPlaying"
+        @playing="onPlaying"
+      />
+      <p
+        v-if="buffering"
+        class="absolute bottom-3 left-3 rounded-[var(--lumin-radius-md)] bg-black/60 px-2 py-1 text-xs text-white"
+        aria-live="polite"
       >
-        <video
-          ref="videoEl"
-          v-if="video !== null"
-          :src="video.url"
-          controls
-          class="h-full w-full"
-          @error="onVideoError"
-          @waiting="onWaiting"
-          @canplay="onPlaying"
-          @playing="onPlaying"
-        />
-        <p
-          v-if="buffering"
-          class="absolute bottom-3 left-3 rounded-[var(--lumin-radius-md)] bg-black/60 px-2 py-1 text-xs text-white"
-          aria-live="polite"
-        >
-          缓冲中…
-        </p>
-      </div>
+        缓冲中…
+      </p>
     </div>
   </section>
 </template>

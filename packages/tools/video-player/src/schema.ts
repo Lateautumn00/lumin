@@ -13,7 +13,7 @@ export const resolvePayloadSchema = z.object({
 
 export type ResolvePayload = z.infer<typeof resolvePayloadSchema>
 
-/** resolve 结果：file:// URL + 展示元信息 */
+/** resolve 结果：媒体协议 URL + 展示元信息 */
 export const resolveResultSchema = z.object({
   url: z.string().min(1),
   name: z.string().min(1),
