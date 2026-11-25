@@ -9,6 +9,7 @@ import { chunkPaths } from '../tree'
 import { emptyDirs } from './client'
 import { useTask } from './use-task'
 import TaskFeedback from './TaskFeedback.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 
 const props = defineProps<{ root: string }>()
 const emit = defineEmits<{ 'update:root': [string] }>()
@@ -156,7 +157,9 @@ async function trashSelected(): Promise<void> {
           :disabled="busy"
           @update:checked="(checked) => toggle(dir, checked)"
         />
-        <span class="text-sm break-all">{{ dir }}</span>
+        <span class="text-sm">
+          <PathLink :path="dir" />
+        </span>
       </div>
     </div>
   </div>

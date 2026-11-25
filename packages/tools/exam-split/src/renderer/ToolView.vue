@@ -5,6 +5,7 @@ import { FileText } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import { isRetryable } from '../errors'
 import type { CropPayload, SplitPayload } from '../schema'
 import {
@@ -462,9 +463,9 @@ onUnmounted(detach)
           />
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-medium" :title="inputName">{{ inputName }}</p>
-            <p class="truncate text-xs text-[var(--lumin-color-text-secondary)]" :title="inputPath">
-              {{ inputPath }}
-            </p>
+            <div class="min-w-0">
+              <PathLink :path="inputPath" :reveal="false" />
+            </div>
           </div>
           <NButton size="small" quaternary :disabled="busy" @click="resetInput">更换</NButton>
         </div>

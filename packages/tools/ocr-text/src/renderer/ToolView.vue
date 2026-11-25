@@ -8,6 +8,7 @@ import { Copy, FileText, RefreshCw, Save, Trash2 } from '@lucide/vue'
 import { NAlert, NButton, NInput, NRadioButton, NRadioGroup, NTag } from 'naive-ui'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import { isRetryable } from '../errors'
 import { MAX_BATCH_FILES, MAX_IMAGE_BYTES, type ExportMode, type RecognizeResult } from '../schema'
@@ -675,7 +676,7 @@ onUnmounted(() => {
       {{ notice }}
     </p>
     <p v-if="outputs.length > 0" class="break-all text-sm text-[var(--lumin-color-text-secondary)]">
-      已导出 {{ outputs.length }} 个文件：{{ outputs[0] }}
+      已导出 {{ outputs.length }} 个文件：<PathLink :path="outputs[0] ?? ''" :reveal="false" />
       <NButton text type="primary" @click="revealFirst">打开所在文件夹</NButton>
     </p>
   </div>

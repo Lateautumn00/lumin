@@ -4,6 +4,7 @@
 import { computed, ref } from 'vue'
 import { NButton, NInput, NInputNumber, NSpin, NText } from 'naive-ui'
 import { Copy, FolderOpen, Play, Square } from '@lucide/vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import type { AccessLog } from '../schema'
 
 const props = defineProps<{
@@ -96,7 +97,9 @@ async function copyAddress(): Promise<void> {
         <NButton size="tiny" quaternary @click="copyAddress">
           <Copy class="mr-1 h-3 w-3" />{{ copied ? '已复制' : '复制' }}
         </NButton>
-        <NText depth="3" class="text-xs">根目录：{{ status.root ?? root }}</NText>
+        <NText depth="3" class="text-xs">
+          根目录：<PathLink :path="status.root ?? root" :reveal="false" />
+        </NText>
       </div>
 
       <div class="flex flex-col gap-1">

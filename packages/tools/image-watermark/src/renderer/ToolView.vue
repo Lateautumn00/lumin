@@ -18,6 +18,7 @@ import {
 } from 'naive-ui'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import {
   anchorPosition,
@@ -655,7 +656,7 @@ onUnmounted(() => {
             :key="path"
             class="break-all text-sm text-[var(--lumin-color-text-secondary)]"
           >
-            {{ path }}
+            <PathLink :path="path" :reveal="false" />
           </li>
           <li
             v-if="result.outputs.length > 5 && !showAllOutputs"

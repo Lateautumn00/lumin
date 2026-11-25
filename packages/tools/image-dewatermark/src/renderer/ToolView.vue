@@ -11,6 +11,7 @@ import { NAlert, NButton, NInput, NRadio, NRadioGroup, NSlider } from 'naive-ui'
 import { Eraser, FolderOpen, RefreshCw, Trash2, X } from '@lucide/vue'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import type { StructuredError, TaskEvent } from '@lumin/shared'
 import {
   MAX_DIMENSION,
@@ -577,7 +578,9 @@ onUnmounted(() => {
 
         <NAlert v-if="result" type="success" :bordered="false">
           <div class="flex flex-col gap-2">
-            <span class="text-sm text-[var(--lumin-color-text)]">已生成：{{ result.output }}</span>
+            <span class="text-sm text-[var(--lumin-color-text)]">
+              已生成：<PathLink :path="result.output" :reveal="false" />
+            </span>
             <span
               v-for="warning in result.warnings"
               :key="warning"

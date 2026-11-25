@@ -42,6 +42,7 @@ import {
 } from '@lucide/vue'
 import type { StructuredError } from '@lumin/shared'
 import { createEditor, type CursorPosition, type EditorHandle } from '@lumin/ui/create-editor'
+import PathLink from '@lumin/ui/PathLink.vue'
 import { buildHtmlDocument, renderMarkdown, type MarkdownOutcome } from '../markdown'
 import { applyFormat, type MarkdownFormatCommand } from '../editor-format'
 import { generateTypes, type DeclarationStyle } from '../json-to-ts'
@@ -585,12 +586,20 @@ onBeforeUnmount(() => {
       <h1 class="text-base font-semibold">Markdown 工具</h1>
       <div class="flex min-w-0 items-center gap-2 text-xs text-[var(--lumin-color-text-secondary)]">
         <FolderOpen class="h-3 w-3 shrink-0" aria-hidden="true" />
+        <PathLink
+          v-if="outputDir !== ''"
+          :path="outputDir"
+          :reveal="false"
+          class="max-w-56"
+          data-testid="output-dir"
+        />
         <span
+          v-else
           class="max-w-56 truncate"
-          :title="outputDir === '' ? '默认输出目录：userData/markdown' : outputDir"
+          title="默认输出目录：userData/markdown"
           data-testid="output-dir"
         >
-          {{ outputDir === '' ? '默认输出目录' : outputDir }}
+          默认输出目录
         </span>
         <NButton size="tiny" quaternary data-testid="choose-dir" @click="chooseDirectory">
           选择
@@ -740,7 +749,19 @@ onBeforeUnmount(() => {
                 data-testid="md-statusbar"
               >
                 <span class="flex min-w-0 items-center gap-1">
-                  <span class="max-w-40 truncate" :title="mdFilePath" data-testid="md-file">
+                  <PathLink
+                    v-if="mdFilePath !== ''"
+                    :path="mdFilePath"
+                    :label="mdFileNameLabel"
+                    :reveal="false"
+                    class="max-w-40"
+                    data-testid="md-file"
+                  />
+                  <span
+                    v-else
+                    class="max-w-40 truncate"
+                    data-testid="md-file"
+                  >
                     {{ mdFileNameLabel }}
                   </span>
                   <span aria-hidden="true">·</span>

@@ -9,6 +9,7 @@ import type { TouchResult } from '../schema'
 import { touch } from './client'
 import { useTask } from './use-task'
 import TaskFeedback from './TaskFeedback.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 
 const props = defineProps<{ root: string }>()
 const emit = defineEmits<{ 'update:root': [string] }>()
@@ -129,21 +130,23 @@ function run(dryRun: boolean): void {
       <NText v-if="result.total === 0" depth="3" class="text-xs">没有符合条件的文件</NText>
       <div v-if="result.sample.length > 0 && result.updated === 0" class="flex flex-col gap-1">
         <NText depth="3" class="text-xs">命中样例（前 20 条）</NText>
-        <span
+        <div
           v-for="path in result.sample"
           :key="path"
-          class="text-xs break-all text-[var(--lumin-color-text-secondary)]"
-          >{{ path }}</span
+          class="text-xs"
         >
+          <PathLink :path="path" :reveal="false" />
+        </div>
       </div>
       <div v-if="result.failures.length > 0" class="flex flex-col gap-1">
         <NText depth="3" class="text-xs">失败明细</NText>
-        <span
+        <div
           v-for="failure in result.failures.slice(0, 20)"
           :key="failure.path"
-          class="text-xs break-all text-[var(--lumin-color-error)]"
-          >{{ failure.path }}（{{ failure.message }}）</span
+          class="text-xs"
         >
+          <PathLink :path="failure.path" :reveal="false" />（{{ failure.message }}）
+        </div>
       </div>
     </div>
   </div>

@@ -14,6 +14,7 @@ import {
   type TaskEvent
 } from '@lumin/shared'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import DropZone from '@lumin/ui/DropZone.vue'
 import {
   defaultArchiveName,
@@ -392,8 +393,8 @@ onUnmounted(detach)
           <Archive class="h-3.5 w-3.5 shrink-0 text-[var(--lumin-color-text-secondary)]" />
           <div class="min-w-0 flex-1">
             <div class="truncate text-sm" :title="path">{{ fileNameOf(path) }}</div>
-            <div class="truncate text-xs text-[var(--lumin-color-text-secondary)]" :title="path">
-              {{ path }}
+            <div class="truncate text-xs">
+              <PathLink :path="path" :reveal="false" />
             </div>
           </div>
           <NButton
@@ -501,7 +502,9 @@ onUnmounted(detach)
       class="flex flex-col gap-2 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] p-3"
     >
       <div class="flex items-center justify-between gap-2">
-        <NText class="break-all text-sm">已生成 {{ packResult.outputZip }}</NText>
+        <div class="break-all text-sm">
+          已生成 <PathLink :path="packResult.outputZip" :reveal="false" />
+        </div>
         <NButton size="small" @click="reveal(packResult.outputZip)">定位产物</NButton>
       </div>
       <NText depth="3" class="text-xs">
@@ -516,7 +519,9 @@ onUnmounted(detach)
       class="flex flex-col gap-2 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] p-3"
     >
       <div class="flex items-center justify-between gap-2">
-        <NText class="break-all text-sm">已解压到 {{ unpackResult.targetDir }}</NText>
+        <div class="break-all text-sm">
+          已解压到 <PathLink :path="unpackResult.targetDir" :reveal="false" />
+        </div>
         <NButton size="small" @click="reveal(unpackResult.targetDir)">打开目标目录</NButton>
       </div>
       <NText depth="3" class="text-xs">

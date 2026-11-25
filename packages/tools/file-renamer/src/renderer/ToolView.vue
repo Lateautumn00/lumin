@@ -7,6 +7,7 @@ import { NButton, NCheckbox, NEmpty, NInput, NInputNumber, NText, NTag } from 'n
 import { CircleAlert, FolderOpen, RotateCcw, X } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import { apply, config, scan, setDir, undo } from './client'
 import { errorMessage, isRetryable } from '../errors'
 import { buildRenamePlan, createDefaultRules, type PlanEntry, type RenameRules } from '../rules'
@@ -555,7 +556,9 @@ onUnmounted(detach)
             @update:checked="toggle(entry.from, $event)"
           />
           <div class="min-w-0 flex-1">
-            <div class="truncate text-sm">{{ entry.from }}</div>
+            <div class="truncate text-sm">
+              <PathLink :path="entry.from" :reveal="false" />
+            </div>
             <div class="truncate text-xs text-[var(--lumin-color-text-secondary)]">
               {{ metaOf(entry.from) }} · → {{ entry.to }}
               <template v-if="entry.reason !== undefined"> · {{ entry.reason }}</template>
@@ -619,7 +622,7 @@ onUnmounted(detach)
         :key="fail.from"
         class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-error, #e88080)] px-3 py-1.5"
       >
-        <NText type="error" class="block truncate text-sm">{{ fail.from }}</NText>
+        <PathLink :path="fail.from" :reveal="false" />
         <NText depth="3" class="block text-xs">
           {{ errorMessage(fail.code)
           }}<template v-if="fail.message !== ''"> （{{ fail.message }}）</template>

@@ -12,6 +12,7 @@ import { NButton, NInput, NModal, NSelect, NSwitch } from 'naive-ui'
 import { AlertTriangle, FileOutput, PencilLine, RotateCcw, Save, Search } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TextEncoding } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import { splitPath, type EolKind } from '../formats'
 import type { OpenResult } from '../schema'
 import { open as openDocument, save as saveDocument, saveAs as saveAsDocument } from './client'
@@ -503,11 +504,14 @@ onUnmounted(() => {
                 ●
               </span>
             </div>
-            <p
-              class="truncate text-[11px] text-[var(--lumin-color-text-tertiary)]"
-              :title="filePath"
-            >
-              {{ filePath === '' ? '尚未保存到磁盘' : filePath }}
+            <PathLink
+              v-if="filePath !== ''"
+              :path="filePath"
+              :reveal="false"
+              class="text-[11px]"
+            />
+            <p v-else class="truncate text-[11px] text-[var(--lumin-color-text-tertiary)]">
+              尚未保存到磁盘
             </p>
           </div>
         </div>

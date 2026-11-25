@@ -40,6 +40,8 @@ export interface LuminBridge {
   getPathForFile(file: File): string
   /** 在资源管理器中定位文件/目录（shell.showItemInFolder） */
   revealPath(path: string): Promise<void>
+  /** 用系统默认程序直接打开文件（shell.openPath；Win/macOS/Linux 通用，等价点击 URL） */
+  openPath(path: string): Promise<void>
   /** 移入系统回收站（shell.trashItem；单批 ≤200，逐条容错，不做永久删除） */
   trashPaths(paths: readonly string[]): Promise<TrashOutcome>
   /** 系统目录选择对话框；用户取消返回 null（壳通用能力，多工具复用） */

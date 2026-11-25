@@ -136,6 +136,22 @@ describe('registerShellChannels', () => {
     })
   })
 
+  it('shell:open 直接打开文件；系统拒绝 → INTERNAL；非法参数 → INVALID_PAYLOAD', async () => {
+    const { call } = createHarness()
+    await expect(call('lumin:shell:open', { path: 'C:\\a\\b.pdf' })).resolves.toBeUndefined()
+    expect(shell.openPath).toHaveBeenCalledWith('C:\\a\\b.pdf')
+
+    vi.mocked(shell.openPath).mockResolvedValueOnce('没有默认程序')
+    await expect(call('lumin:shell:open', { path: 'C:\\a\\b.pdf' })).rejects.toMatchObject({
+      code: 'INTERNAL',
+      detail: '没有默认程序'
+    })
+
+    await expect(call('lumin:shell:open', { path: '' })).rejects.toMatchObject({
+      code: 'INVALID_PAYLOAD'
+    })
+  })
+
   it('shell:pick-directory 返回选中目录；取消 → null；非法参数 → INVALID_PAYLOAD', async () => {
     const { call } = createHarness()
     await expect(call('lumin:shell:pick-directory', { title: '选择输出目录' })).resolves.toBe(

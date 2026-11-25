@@ -20,7 +20,7 @@ const cancelSchema = z.object({
   taskId: z.string().min(1)
 })
 
-const revealPathSchema = z.object({
+const pathSchema = z.object({
   path: z.string().min(1)
 })
 
@@ -82,9 +82,17 @@ export function registerShellChannels(bus: IpcBus, deps: ShellChannelDeps): void
   })
 
   bus.registerSync('lumin:shell:reveal', 'lumin', 'shell:reveal', ({ payload }) => {
-    const parsed = revealPathSchema.safeParse(payload)
+    const parsed = pathSchema.safeParse(payload)
     if (!parsed.success) throw makeError('INVALID_PAYLOAD', '定位路径参数无效')
     shell.showItemInFolder(parsed.data.path)
+  })
+
+  // 单击路径直接打开文件（等价点击 URL）：路径原样交给系统，Win/macOS/Linux 通用
+  bus.registerSync('lumin:shell:open', 'lumin', 'shell:open', async ({ payload }) => {
+    const parsed = pathSchema.safeParse(payload)
+    if (!parsed.success) throw makeError('INVALID_PAYLOAD', '打开路径参数无效')
+    const error = await shell.openPath(parsed.data.path)
+    if (error !== '') throw makeError('INTERNAL', '打开文件失败', error)
   })
 
   bus.registerSync(

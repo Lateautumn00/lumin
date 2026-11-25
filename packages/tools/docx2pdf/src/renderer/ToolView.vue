@@ -11,6 +11,7 @@ import { Download, FileText, FolderOpen, RefreshCw, RotateCcw, X } from '@lucide
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import { isRetryable } from '../errors'
 import { MAX_BATCH_FILES, OFFICE_ACCEPT } from '../formats'
 import type { BatchConvertResult, StatusResult } from '../schema'
@@ -280,13 +281,9 @@ onUnmounted(() => {
               {{ sourceLabel }}
             </NText>
           </div>
-          <p
-            v-if="status?.path"
-            class="mt-1 truncate text-xs text-[var(--lumin-color-text-secondary)]"
-            :title="status.path"
-          >
-            {{ status.path }}
-          </p>
+          <div v-if="status?.path" class="mt-1 min-w-0">
+            <PathLink :path="status.path" />
+          </div>
           <NText v-if="status?.customInvalid" type="warning" class="mt-1 block text-xs">
             自定义路径无效，已回退系统检测
           </NText>
@@ -359,7 +356,9 @@ onUnmounted(() => {
             class="shrink-0 text-[var(--lumin-color-text-secondary)]"
             aria-hidden="true"
           />
-          <span class="min-w-0 flex-1 truncate text-sm" :title="file.path">{{ file.name }}</span>
+          <div class="min-w-0 flex-1">
+            <PathLink :path="file.path" :label="file.name" :reveal="false" />
+          </div>
           <NButton
             size="tiny"
             quaternary
@@ -401,10 +400,9 @@ onUnmounted(() => {
         <li
           v-for="item in result.outputs"
           :key="item.outputPath"
-          class="break-all text-xs text-[var(--lumin-color-text-secondary)]"
-          :title="item.outputPath"
+          class="break-all text-xs"
         >
-          {{ item.outputPath }}
+          <PathLink :path="item.outputPath" :reveal="false" />
         </li>
       </ul>
       <ul
@@ -413,7 +411,7 @@ onUnmounted(() => {
         aria-label="转换失败列表"
       >
         <li v-for="item in failureList" :key="item.inputPath" class="text-xs">
-          <span class="font-medium">{{ item.inputPath }}</span>
+          <PathLink :path="item.inputPath" :reveal="false" />
           <span class="ml-1 text-[var(--lumin-color-text-secondary)]">
             {{ item.code }} · {{ item.message }}
           </span>

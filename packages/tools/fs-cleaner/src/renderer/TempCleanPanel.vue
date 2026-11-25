@@ -11,6 +11,7 @@ import { chunkPaths, parseExtensions } from '../tree'
 import { tempClean } from './client'
 import { useTask } from './use-task'
 import TaskFeedback from './TaskFeedback.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 
 const props = defineProps<{ root: string; extensionsText: string }>()
 const emit = defineEmits<{ 'update:root': [string]; 'update:extensionsText': [string] }>()
@@ -207,8 +208,9 @@ async function trashSelected(): Promise<void> {
         />
         <div class="flex min-w-0 flex-col">
           <span class="text-sm">{{ fileNameOf(file.path) }}</span>
-          <span class="text-xs break-all text-[var(--lumin-color-text-secondary)]">
-            {{ file.path }} · {{ formatBytes(file.size) }} · {{ formatTime(file.mtimeMs) }}
+          <span class="text-xs">
+            <PathLink :path="file.path" :reveal="false" /> · {{ formatBytes(file.size) }} ·
+            {{ formatTime(file.mtimeMs) }}
           </span>
         </div>
       </div>

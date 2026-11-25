@@ -8,6 +8,7 @@ import { ArrowDown, ArrowUp, Files, FolderOpen, X } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import { isRetryable } from '../errors'
 import {
   COMPRESS_LEVELS,
@@ -543,7 +544,9 @@ onUnmounted(detach)
             :key="path"
             class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
           >
-            <div class="min-w-0 flex-1 truncate text-sm">{{ index + 1 }}. {{ fileName(path) }}</div>
+            <div class="min-w-0 flex-1 truncate text-sm">
+              {{ index + 1 }}. <PathLink :path="path" :label="fileName(path)" :reveal="false" />
+            </div>
             <div class="flex items-center gap-1">
               <NButton
                 size="tiny"
@@ -1032,7 +1035,9 @@ onUnmounted(detach)
           :key="path"
           class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
         >
-          <div class="min-w-0 flex-1 truncate text-sm">{{ fileName(path) }}</div>
+          <div class="min-w-0 flex-1 truncate text-sm">
+            <PathLink :path="path" :label="fileName(path)" :reveal="false" />
+          </div>
           <NButton size="tiny" quaternary @click="reveal(path)">
             <FolderOpen class="h-3.5 w-3.5" />
           </NButton>

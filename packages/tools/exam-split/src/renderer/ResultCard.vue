@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { NButton, NText } from 'naive-ui'
 import { FolderOpen, RotateCcw } from '@lucide/vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 
 defineProps<{
   title: string
@@ -19,9 +20,8 @@ const emit = defineEmits<{ open: []; reset: [] }>()
         v-for="path in paths"
         :key="path"
         class="text-xs break-all text-[var(--lumin-color-text-secondary)]"
-        :title="path"
       >
-        {{ path }}
+        <PathLink :path="path" />
       </li>
     </ul>
     <div class="mt-3 flex gap-2">

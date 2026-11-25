@@ -20,6 +20,7 @@ import {
 import { Copy, FolderOpen, RefreshCw, Save } from '@lucide/vue'
 import { toStructuredError, type StructuredError } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import { buildQrContent } from '../payload'
 import { isRetryable } from '../errors'
 import {
@@ -589,9 +590,13 @@ onUnmounted(() => {
           <div class="flex flex-col gap-1">
             <span class="text-xs text-[var(--lumin-color-text-secondary)]">输出目录</span>
             <div class="flex items-center gap-2">
-              <NText depth="3" class="flex-1 break-all text-xs">
-                {{ outputDir === '' ? '加载中…' : outputDir }}
-              </NText>
+              <PathLink
+                v-if="outputDir !== ''"
+                :path="outputDir"
+                :reveal="false"
+                class="flex-1"
+              />
+              <NText v-else depth="3" class="flex-1 break-all text-xs">加载中…</NText>
               <NButton size="small" @click="chooseDir">选择目录</NButton>
             </div>
           </div>
@@ -600,7 +605,7 @@ onUnmounted(() => {
             保存到文件
           </NButton>
           <div v-if="savedPath !== ''" class="flex items-center gap-2">
-            <NText class="flex-1 break-all text-xs">{{ savedPath }}</NText>
+            <PathLink :path="savedPath" :reveal="false" class="flex-1" />
             <NButton size="small" @click="revealSaved">
               <template #icon><FolderOpen :size="14" /></template>
               打开所在文件夹

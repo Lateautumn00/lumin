@@ -21,6 +21,7 @@ import { Film, FolderOpen, RotateCcw, X } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import { config, process, probe, revealPath, saveOutputDir } from './client'
 import { errorMessage, isRetryable } from '../errors'
 import { formatClock, parseTimecode } from '../media'
@@ -888,7 +889,13 @@ onUnmounted(detach)
         class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
       >
         <div class="min-w-0 flex-1">
-          <div class="truncate text-sm">{{ item.output.replace(/^.*[\\/]/, '') }}</div>
+          <div class="truncate text-sm">
+            <PathLink
+              :path="item.output"
+              :label="item.output.replace(/^.*[\\/]/, '')"
+              :reveal="false"
+            />
+          </div>
           <div class="text-xs text-[var(--lumin-color-text-secondary)]">
             {{ formatClock(item.durationSec) }} · {{ formatBytes(item.beforeBytes) }} →
             {{ formatBytes(item.afterBytes) }}

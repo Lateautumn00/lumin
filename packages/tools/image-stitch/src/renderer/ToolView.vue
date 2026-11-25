@@ -19,6 +19,7 @@ import {
 } from 'naive-ui'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import { planLayout, planOverLimit, type LayoutPlan } from '../contract'
 import { isRetryable } from '../errors'
@@ -665,9 +666,9 @@ onUnmounted(() => {
           type="success"
           :title="`已生成 ${result.width} × ${result.height} · ${result.count} 张图`"
         />
-        <p class="break-all text-sm text-[var(--lumin-color-text-secondary)]">
-          {{ result.outputPath }}
-        </p>
+        <div class="break-all">
+          <PathLink :path="result.outputPath" :reveal="false" />
+        </div>
         <div class="flex gap-2">
           <NButton quaternary @click="reveal">
             <template #icon><FolderOpen :size="16" /></template>
@@ -834,9 +835,7 @@ onUnmounted(() => {
               :key="item.path"
               class="flex items-center justify-between gap-2 rounded-[var(--lumin-radius-sm)] border border-[var(--lumin-color-border)] px-2 py-1"
             >
-              <span class="flex-1 truncate text-xs text-[var(--lumin-color-text)]">
-                {{ item.path }}
-              </span>
+              <PathLink :path="item.path" :reveal="false" class="flex-1" />
               <span class="shrink-0 text-xs text-[var(--lumin-color-text-secondary)]">
                 {{ item.width }} × {{ item.height }}
               </span>
