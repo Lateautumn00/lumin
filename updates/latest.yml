@@ -1,8 +1,9 @@
-version: 0.9.0
-files:
-  - url: https://gitee.com/Lateautumn00/lumin/releases/download/v0.9.0/Lumin-0.9.0-win-x64-setup.exe
-    sha512: QzR3lU69tIZNDK/JseT+u4wCcBlGLGXFG0TggTLC7PUnwLTbC+Ty1d399iAlKxt2nSC3SMmxnbgNKMwagKgREA==
-    size: 213689615
-path: https://gitee.com/Lateautumn00/lumin/releases/download/v0.9.0/Lumin-0.9.0-win-x64-setup.exe
-sha512: QzR3lU69tIZNDK/JseT+u4wCcBlGLGXFG0TggTLC7PUnwLTbC+Ty1d399iAlKxt2nSC3SMmxnbgNKMwagKgREA==
-releaseDate: '2026-11-19T03:47:39.468Z'
+# 自动更新源（generic provider，客户端读取本文件）
+# v0.1.0 首个开源版本：先置为与 app 版本一致的空条目，客户端不会提示更新。
+# 发布时执行 pnpm dist，用产物 dist/latest.yml 覆盖本文件（真实 sha512 / size / 下载地址以产物为准），
+# 并将安装包与 .blockmap 上传到对应 Release，详见 docs/release。
+version: 0.1.0
+files: []
+path: ''
+sha512: ''
+releaseDate: '2026-11-25T00:00:00.000Z'

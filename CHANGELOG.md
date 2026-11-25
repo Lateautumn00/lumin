@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-25
+
+> 首个开源版本。此前内部迭代记录（M0–M83）合并收录于本版本条目，历史里程碑编号保留以便追溯。
+
 ### Added
 
 - M83 抖音 / 快手直链下载（`@lumin/tool-media-convert` 下载页签，**零新增依赖/二进制**）：新增 `src/download/platforms/`（`common` / `douyin` / `kuaishou` / `index`），主进程用全局 `fetch` 拉分享页 HTML（iPhone UA、15s 超时、5MB 上限、follow 重定向）解析**真实播放直链**，命中平台则跳过 cookie 解析、直链交既有 yt-dlp 下载（`-f b --add-header UA/Referer -o 定名路径`），进度 / 暂停续传 / 取消 / 历史全复用——修复二期实测「抖音需签名、快手无 yt-dlp extractor」的失败面。抖音：`v.douyin.com` 短链 302 + `aweme_id` → `iesdouyin.com/share/video/{id}/` 的 `_ROUTER_DATA` 取 `video.play_addr.url_list`；**真机实测（2026-11-25）分享页无 cookie 时不再下发 `videoInfoRes`**，故解析前先 `POST https://ttwid.bytedance.com/ttwid/union/register/` 取**匿名访客态 `ttwid`**（非账号 cookie，现取现用、不落盘不池化）随请求下发；**默认去水印**（`playwm`→`play`），`ratio` 映射 `best/1080p→1080p`、`audio-mp3→720p`（实测 `default` 单条 1.08GB 原始母版，弃用）；快手：页面 `.mp4` 直链按 `hd15`/`_hd` → 标清 → 其余优先级挑选（token 有 TTL，解析后立即下载）。失败归因新增 `VD_LINK_EXPIRED` / `VD_LOGIN_REQUIRED` / `VD_REGION_BLOCKED` / `VD_FORBIDDEN` 四码与 `classifyEngineError`（登录/地区/403/无 extractor/作品失效五条分支）；`probe` 命中平台时不再调用 yt-dlp；新增 `allocateDirectOutput`（`safeFileTitle` + `uniqueFileName` 大小写不敏感去重）。直链层真实网络实测通过（短链→`aweme_id=7707583901452419835`→`play` + `ratio=1080p` 返回 `video/mp4` 119,222,946 B；yt-dlp 识别单格式 mp4）；单测 151/151（platforms 35 例、直链 6 例、ttwid 4 例、归因 5 例），`platforms` 聚合覆盖率 92.59% statements / 82.55% branches；**同时修复二期遗留缺陷**：`--print after_move:filepath` 隐含 `--quiet` 导致 `--progress-template` 输出被吞（进度条恒为 0 但最终下载成功），两条 start 参数路径统一显式追加 `--progress`，进度模板扩为五段（优先 `total_bytes`、`NA` 时回退 `total_bytes_estimate`，兼容直链源与 B站分片源）；**不复用** res-downloader 的系统代理 + 根证书 MITM、**不接** galaxy-downloader 的闭源 API、不做签名逆向/cookie 池；plan Q83/§4.83/M83、AGENTS §11、`docs/research/downloader-optimization.md` §7、`docs/spec|smoke/media-convert-download.md` §10/§5 已同步
