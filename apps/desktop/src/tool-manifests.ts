@@ -12,10 +12,7 @@ import { manifest as filePreviewManifest } from '@lumin/tool-file-preview/manife
 import { manifest as fileRenamerManifest } from '@lumin/tool-file-renamer/manifest'
 import { manifest as fileScannerManifest } from '@lumin/tool-file-scanner/manifest'
 import { manifest as fsCleanerManifest } from '@lumin/tool-fs-cleaner/manifest'
-import { manifest as imageDewatermarkManifest } from '@lumin/tool-image-dewatermark/manifest'
 import { manifest as imageToolboxManifest } from '@lumin/tool-image-toolbox/manifest'
-import { manifest as imageStitchManifest } from '@lumin/tool-image-stitch/manifest'
-import { manifest as imageWatermarkManifest } from '@lumin/tool-image-watermark/manifest'
 import { manifest as lifeCalculatorManifest } from '@lumin/tool-life-calculator/manifest'
 import { manifest as markdownToolManifest } from '@lumin/tool-markdown-tool/manifest'
 import { manifest as mediaConvertManifest } from '@lumin/tool-media-convert/manifest'
@@ -47,9 +44,6 @@ export const toolManifests: readonly ToolManifest[] = [
   docx2pdfManifest,
   examSplitManifest,
   imageToolboxManifest,
-  imageStitchManifest,
-  imageWatermarkManifest,
-  imageDewatermarkManifest,
   pdfImagesManifest,
   pdfToolkitManifest,
   printManifest,

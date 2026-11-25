@@ -62,6 +62,18 @@ import {
   buildRotateOutputName
 } from './rotate'
 import { buildCropEncodeArgs, buildCropFilterArgs, buildCropOutputName } from './crop'
+import {
+  createNodeDeps as createWatermarkDeps,
+  registerWith as registerWatermarkWith
+} from './watermark/node'
+import {
+  createNodeDeps as createDewatermarkDeps,
+  registerWith as registerDewatermarkWith
+} from './dewatermark/node'
+import {
+  createNodeDeps as createStitchDeps,
+  registerWith as registerStitchWith
+} from './stitch/node'
 
 /** 可注入依赖（单测传假件；docx2pdf/video-download node.ts 同口径） */
 export interface ImageToolboxDeps {
@@ -540,17 +552,7 @@ async function processOne(
       payload.mode === 'rotate' ? buildRotateEncodeArgs(ext) : buildCropEncodeArgs(ext)
     const result = await env.deps.runProcess({
       command: env.ffmpegPath,
-      args: [
-        '-y',
-        '-v',
-        'error',
-        '-i',
-        file,
-        ...filterArgs,
-        ...staticArgs,
-        ...encodeArgs,
-        output
-      ],
+      args: ['-y', '-v', 'error', '-i', file, ...filterArgs, ...staticArgs, ...encodeArgs, output],
       signal: env.signal,
       maxOutputChars: 256 * 1024
     })
@@ -661,4 +663,10 @@ async function processOne(
 }
 
 /** 生产注册入口（壳 tool-mains.ts 调用；测试用 registerWith 注入假 deps） */
-export const registerMain: RegisterMain = (ctx) => registerWith(ctx, createDefaultDeps())
+export const registerMain: RegisterMain = (ctx) => {
+  registerWith(ctx, createDefaultDeps())
+  // M72：水印 / 去水印 / 拼接三页签主进程通道（通道名已加 page 前缀避免与本包冲突）
+  registerWatermarkWith(ctx, createWatermarkDeps())
+  registerDewatermarkWith(ctx, createDewatermarkDeps())
+  registerStitchWith(ctx, createStitchDeps())
+}

@@ -82,6 +82,7 @@
 | Q69 | 文件打印（M68，2026-11-25 用户拍板）           | **新增独立工具 `@lumin/tool-print`「文件打印」（id `print`，`category: document`，`icon: printer`，`order: 72`）**：输入 Office 六格式（doc/docx/xls/xlsx/ppt/pptx）/ PDF / 图片（png/jpg/jpeg/webp/bmp/gif）；Office 经 `soffice` → PDF 后打印，PDF 走 Electron 内置 PDFium 视图（隐藏窗口 `plugins:true`）打印、失败栅格兜底，图片经本地 HTML 包装打印；**统一系统打印对话框（`silent:false`），不做应用内预览、不做静默打印**；批量 ≤50 份逐份串行；临时产物落 `userData/temp/lumin-print/`（启动清 >24h、退出清理）；**零新增依赖、零新增二进制**（复用 `node-kit/office` 与 `node-kit/pdf`）；错误码 `PR_*`；详见 §4.68                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Q70 | 页面切分（M69，2026-11-25 用户拍板）           | **`exam-split` 在 OCR 页签内置「切成两页」处理方式（默认选中，与「识别切题」互斥切换；不新增第三个页签；零新增依赖、零新增二进制）**：单文件输入（PDF / png/jpg/jpeg/webp）；**纯像素检测**（灰度 → Otsu → 纸张亮区包围盒（仅深色边带裁边）→ 纸面竖向墨迹投影找 33%–67% 中央装订沟，低于均值 35% 且宽 ≥0.8% 页宽才算沟，无沟回退 0.5）；**竖版（宽 < 高×1.15）→ `PAGE_NOT_SPREAD`**，不静默硬切；PDF 逐页渲染检测后**两次独立 `copyPages`** 得左/右副本 → `setMediaBox`/`setCropBox` 收窄为半页 → **单文件 2N 页（左→右）**；图片按纸面裁左/右 → **同格式编码**（PNG 无损 / JPEG·WebP q95）左右成对写盘；产物 `{原名}_对半切.pdf` / `{原名}_左.ext`+`{原名}_右.ext`；详见 §4.69 |
 | Q71 | 图片三件套合并（M70，2026-11-25 用户拍板「先做图片三件套合并，用户能直接感知入口精简」） | **`image-rotate` / `image-crop` 整包合并进 `image-toolbox`**：新增「旋转」「裁剪」两 Tab（`TabId` 扩为 compress/convert/resize/rotate/crop/effect/gif），删除两个独立工具包、两个侧边栏入口、两个薄壳页与两个 e2e 文件；`process` discriminated union 增 `mode:'rotate'|'crop'`，`historyModeSchema` 同步；错误码统一 `IT_*`（原 `IR_*`/`IC_*` 归并）；产物扩展名沿用 `compressOutputExt`（gif/webp→webp，动图取首帧）；**零新增依赖/二进制**；详见 §4.70 |
+| Q72 | 图片剩余三件套合并（M72，2026-11-25 用户拍板「继续优化其他功能模块」） | **`image-watermark` / `image-dewatermark` / `image-stitch` 整包合并进 `image-toolbox`**：新增「水印」「去水印」「拼接」三 Tab（`TabId` 扩为 compress/convert/resize/rotate/crop/effect/gif/watermark/dewatermark/stitch），删除三个独立工具包、三个侧边栏入口、三个薄壳页与三个 e2e 文件（图片入口 4 → 1）；通道收敛为 `image-toolbox:watermark|dewatermark|stitch|split` + `{页签}-config` / `{页签}-set-output-dir`；错误码保留 `IW_*` / `IDW_*` / `IS_*` 前缀；**零新增依赖/二进制**；详见 §4.72 |
 | —   | 硬约束                                         | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -1000,6 +1001,18 @@ lumin/
 
 ---
 
+### 4.72 图片剩余三件套合并（M72，2026-11-25 R8 登记）
+
+- **决策（用户拍板 2026-11-25）**：把 `@lumin/tool-image-watermark`、`@lumin/tool-image-dewatermark`、`@lumin/tool-image-stitch` **三包整包合并**进 `@lumin/tool-image-toolbox`（id `image-toolbox`），新增「水印 / 去水印 / 拼接」三 Tab；**删除三个旧包**及侧边栏入口、薄壳页与 e2e（侧边栏图片入口 4 → 1）。**零新增依赖、零新增二进制**（ffmpeg / @napi-rs/canvas 沿用）。
+- **包内结构**：`src/watermark|dewatermark|stitch/` 各自保留 `schema / contract / errors / *.worker / node`；`src/renderer/clients/{watermark,dewatermark,stitch}.ts` 为三页签 invoke 封装；`renderer/tabs/{WatermarkTab,DewatermarkTab,StitchTab}.vue` 为三页签视图；父 `ToolView.vue` 用 `v-show` 保留页签状态与在跑任务。
+- **通道收敛**：统一前缀 `image-toolbox:{action}`，按页签加前缀——`watermark` / `watermark-config` / `watermark-set-output-dir`、`dewatermark` / `dewatermark-config` / `dewatermark-set-output-dir`、`stitch` / `split` / `stitch-config` / `stitch-set-output-dir`（共 10 通道）。
+- **错误码**：保留原 `IW_*` / `IDW_*` / `IS_*` 前缀（降低回归风险），未统一改名；取消统一 `CANCELLED`。
+- **设置记忆**：共用 `tools.image-toolbox.*` 命名空间，键位互不重叠（`outputDir`；`watermarkOutputDir`；`dewatermarkOutputDir`；`stitchOutputDir`）；旧工具 id 的存量设置不迁移。
+- **注册点清理**：`tool-manifests.ts`、`main/tool-mains.ts`、`electron.vite.config.ts` 三端 alias、`apps/desktop/package.json`、`vitest.config.ts` 覆盖率分组移除三包；删除 `renderer/src/tools/{image-watermark,image-dewatermark,image-stitch}.vue` 与三个 e2e，用例并入 `apps/desktop/e2e/image-toolbox-smoke.spec.ts`；删除 `docs/spec|smoke` 三套旧文档，内容并入 `docs/spec|smoke/image-toolbox.md`。
+- **验收**：三包测试全部并入新包且本包覆盖率 ≥80%；e2e 断言三页签加载/空态、水印批量出图与原图不变、去水印框选出图、拼接出图与长图按份数切分；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步。
+
+---
+
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
 
 ### 5.1 精选 8 份 → AGENTS.md（已生成于根目录）
@@ -1114,6 +1127,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M68 v5.16** | 文件打印（§4.68，2026-11-25 用户拍板）：新工具 `@lumin/tool-print`——Office 六格式 / PDF / 图片三类输入，PDFium 视图优先 + 栅格兜底，统一系统打印对话框（`silent:false`），批量 ≤50 逐份串行；4 通道（status / prepare / show / cleanup）；错误码 `PR_*`；零新增依赖、零新增二进制 | §4.68 验收；本包覆盖率 ≥80%；e2e dry-run；R2 八类映射 + 真机出纸人工项；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 2 天 |
 | **M70 v5.17** | 图片三件套合并（§4.70，2026-11-25 用户拍板）：`image-rotate`（M33）/`image-crop`（M35）**整包并入 `image-toolbox`** 为「旋转」「裁剪」两 Tab，删除两包与侧边栏入口/薄壳页/e2e；`process` union + `historyModeSchema` 增 rotate/crop；错误码统一 `IT_*`；产物扩展名沿用 `compressOutputExt`，动图取首帧；零新增依赖/二进制 | §4.70 验收；toolbox 覆盖率 ≥80%；e2e 旋转尺寸/翻转冲突命名/裁剪尺寸/混合失败码；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
 | **M71 v5.18** | 文件扫描套件合并（§4.71，2026-11-25 用户拍板）：`file-hasher`（M13）/`duplicate-finder`（M18）/`folder-compare`（M24）**三包整包并入 `file-scanner`** 为「文件校验 / 重复文件 / 目录对比」三页签，删除三包与侧边栏入口/薄壳页/e2e（3 入口 → 1）；9 通道 `file-scanner:*`；错误码保留 `FH_*`/`DF_*`/`FC_*`；零新增依赖/二进制 | §4.71 验收；本包覆盖率 ≥80%；e2e 三页签加载/四算法向量/期望哈希/重复分组/对比分类与内容比较/错误码/取消/并发/强杀恢复；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
+| **M72 v5.19** | 图片剩余三件套合并（§4.72，2026-11-25 用户拍板）：`image-watermark`（M20）/`image-dewatermark`（M31）/`image-stitch`（M14/M40）**三包整包并入 `image-toolbox`** 为「水印 / 去水印 / 拼接」三 Tab，删除三包与侧边栏入口/薄壳页/e2e（图片入口 4 → 1）；10 通道 `image-toolbox:*`；错误码保留 `IW_*`/`IDW_*`/`IS_*`；零新增依赖/二进制 | §4.72 验收；本包覆盖率 ≥80%；e2e 三页签加载/水印批量出图与原名保护/去水印框选出图/拼接出图与按份数切分；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

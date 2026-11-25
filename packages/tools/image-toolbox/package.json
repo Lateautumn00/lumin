@@ -36,6 +36,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
+  "devDependencies": {
+    "@napi-rs/canvas": "1.1.1"
+  },
   "dependencies": {
     "@lucide/vue": "1.72.0",
     "@lumin/node-kit": "workspace:*",

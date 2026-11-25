@@ -609,7 +609,10 @@ test('页签标签可见（naive-ui 自闭合 pane 渲染回归）', async () =>
       ['rotate', '旋转'],
       ['crop', '裁剪'],
       ['effect', '调整'],
-      ['gif', 'GIF']
+      ['gif', 'GIF'],
+      ['watermark', '水印'],
+      ['dewatermark', '去水印'],
+      ['stitch', '拼接']
     ] as const) {
       const tab = page.locator(`.n-tabs-tab[data-name="${name}"]`)
       await expect(tab).toBeVisible()
@@ -678,9 +681,7 @@ test.describe('image-toolbox 旋转/裁剪（M70 §4.48 合并 image-rotate/imag
       const second = (await runTask(page, 'image-toolbox:process', payload)) as {
         outputs: { output: string }[]
       }
-      expect(firstOf(second.outputs).output).toBe(
-        path.join(outDir, '横向 样例_水平翻转 (1).png')
-      )
+      expect(firstOf(second.outputs).output).toBe(path.join(outDir, '横向 样例_水平翻转 (1).png'))
     } finally {
       fs.rmSync(inDir, { recursive: true, force: true })
       await app.close()
@@ -816,6 +817,125 @@ test.describe('image-toolbox 旋转/裁剪（M70 §4.48 合并 image-rotate/imag
       ])
     } finally {
       fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+})
+
+test.describe('image-toolbox 水印/去水印/拼接（M72 §4.72 合并 image-watermark/image-dewatermark/image-stitch）', () => {
+  test.beforeAll(async () => {
+    test.skip(!fs.existsSync(ffmpeg), '缺少 ffmpeg（先跑 node scripts/fetch-binaries.mjs）')
+  })
+
+  test('M72.1 水印页签：两张 PNG 批量加水印，产物落盘且原图不变', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lumin-e2e-wm-'))
+    const out = path.join(dir, 'out')
+    const a = path.join(dir, '图 一.png')
+    const b = path.join(dir, '图二.png')
+    await makeImage(['-f', 'lavfi', '-i', 'color=c=red:s=120x80:d=1', '-frames:v', '1', a])
+    await makeImage(['-f', 'lavfi', '-i', 'color=c=blue:s=120x80:d=1', '-frames:v', '1', b])
+    const beforeA = fs.readFileSync(a)
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      // 页签挂载即读 config，先记忆输出目录再进工具页
+      await page.evaluate(
+        (target) =>
+          window.lumin.invoke('image-toolbox:watermark-set-output-dir', { outputDir: target }),
+        out
+      )
+      await clickSidebarTool(page, '图片工具箱')
+      await page.locator('.n-tabs-tab[data-name="watermark"]').click()
+      const tab = page.getByTestId('watermark-tab')
+      await tab.locator('input[type="file"]').setInputFiles([a, b])
+      await expect(tab.getByText('图 一.png')).toBeVisible()
+      await tab.getByPlaceholder('输入水印文字（1–100 字）').fill('Lumin 水印')
+      await tab.getByRole('button', { name: '开始加水印' }).click()
+      await expect(tab.getByText('成功 2 张 · 失败 0 张')).toBeVisible({ timeout: 30000 })
+      expect(fs.readdirSync(out)).toHaveLength(2)
+      expect(fs.readFileSync(a).equals(beforeA)).toBe(true)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('M72.2 去水印页签：框选后快速修复出图，原图不变', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lumin-e2e-dw-'))
+    const out = path.join(dir, 'out')
+    const image = path.join(dir, '待去水印 图.png')
+    await makeImage(['-f', 'lavfi', '-i', 'color=c=green:s=240x160:d=1', '-frames:v', '1', image])
+    const before = fs.readFileSync(image)
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await page.evaluate(
+        (target) =>
+          window.lumin.invoke('image-toolbox:dewatermark-set-output-dir', { outputDir: target }),
+        out
+      )
+      await clickSidebarTool(page, '图片工具箱')
+      await page.locator('.n-tabs-tab[data-name="dewatermark"]').click()
+      const tab = page.getByTestId('dewatermark-tab')
+      await tab.locator('input[type="file"]').setInputFiles(image)
+      const stage = tab.getByTestId('dewatermark-stage')
+      await expect(stage).toBeVisible()
+      const box = await stage.boundingBox()
+      if (box === null) throw new Error('画布不可见')
+      await page.mouse.move(box.x + 20, box.y + 20)
+      await page.mouse.down()
+      await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5, { steps: 5 })
+      await page.mouse.up()
+      await expect(tab.getByText(/已框选 1\//)).toBeVisible()
+      await tab.getByTestId('dewatermark-start').click()
+      await expect(tab.getByText(/已生成：/)).toBeVisible({ timeout: 30000 })
+      expect(fs.readdirSync(out).length).toBeGreaterThan(0)
+      expect(fs.readFileSync(image).equals(before)).toBe(true)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('M72.3 拼接页签：两图拼接出图 + 长图按份数切 3 段', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lumin-e2e-st-'))
+    const out = path.join(dir, 'out')
+    const a = path.join(dir, '左 图.png')
+    const b = path.join(dir, '右图.png')
+    const tall = path.join(dir, '长 图.png')
+    await makeImage(['-f', 'lavfi', '-i', 'color=c=red:s=120x80:d=1', '-frames:v', '1', a])
+    await makeImage(['-f', 'lavfi', '-i', 'color=c=blue:s=120x80:d=1', '-frames:v', '1', b])
+    await makeImage(['-f', 'lavfi', '-i', 'color=c=yellow:s=300x300:d=1', '-frames:v', '1', tall])
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await page.evaluate(
+        (target) =>
+          window.lumin.invoke('image-toolbox:stitch-set-output-dir', { outputDir: target }),
+        out
+      )
+      await clickSidebarTool(page, '图片工具箱')
+      await page.locator('.n-tabs-tab[data-name="stitch"]').click()
+      const tab = page.getByTestId('stitch-tab')
+      // 拼接
+      await tab.locator('input[type="file"]').setInputFiles([a, b])
+      await expect(tab.getByText('左 图.png')).toBeVisible()
+      await tab.getByRole('button', { name: '开始拼接' }).click()
+      await expect(tab.getByText(/已生成 \d+ × \d+ · 2 张图/)).toBeVisible({ timeout: 30000 })
+      expect(fs.readdirSync(out)).toHaveLength(1)
+      // 长图分割
+      await tab.locator('.n-tabs-tab[data-name="split"]').click()
+      await tab.locator('input[type="file"]').setInputFiles(tall)
+      await expect(tab.getByText('长 图.png')).toBeVisible()
+      await tab.getByTestId('split-mode').getByText('按份数').click()
+      await tab.locator('[data-testid="split-parts"] input').fill('3')
+      await tab.getByTestId('split-run').click()
+      await expect(tab.getByTestId('split-result')).toContainText('已切分 3 段', {
+        timeout: 30000
+      })
+      expect(fs.readdirSync(out)).toHaveLength(4)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
       await app.close()
     }
   })

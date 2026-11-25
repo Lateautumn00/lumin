@@ -142,3 +142,39 @@
 
 - 无新增依赖/二进制；`pnpm build` 实测 `out/renderer/assets/image-toolbox-DNH2nNyb.js` **87,400 B raw**（gzip 约 20KB 量级），较 M63 基线增量来自旋转/裁剪参数面板与纯函数，远低于 200KB gzip，R5 达标。
 - 零新增运行时资产。
+
+---
+
+## 11. M72：水印 / 去水印 / 拼接合并冒烟（2026-11-25）
+
+> 本节并入原 `docs/smoke/image-watermark.md` / `image-dewatermark.md` / `image-stitch.md` 后删除；三工具已无独立入口。
+
+### 11.1 正向链路（e2e 自动化，`image-toolbox-smoke.spec.ts`）
+
+- **水印**：两张 PNG（含中文+空格文件名）→ 水印 Tab → 输入「Lumin 水印」→ 开始加水印 → 结果态「成功 2 张 · 失败 0 张」；输出目录新增 2 个文件；原图字节较操作前完全一致。
+- **去水印**：240×160 PNG → 去水印 Tab → 画布拖拽框选（左上 → 中心）→ 快速修复 → 结果态「已生成：…」；输出目录非空；原图字节不变。
+- **拼接**：两张 PNG → 拼接 Tab → 开始拼接 → 结果态「已生成 W × H · 2 张图」；输出 1 个文件；300×300 长图 → 长图分割（按份数 3）→「已切分 3 段」；输出累计 4 个文件，序号 `01/02/03` 连续。
+- 自动化结果：`image-toolbox-smoke.spec.ts` **16 passed（25.6s）**，含原有 13 例与 M72 新增 3 例。
+
+### 11.2 R2 八类映射（增量）
+
+1. 中文/空格路径：M72.1/M72.3 的 `图 一.png`、`左 图.png`、`长 图.png` 均实测出图。
+2. 文件被占用：主进程预检 `stat`/解码失败 → `IW_FILE_UNSUPPORTED` / `IDW_*` / `IS_*`，单张失败不中断批次（水印任务逐张累计成功/失败）。
+3. 加密/损坏文件：损坏解码失败映射 `IW_FILE_CORRUPT` / `IDW_FILE_CORRUPT` / `IS_FILE_CORRUPT`（原三包单测覆盖）。
+4. 超大文件：单张 >40MB → `*_FILE_TOO_LARGE`；尺寸 >10000 → `*_DIMENSION_TOO_LARGE`。
+5. 任务取消：三段式 `lumin:task:cancel` → `CANCELLED`；已完成产物保留（原三包 e2e 覆盖，合并后通道行为不变）。
+6. 并发溢出：沿用壳任务队列 `QUEUE_FULL`。
+7. 磁盘满：worker 写盘失败 → `IW_OUTPUT_WRITE_FAILED` / `IDW_OUTPUT_WRITE_FAILED` / `IS_OUTPUT_WRITE_FAILED`。
+8. 断电恢复：产物先写临时名再改名；原图只读不改动，重跑按 `(1)` 去重（M72.1 已验证同名递增）。
+
+### 11.3 R5 体积记录（M72 合并后）
+
+- 无新增第三方依赖/二进制（`@napi-rs/canvas`、ffmpeg 沿用旧三包）；
+- `pnpm build` 实测 `out/renderer/assets/image-toolbox-arrN7NQX.js` **235,273 B raw / 50.4KB gzip**（合并前四包合计约 48KB gzip 量级，含原共享代码），远低于 200KB gzip，R5 达标；
+- 零新增运行时资产；`@napi-rs/canvas` 仅主进程 worker 使用，不计入 renderer chunk。
+
+### 11.4 单测与覆盖率
+
+- 迁入三包全部单测：`src/watermark/*`、`src/dewatermark/*`、`src/stitch/*`、`renderer/clients/*.test.ts`；
+- `pnpm vitest run packages/tools/image-toolbox` **400 passed**（合并后本包全部用例）；
+- 覆盖率分组已收敛为 `packages/tools/image-toolbox/src/**/*.ts` 80%（删除三旧包分组）。

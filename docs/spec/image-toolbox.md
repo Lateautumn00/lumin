@@ -288,3 +288,62 @@ export const collectFolderResultSchema = z.object({
 3. e2e：并入 `image-toolbox-smoke.spec.ts`（旋转尺寸变化、翻转冲突命名、比例/自由裁剪尺寸、损坏+不支持混合批次）；页签标签清单含「旋转」「裁剪」。
 4. 注册点清理：`tool-manifests.ts` / `tool-mains.ts` / `electron.vite.config.ts` / `apps/desktop/package.json` / `vitest.config.ts` 移除两包；删除薄壳页与两个 e2e 文件。
 5. chunk 增量 <200KB gzip；`pnpm gate` 全绿。
+
+---
+
+## M72 追加：水印 / 去水印 / 拼接三 Tab（2026-11-25，plan Q72/§4.72）
+
+> 原 `docs/spec/image-watermark.md`、`image-dewatermark.md`、`image-stitch.md` 已并入本节后删除；三个旧工具 id 不再存在。
+
+### 页签与通道对照
+
+| Tab（`TabId`） | 视图                                  | 通道（`image-toolbox:{action}`）                                       | 错误码前缀 |
+| -------------- | ------------------------------------- | ---------------------------------------------------------------------- | ---------- |
+| `watermark`    | `renderer/tabs/WatermarkTab.vue`      | `watermark`（任务）、`watermark-config`、`watermark-set-output-dir`    | `IW_*`     |
+| `dewatermark`  | `renderer/tabs/DewatermarkTab.vue`    | `dewatermark`（任务）、`dewatermark-config`、`dewatermark-set-output-dir` | `IDW_*`    |
+| `stitch`       | `renderer/tabs/StitchTab.vue`（内含「拼接 / 长图分割」二级 Tab） | `stitch`、`split`（任务）、`stitch-config`、`stitch-set-output-dir` | `IS_*`     |
+
+- 设置键（`tools.image-toolbox.*`）：`watermarkOutputDir`、`dewatermarkOutputDir`、`stitchOutputDir`（默认分别为 `userData/image-watermark`、`userData/image-dewatermark`、`userData/image-stitch`）。
+- 三页签与原有 7 页签同页共存；`v-show` 保留文件选择、框选与在跑任务状态；新页签不参与原有共享处理链路（`runProcess`）。
+
+### 水印 Tab（原 image-watermark）
+
+| 项       | 规则                                                                                     |
+| -------- | ---------------------------------------------------------------------------------------- |
+| 输入     | 多选 PNG/JPG/WebP，单次 ≤100 张，单张 ≤40MB；DropZone 与追加选择                          |
+| 水印类型 | 文字（1–100 字）或图片（PNG/JPG/WebP ≤5MB）                                              |
+| 位置     | 九宫格锚点（默认右下）+ 平铺模式（`tile`）                                                |
+| 参数     | 透明度 0–100%（钳制）、旋转角度（归一化 0–359）、文字字号百分比 / 图片宽度百分比          |
+| 输出     | 指定输出目录；同名自动 `(1)` 递增；扩展名沿用输入编码；原图不改动                        |
+| 界面     | 空态 DropZone；加载态逐张进度 + 取消；报错态 `IW_*` 中文文案 + 重试/详情；结果态「成功 N 张 · 失败 M 张」 |
+
+### 去水印 Tab（原 image-dewatermark）
+
+| 项       | 规则                                                                       |
+| -------- | -------------------------------------------------------------------------- |
+| 输入     | 单张 PNG/JPG/WebP ≤40MB、≤10000×10000                                      |
+| 框选     | 预览画布拖拽新建；选中后移动 / 删除；最多 20 个区域，最小 2px              |
+| 填充模式 | `inpaint` 快速修复 / `blur` 模糊（半径 4–40，默认 12）/ `solid` 纯色       |
+| 输出     | 指定目录；编码 png/jpeg/webp 可选；原图不改动                              |
+| 界面     | 空态选择图片引导；加载态进度 + 取消；报错态 `IDW_*` + 重试/详情；结果态展示产物路径 |
+
+### 拼接 Tab（原 image-stitch，含 M40 长图分割）
+
+| 项       | 规则                                                                                                  |
+| -------- | ----------------------------------------------------------------------------------------------------- |
+| 拼接输入 | 多选 PNG/JPG/WebP，≤100 张，单张 ≤40MB；顺序可调整                                                     |
+| 拼接模式 | `vertical` 纵向 / `horizontal` 横向 / `grid` 网格（列数 2–8）                                          |
+| 尺寸模式 | `first` 以首图 / `max` 以最大 / `fixed` 固定边长（100–10000px）                                        |
+| 版式参数 | 间距 0–100px、外边距 0–100px、编码 png/jpeg/webp、质量 60–100                                          |
+| 长图分割 | 单张长图；`height` 按高度（50–30000px）或 `parts` 按份数（2–20）；输出 `名称-01.ext` 序列             |
+| 输出     | 指定目录；拼接与分割均原图不改动                                                                      |
+| 界面     | 空态 DropZone；加载态「量尺寸 / 绘制」两阶段进度 + 取消；报错态 `IS_*` + 重试/详情；结果态含尺寸与张数、分割段数 |
+
+### 验收（M72）
+
+1. 三 Tab 标签渲染与切换正常，切换后原文件选择与在跑任务不丢失
+2. 水印批量出图数量正确、同名递增、原图字节不变
+3. 去水印框选出图，产物落盘，原图字节不变
+4. 拼接出图尺寸与模式一致；长图按份数切 3 段且 `01/02/03` 序号连续
+5. 缺参/编码不支持/目录不可写分别映射 `IW_*` / `IDW_*` / `IS_*`；取消为 `CANCELLED`
+6. 本包覆盖率 ≥80%，e2e 全绿，`pnpm gate` 全绿

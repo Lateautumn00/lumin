@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// 图片工具箱主视图（M6 一期：压缩/转换/缩放三 Tab）
-// 作者：cuilanchao · 修改时间：2026-11-18
+// 图片工具箱主视图（M6 一期：压缩/转换/缩放三 Tab；M70 合并旋转/裁剪；M72 合并水印/去水印/拼接）
+// 作者：cuilanchao · 修改时间：2026-11-25
 // 三态强制（空态拖拽引导/加载进度可取消/报错码 + 详情）、tokens、@lucide/vue（spec §3）
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
@@ -16,7 +16,16 @@ import {
   NTag,
   NText
 } from 'naive-ui'
-import { ArrowDownAZ, ChevronDown, ChevronUp, FolderOpen, FolderPlus, History, Images, X } from '@lucide/vue'
+import {
+  ArrowDownAZ,
+  ChevronDown,
+  ChevronUp,
+  FolderOpen,
+  FolderPlus,
+  History,
+  Images,
+  X
+} from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
@@ -47,9 +56,33 @@ import type {
   Rotation,
   TargetFormat
 } from '../schema'
+import WatermarkTab from './tabs/WatermarkTab.vue'
+import DewatermarkTab from './tabs/DewatermarkTab.vue'
+import StitchTab from './tabs/StitchTab.vue'
 
-/** Tab 标识（spec §2；M40 增补 effect/gif；M70 §4.48 合并 rotate/crop） */
-type TabId = 'compress' | 'convert' | 'resize' | 'rotate' | 'crop' | 'effect' | 'gif'
+/** Tab 标识（spec §2；M40 增补 effect/gif；M70 §4.48 合并 rotate/crop；M72 §4.72 合并水印/去水印/拼接） */
+type TabId =
+  | 'compress'
+  | 'convert'
+  | 'resize'
+  | 'rotate'
+  | 'crop'
+  | 'effect'
+  | 'gif'
+  | 'watermark'
+  | 'dewatermark'
+  | 'stitch'
+
+/** 原有 7 个页签（共享同一套文件列表与输出目录 UI；M72 新增三页签自带独立视图） */
+const LEGACY_TABS: readonly TabId[] = [
+  'compress',
+  'convert',
+  'resize',
+  'rotate',
+  'crop',
+  'effect',
+  'gif'
+]
 
 /** 支持的输出目标格式选项（转换/缩放共用；avif 标注慢，bmp/tiff 无损） */
 const FORMAT_OPTIONS = [
@@ -118,6 +151,8 @@ const ANCHOR_OPTIONS: { label: string; value: CropAnchor }[] = [
 
 // —— Tab 与参数（spec §2 默认值） ——
 const tab = ref<TabId>('compress')
+/** 当前是否原有页签（决定共享文件列表区显隐；M72 新页签各自渲染独立视图） */
+const isLegacyTab = computed(() => LEGACY_TABS.includes(tab.value))
 const compressQuality = ref(75)
 const compressTarget = ref<'original' | 'jpg' | 'png' | 'webp' | 'avif'>('original')
 const convertFormat = ref<TargetFormat>('jpg')
@@ -250,9 +285,7 @@ const effectIsLossless = computed(
 )
 
 /** 旋转/翻转至少选一项（M70 §4.48，spec §2.6 禁用规则） */
-const hasRotateOperation = computed(
-  () => rotation.value !== 'none' || flip.value !== 'none'
-)
+const hasRotateOperation = computed(() => rotation.value !== 'none' || flip.value !== 'none')
 
 /** 裁剪比例参数（自定义时取输入值，空值回退 1） */
 const ratioBox = computed(() => {
@@ -271,7 +304,8 @@ const freeBox = computed(() => ({
 
 /** 自由区域必须落在图片内（spec §2.7 禁用规则） */
 const freeValid = computed(
-  () => freeBox.value.x + freeBox.value.width <= 100 && freeBox.value.y + freeBox.value.height <= 100
+  () =>
+    freeBox.value.x + freeBox.value.width <= 100 && freeBox.value.y + freeBox.value.height <= 100
 )
 
 /** 开始按钮禁用：旋转需选操作、自由裁剪需区域合法（M70 §4.48） */
@@ -429,6 +463,20 @@ function onEvent(event: TaskEvent): void {
   errorDetail.value = event.error.detail ?? ''
 }
 
+/** 原有页签 → 历史模式（新页签不走共享处理链路，gif 复用 compress 模式） */
+function legacyModeOf(current: TabId): HistoryMode {
+  switch (current) {
+    case 'convert':
+    case 'resize':
+    case 'rotate':
+    case 'crop':
+    case 'effect':
+      return current
+    default:
+      return 'compress'
+  }
+}
+
 /** 提交批量处理（spec §2 参数 → payload discriminated union） */
 async function runProcess(): Promise<void> {
   error.value = null
@@ -441,7 +489,7 @@ async function runProcess(): Promise<void> {
     return
   }
   taskKind.value = 'process'
-  taskMode = tab.value === 'gif' ? 'compress' : tab.value
+  taskMode = legacyModeOf(tab.value)
   phase.value = 'running'
   progress.value = { current: 0, total: rows.value.length }
   try {
@@ -691,15 +739,15 @@ onUnmounted(detach)
 </script>
 
 <template>
-  <div class="flex max-w-3xl flex-col gap-4">
+  <div class="flex max-w-5xl flex-col gap-4">
     <div>
       <h1 class="text-base font-semibold">图片工具箱</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        批量压缩、格式转换、缩放、效果调整与 GIF 生成（基于 ffmpeg）
+        批量压缩、格式转换、缩放、效果调整、GIF 生成、批量水印、去水印与图片拼接（基于 ffmpeg）
       </p>
     </div>
 
-    <!-- Tab：压缩/转换/缩放/调整/GIF（切换不丢文件列表与输出目录） -->
+    <!-- Tab：压缩/转换/缩放/调整/GIF/水印/去水印/拼接（切换不丢文件列表与输出目录） -->
     <!-- 标签必须走 #tab 插槽：当前 naive-ui 构建下自闭合 pane 的 tab 文本不会渲染 -->
     <NTabs v-model:value="tab" type="line">
       <NTabPane name="compress">
@@ -723,736 +771,749 @@ onUnmounted(detach)
       <NTabPane name="gif">
         <template #tab>GIF</template>
       </NTabPane>
+      <NTabPane name="watermark">
+        <template #tab>水印</template>
+      </NTabPane>
+      <NTabPane name="dewatermark">
+        <template #tab>去水印</template>
+      </NTabPane>
+      <NTabPane name="stitch">
+        <template #tab>拼接</template>
+      </NTabPane>
     </NTabs>
 
-    <!-- 文件列表区（空态 = 拖拽引导；非空时 DropZone 收窄为追加入口） -->
-    <NEmpty
-      v-if="rows.length === 0 && phase === 'idle' && error === null"
-      description="添加图片开始处理"
-    />
-    <DropZone
-      :accept="ACCEPT"
-      :hint="
-        rows.length === 0
-          ? tab === 'gif'
-            ? '拖入图片作为 GIF 帧，或点击选择（顺序即帧顺序）'
-            : '拖入图片，或点击选择（支持 jpg/png/webp/avif/gif/bmp/tiff）'
-          : '继续添加'
-      "
-      multiple
-      :disabled="phase === 'running'"
-      @select="onAdd([$event.path])"
-      @invalid="onInvalid"
-    />
-    <NText v-if="invalidHint !== ''" type="warning" class="text-xs">{{ invalidHint }}</NText>
-    <div class="flex flex-wrap items-center gap-2">
-      <NButton
-        size="small"
-        secondary
-        data-testid="add-folder"
-        :disabled="phase === 'running' || collecting"
-        @click="addFolder"
-      >
-        <FolderPlus class="mr-1 h-4 w-4" />{{ collecting ? '正在收集…' : '添加文件夹' }}
-      </NButton>
-      <NText depth="3" class="text-xs">递归收集子目录内支持的图片（上限 {{ MAX_BATCH_FILES }} 张）</NText>
-    </div>
-    <NText v-if="folderHint !== ''" depth="3" class="text-xs" data-testid="folder-hint">
-      {{ folderHint }}
-    </NText>
-    <div v-if="rows.length > 0" class="flex flex-col gap-2">
-      <div class="flex items-center justify-between">
-        <NText depth="2" class="text-sm font-medium">
-          已选 {{ rows.length }} 张<template v-if="probing"> · 读取信息中…</template>
-        </NText>
-        <div class="flex items-center gap-1">
-          <NButton
-            v-if="tab === 'gif'"
-            size="tiny"
-            quaternary
-            data-testid="sort-by-name"
-            :disabled="phase === 'running' || rows.length < 2"
-            @click="sortByName"
-          >
-            <ArrowDownAZ class="mr-1 h-3.5 w-3.5" />按文件名排序
-          </NButton>
-          <NButton
-            size="tiny"
-            quaternary
-            type="error"
-            :disabled="phase === 'running'"
-            @click="clearRows"
-          >
-            清空
-          </NButton>
-        </div>
-      </div>
-      <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
-        <div
-          v-for="row in rows"
-          :key="row.file"
-          class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
+    <!-- 原有 7 页签共享区（v-show 保留文件列表与在跑任务状态） -->
+    <div v-show="isLegacyTab" class="flex max-w-3xl flex-col gap-4">
+      <!-- 文件列表区（空态 = 拖拽引导；非空时 DropZone 收窄为追加入口） -->
+      <NEmpty
+        v-if="rows.length === 0 && phase === 'idle' && error === null"
+        description="添加图片开始处理"
+      />
+      <DropZone
+        :accept="ACCEPT"
+        :hint="
+          rows.length === 0
+            ? tab === 'gif'
+              ? '拖入图片作为 GIF 帧，或点击选择（顺序即帧顺序）'
+              : '拖入图片，或点击选择（支持 jpg/png/webp/avif/gif/bmp/tiff）'
+            : '继续添加'
+        "
+        multiple
+        :disabled="phase === 'running'"
+        @select="onAdd([$event.path])"
+        @invalid="onInvalid"
+      />
+      <NText v-if="invalidHint !== ''" type="warning" class="text-xs">{{ invalidHint }}</NText>
+      <div class="flex flex-wrap items-center gap-2">
+        <NButton
+          size="small"
+          secondary
+          data-testid="add-folder"
+          :disabled="phase === 'running' || collecting"
+          @click="addFolder"
         >
-          <div class="min-w-0 flex-1">
-            <div class="truncate text-sm">{{ row.name }}</div>
-            <div class="text-xs text-[var(--lumin-color-text-secondary)]">
-              {{ row.width > 0 ? `${row.width}×${row.height}` : row.format }}
-              <template v-if="row.sizeBytes > 0"> · {{ formatBytes(row.sizeBytes) }}</template>
-              <NTag v-if="row.animated" size="tiny" :bordered="false" class="ml-1">动画</NTag>
-            </div>
-          </div>
+          <FolderPlus class="mr-1 h-4 w-4" />{{ collecting ? '正在收集…' : '添加文件夹' }}
+        </NButton>
+        <NText depth="3" class="text-xs"
+          >递归收集子目录内支持的图片（上限 {{ MAX_BATCH_FILES }} 张）</NText
+        >
+      </div>
+      <NText v-if="folderHint !== ''" depth="3" class="text-xs" data-testid="folder-hint">
+        {{ folderHint }}
+      </NText>
+      <div v-if="rows.length > 0" class="flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <NText depth="2" class="text-sm font-medium">
+            已选 {{ rows.length }} 张<template v-if="probing"> · 读取信息中…</template>
+          </NText>
           <div class="flex items-center gap-1">
-            <template v-if="tab === 'gif'">
-              <NButton
-                size="tiny"
-                quaternary
-                data-testid="row-up"
-                :disabled="phase === 'running'"
-                @click="moveRow(rows.indexOf(row), -1)"
-              >
-                <ChevronUp class="h-3.5 w-3.5" />
-              </NButton>
-              <NButton
-                size="tiny"
-                quaternary
-                data-testid="row-down"
-                :disabled="phase === 'running'"
-                @click="moveRow(rows.indexOf(row), 1)"
-              >
-                <ChevronDown class="h-3.5 w-3.5" />
-              </NButton>
-            </template>
+            <NButton
+              v-if="tab === 'gif'"
+              size="tiny"
+              quaternary
+              data-testid="sort-by-name"
+              :disabled="phase === 'running' || rows.length < 2"
+              @click="sortByName"
+            >
+              <ArrowDownAZ class="mr-1 h-3.5 w-3.5" />按文件名排序
+            </NButton>
             <NButton
               size="tiny"
               quaternary
+              type="error"
               :disabled="phase === 'running'"
-              @click="removeRow(row.file)"
+              @click="clearRows"
             >
-              <X class="h-3.5 w-3.5" />
+              清空
             </NButton>
           </div>
         </div>
+        <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
+          <div
+            v-for="row in rows"
+            :key="row.file"
+            class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
+          >
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-sm">{{ row.name }}</div>
+              <div class="text-xs text-[var(--lumin-color-text-secondary)]">
+                {{ row.width > 0 ? `${row.width}×${row.height}` : row.format }}
+                <template v-if="row.sizeBytes > 0"> · {{ formatBytes(row.sizeBytes) }}</template>
+                <NTag v-if="row.animated" size="tiny" :bordered="false" class="ml-1">动画</NTag>
+              </div>
+            </div>
+            <div class="flex items-center gap-1">
+              <template v-if="tab === 'gif'">
+                <NButton
+                  size="tiny"
+                  quaternary
+                  data-testid="row-up"
+                  :disabled="phase === 'running'"
+                  @click="moveRow(rows.indexOf(row), -1)"
+                >
+                  <ChevronUp class="h-3.5 w-3.5" />
+                </NButton>
+                <NButton
+                  size="tiny"
+                  quaternary
+                  data-testid="row-down"
+                  :disabled="phase === 'running'"
+                  @click="moveRow(rows.indexOf(row), 1)"
+                >
+                  <ChevronDown class="h-3.5 w-3.5" />
+                </NButton>
+              </template>
+              <NButton
+                size="tiny"
+                quaternary
+                :disabled="phase === 'running'"
+                @click="removeRow(row.file)"
+              >
+                <X class="h-3.5 w-3.5" />
+              </NButton>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- 参数区（随 Tab） -->
-    <NSpace vertical :size="12">
-      <template v-if="tab === 'compress'">
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">质量</NText>
-          <NSlider
-            v-model:value="compressQuality"
-            :min="1"
-            :max="100"
-            :disabled="phase === 'running' || compressIsLossless"
-            class="flex-1"
-          />
-          <span class="w-10 text-right text-sm">{{ compressQuality }}</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">目标格式</NText>
-          <select
-            v-model="compressTarget"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option v-for="opt in COMPRESS_TARGET_OPTIONS" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-          <NText v-if="compressTarget === 'original'" depth="3" class="text-xs"
-            >gif 将转 WebP 保留动画</NText
-          >
-        </div>
-      </template>
-      <template v-else-if="tab === 'convert'">
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">目标格式</NText>
-          <select
-            v-model="convertFormat"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option v-for="opt in FORMAT_OPTIONS" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">质量</NText>
-          <NSlider
-            v-model:value="convertQuality"
-            :min="1"
-            :max="100"
-            :disabled="phase === 'running' || convertIsLossless"
-            class="flex-1"
-          />
-          <span class="w-10 text-right text-sm">{{ convertQuality }}</span>
-        </div>
-      </template>
-      <template v-else-if="tab === 'resize'">
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">缩放模式</NText>
-          <select
-            v-model="resizeMode"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option value="percent">按百分比</option>
-            <option value="width">指定宽</option>
-            <option value="height">指定高</option>
-            <option value="fit">适配框</option>
-          </select>
-        </div>
-        <div v-if="resizeMode === 'percent'" class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">百分比</NText>
-          <NSlider
-            v-model:value="resizePercent"
-            :min="1"
-            :max="500"
-            :disabled="phase === 'running'"
-            class="flex-1"
-          />
-          <span class="w-12 text-right text-sm">{{ resizePercent }}%</span>
-        </div>
-        <div v-else-if="resizeMode === 'width'" class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">目标宽</NText>
-          <NInputNumber
-            v-model:value="resizeWidth"
-            :min="1"
-            :max="32768"
-            :disabled="phase === 'running'"
-            class="w-40"
-          />
-        </div>
-        <div v-else-if="resizeMode === 'height'" class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">目标高</NText>
-          <NInputNumber
-            v-model:value="resizeHeight"
-            :min="1"
-            :max="32768"
-            :disabled="phase === 'running'"
-            class="w-40"
-          />
-        </div>
-        <div v-else class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">适配框</NText>
-          <NInputNumber
-            v-model:value="resizeFitWidth"
-            :min="1"
-            :max="32768"
-            :disabled="phase === 'running'"
-            class="w-40"
-          />
-          <NInputNumber
-            v-model:value="resizeFitHeight"
-            :min="1"
-            :max="32768"
-            :disabled="phase === 'running'"
-            class="w-40"
-          />
-        </div>
-        <NCheckbox v-model:checked="noUpscale" :disabled="phase === 'running'"
-          >不放大（目标大于原图时保持原尺寸）</NCheckbox
-        >
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">目标格式</NText>
-          <select
-            v-model="resizeFormat"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option v-for="opt in FORMAT_OPTIONS" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">质量</NText>
-          <NSlider
-            v-model:value="resizeQuality"
-            :min="1"
-            :max="100"
-            :disabled="phase === 'running' || resizeIsLossless"
-            class="flex-1"
-          />
-          <span class="w-10 text-right text-sm">{{ resizeQuality }}</span>
-        </div>
-      </template>
-      <template v-else-if="tab === 'rotate'">
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">旋转</NText>
-          <select
-            v-model="rotation"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option v-for="opt in ROTATION_OPTIONS" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">翻转</NText>
-          <select
-            v-model="flip"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option v-for="opt in FLIP_OPTIONS" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-        <NText depth="3" class="text-xs">先翻转后旋转；旋转与翻转至少选一项</NText>
-      </template>
-      <template v-else-if="tab === 'crop'">
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">裁剪方式</NText>
-          <select
-            v-model="cropMode"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option value="ratio">比例裁剪</option>
-            <option value="free">自由裁剪</option>
-          </select>
-        </div>
-        <template v-if="cropMode === 'ratio'">
+      <!-- 参数区（随 Tab） -->
+      <NSpace vertical :size="12">
+        <template v-if="tab === 'compress'">
           <div class="flex items-center gap-3">
-            <NText depth="2" class="w-20 text-sm">比例</NText>
+            <NText depth="2" class="w-20 text-sm">质量</NText>
+            <NSlider
+              v-model:value="compressQuality"
+              :min="1"
+              :max="100"
+              :disabled="phase === 'running' || compressIsLossless"
+              class="flex-1"
+            />
+            <span class="w-10 text-right text-sm">{{ compressQuality }}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">目标格式</NText>
             <select
-              v-model="ratioKey"
+              v-model="compressTarget"
               :disabled="phase === 'running'"
               class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
             >
-              <option v-for="opt in RATIO_PRESETS" :key="opt.key" :value="opt.key">
+              <option v-for="opt in COMPRESS_TARGET_OPTIONS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+            <NText v-if="compressTarget === 'original'" depth="3" class="text-xs"
+              >gif 将转 WebP 保留动画</NText
+            >
+          </div>
+        </template>
+        <template v-else-if="tab === 'convert'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">目标格式</NText>
+            <select
+              v-model="convertFormat"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option v-for="opt in FORMAT_OPTIONS" :key="opt.value" :value="opt.value">
                 {{ opt.label }}
               </option>
             </select>
           </div>
-          <div v-if="ratioKey === 'custom'" class="flex items-center gap-3">
-            <NText depth="2" class="w-20 text-sm">自定义比</NText>
-            <NInputNumber
-              v-model:value="customW"
-              :min="1"
-              :max="100"
-              :precision="0"
-              :disabled="phase === 'running'"
-              class="w-24"
-            />
-            <NText depth="3" class="text-sm">:</NText>
-            <NInputNumber
-              v-model:value="customH"
-              :min="1"
-              :max="100"
-              :precision="0"
-              :disabled="phase === 'running'"
-              class="w-24"
-            />
-          </div>
           <div class="flex items-center gap-3">
-            <NText depth="2" class="w-20 text-sm">裁剪位置</NText>
+            <NText depth="2" class="w-20 text-sm">质量</NText>
+            <NSlider
+              v-model:value="convertQuality"
+              :min="1"
+              :max="100"
+              :disabled="phase === 'running' || convertIsLossless"
+              class="flex-1"
+            />
+            <span class="w-10 text-right text-sm">{{ convertQuality }}</span>
+          </div>
+        </template>
+        <template v-else-if="tab === 'resize'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">缩放模式</NText>
             <select
-              v-model="cropAnchor"
+              v-model="resizeMode"
               :disabled="phase === 'running'"
               class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
             >
-              <option v-for="opt in ANCHOR_OPTIONS" :key="opt.value" :value="opt.value">
+              <option value="percent">按百分比</option>
+              <option value="width">指定宽</option>
+              <option value="height">指定高</option>
+              <option value="fit">适配框</option>
+            </select>
+          </div>
+          <div v-if="resizeMode === 'percent'" class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">百分比</NText>
+            <NSlider
+              v-model:value="resizePercent"
+              :min="1"
+              :max="500"
+              :disabled="phase === 'running'"
+              class="flex-1"
+            />
+            <span class="w-12 text-right text-sm">{{ resizePercent }}%</span>
+          </div>
+          <div v-else-if="resizeMode === 'width'" class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">目标宽</NText>
+            <NInputNumber
+              v-model:value="resizeWidth"
+              :min="1"
+              :max="32768"
+              :disabled="phase === 'running'"
+              class="w-40"
+            />
+          </div>
+          <div v-else-if="resizeMode === 'height'" class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">目标高</NText>
+            <NInputNumber
+              v-model:value="resizeHeight"
+              :min="1"
+              :max="32768"
+              :disabled="phase === 'running'"
+              class="w-40"
+            />
+          </div>
+          <div v-else class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">适配框</NText>
+            <NInputNumber
+              v-model:value="resizeFitWidth"
+              :min="1"
+              :max="32768"
+              :disabled="phase === 'running'"
+              class="w-40"
+            />
+            <NInputNumber
+              v-model:value="resizeFitHeight"
+              :min="1"
+              :max="32768"
+              :disabled="phase === 'running'"
+              class="w-40"
+            />
+          </div>
+          <NCheckbox v-model:checked="noUpscale" :disabled="phase === 'running'"
+            >不放大（目标大于原图时保持原尺寸）</NCheckbox
+          >
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">目标格式</NText>
+            <select
+              v-model="resizeFormat"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option v-for="opt in FORMAT_OPTIONS" :key="opt.value" :value="opt.value">
                 {{ opt.label }}
               </option>
             </select>
           </div>
-          <NText depth="3" class="text-xs">按所选比例取原图内最大矩形，位置由九宫格决定</NText>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">质量</NText>
+            <NSlider
+              v-model:value="resizeQuality"
+              :min="1"
+              :max="100"
+              :disabled="phase === 'running' || resizeIsLossless"
+              class="flex-1"
+            />
+            <span class="w-10 text-right text-sm">{{ resizeQuality }}</span>
+          </div>
         </template>
-        <template v-else>
-          <div class="flex flex-wrap items-center gap-3">
-            <NText depth="2" class="w-20 text-sm">裁剪区域</NText>
-            <NInputNumber
-              v-model:value="freeX"
-              :min="0"
-              :max="99"
-              :precision="0"
+        <template v-else-if="tab === 'rotate'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">旋转</NText>
+            <select
+              v-model="rotation"
               :disabled="phase === 'running'"
-              class="w-24"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
             >
-              <template #prefix>左</template>
-              <template #suffix>%</template>
-            </NInputNumber>
-            <NInputNumber
-              v-model:value="freeY"
-              :min="0"
-              :max="99"
-              :precision="0"
+              <option v-for="opt in ROTATION_OPTIONS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">翻转</NText>
+            <select
+              v-model="flip"
               :disabled="phase === 'running'"
-              class="w-24"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
             >
-              <template #prefix>上</template>
-              <template #suffix>%</template>
-            </NInputNumber>
-            <NInputNumber
-              v-model:value="freeW"
+              <option v-for="opt in FLIP_OPTIONS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+          <NText depth="3" class="text-xs">先翻转后旋转；旋转与翻转至少选一项</NText>
+        </template>
+        <template v-else-if="tab === 'crop'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">裁剪方式</NText>
+            <select
+              v-model="cropMode"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option value="ratio">比例裁剪</option>
+              <option value="free">自由裁剪</option>
+            </select>
+          </div>
+          <template v-if="cropMode === 'ratio'">
+            <div class="flex items-center gap-3">
+              <NText depth="2" class="w-20 text-sm">比例</NText>
+              <select
+                v-model="ratioKey"
+                :disabled="phase === 'running'"
+                class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+              >
+                <option v-for="opt in RATIO_PRESETS" :key="opt.key" :value="opt.key">
+                  {{ opt.label }}
+                </option>
+              </select>
+            </div>
+            <div v-if="ratioKey === 'custom'" class="flex items-center gap-3">
+              <NText depth="2" class="w-20 text-sm">自定义比</NText>
+              <NInputNumber
+                v-model:value="customW"
+                :min="1"
+                :max="100"
+                :precision="0"
+                :disabled="phase === 'running'"
+                class="w-24"
+              />
+              <NText depth="3" class="text-sm">:</NText>
+              <NInputNumber
+                v-model:value="customH"
+                :min="1"
+                :max="100"
+                :precision="0"
+                :disabled="phase === 'running'"
+                class="w-24"
+              />
+            </div>
+            <div class="flex items-center gap-3">
+              <NText depth="2" class="w-20 text-sm">裁剪位置</NText>
+              <select
+                v-model="cropAnchor"
+                :disabled="phase === 'running'"
+                class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+              >
+                <option v-for="opt in ANCHOR_OPTIONS" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+            </div>
+            <NText depth="3" class="text-xs">按所选比例取原图内最大矩形，位置由九宫格决定</NText>
+          </template>
+          <template v-else>
+            <div class="flex flex-wrap items-center gap-3">
+              <NText depth="2" class="w-20 text-sm">裁剪区域</NText>
+              <NInputNumber
+                v-model:value="freeX"
+                :min="0"
+                :max="99"
+                :precision="0"
+                :disabled="phase === 'running'"
+                class="w-24"
+              >
+                <template #prefix>左</template>
+                <template #suffix>%</template>
+              </NInputNumber>
+              <NInputNumber
+                v-model:value="freeY"
+                :min="0"
+                :max="99"
+                :precision="0"
+                :disabled="phase === 'running'"
+                class="w-24"
+              >
+                <template #prefix>上</template>
+                <template #suffix>%</template>
+              </NInputNumber>
+              <NInputNumber
+                v-model:value="freeW"
+                :min="1"
+                :max="100"
+                :precision="0"
+                :disabled="phase === 'running'"
+                class="w-24"
+              >
+                <template #prefix>宽</template>
+                <template #suffix>%</template>
+              </NInputNumber>
+              <NInputNumber
+                v-model:value="freeH"
+                :min="1"
+                :max="100"
+                :precision="0"
+                :disabled="phase === 'running'"
+                class="w-24"
+              >
+                <template #prefix>高</template>
+                <template #suffix>%</template>
+              </NInputNumber>
+            </div>
+            <NText v-if="!freeValid" type="warning" class="text-xs"> 裁剪区域超出图片范围 </NText>
+            <NText v-else depth="3" class="text-xs">
+              按图片尺寸的百分比取区域（左+宽、上+高 ≤ 100）
+            </NText>
+          </template>
+        </template>
+        <template v-else-if="tab === 'effect'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">效果</NText>
+            <select
+              v-model="effectKind"
+              data-testid="effect-kind"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option value="grayscale">灰度</option>
+              <option value="invert">反色</option>
+              <option value="binary">黑白二值</option>
+            </select>
+            <NText depth="3" class="text-xs">输出沿用原格式</NText>
+          </div>
+          <div v-if="effectKind === 'binary'" class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">二值阈值</NText>
+            <NSlider
+              v-model:value="effectThreshold"
+              data-testid="effect-threshold"
+              :min="0"
+              :max="255"
+              :disabled="phase === 'running'"
+              class="flex-1"
+            />
+            <span class="w-10 text-right text-sm">{{ effectThreshold }}</span>
+          </div>
+          <!-- 调色（M55 §4.55）：0 = 不生效，与效果叠加 -->
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">调色</NText>
+            <NButton
+              size="tiny"
+              quaternary
+              data-testid="adjust-reset"
+              :disabled="phase === 'running'"
+              @click="resetAdjust"
+            >
+              复位
+            </NButton>
+            <NText depth="3" class="text-xs">0 = 不生效，可与效果叠加</NText>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">亮度</NText>
+            <NSlider
+              v-model:value="effectBrightness"
+              data-testid="adjust-brightness"
+              :min="-100"
+              :max="100"
+              :disabled="phase === 'running'"
+              class="flex-1"
+            />
+            <span class="w-10 text-right text-sm">{{ effectBrightness }}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">对比度</NText>
+            <NSlider
+              v-model:value="effectContrast"
+              data-testid="adjust-contrast"
+              :min="-100"
+              :max="100"
+              :disabled="phase === 'running'"
+              class="flex-1"
+            />
+            <span class="w-10 text-right text-sm">{{ effectContrast }}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">饱和度</NText>
+            <NSlider
+              v-model:value="effectSaturation"
+              data-testid="adjust-saturation"
+              :min="-100"
+              :max="100"
+              :disabled="phase === 'running'"
+              class="flex-1"
+            />
+            <span class="w-10 text-right text-sm">{{ effectSaturation }}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">锐化</NText>
+            <NSlider
+              v-model:value="effectSharpen"
+              data-testid="adjust-sharpen"
+              :min="0"
+              :max="100"
+              :disabled="phase === 'running'"
+              class="flex-1"
+            />
+            <span class="w-10 text-right text-sm">{{ effectSharpen }}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">模糊</NText>
+            <NSlider
+              v-model:value="effectBlur"
+              data-testid="adjust-blur"
+              :min="0"
+              :max="100"
+              :disabled="phase === 'running'"
+              class="flex-1"
+            />
+            <span class="w-10 text-right text-sm">{{ effectBlur }}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">质量</NText>
+            <NSlider
+              v-model:value="effectQuality"
               :min="1"
               :max="100"
-              :precision="0"
-              :disabled="phase === 'running'"
-              class="w-24"
-            >
-              <template #prefix>宽</template>
-              <template #suffix>%</template>
-            </NInputNumber>
+              :disabled="phase === 'running' || effectIsLossless"
+              class="flex-1"
+            />
+            <span class="w-10 text-right text-sm">{{ effectQuality }}</span>
+          </div>
+        </template>
+        <template v-else-if="tab === 'gif'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">帧时长</NText>
             <NInputNumber
-              v-model:value="freeH"
-              :min="1"
-              :max="100"
-              :precision="0"
+              v-model:value="gifDuration"
+              data-testid="gif-duration"
+              :min="50"
+              :max="5000"
+              :step="50"
               :disabled="phase === 'running'"
-              class="w-24"
+              class="w-40"
             >
-              <template #prefix>高</template>
-              <template #suffix>%</template>
+              <template #suffix>ms</template>
             </NInputNumber>
           </div>
-          <NText v-if="!freeValid" type="warning" class="text-xs">
-            裁剪区域超出图片范围
-          </NText>
-          <NText v-else depth="3" class="text-xs">
-            按图片尺寸的百分比取区域（左+宽、上+高 ≤ 100）
-          </NText>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">循环</NText>
+            <select
+              v-model.number="gifLoop"
+              data-testid="gif-loop"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option :value="0">无限</option>
+              <option :value="-1">不循环</option>
+              <option v-for="n in [2, 3, 4, 5, 6, 7, 8, 9, 10]" :key="n" :value="n">
+                {{ n }} 次
+              </option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">宽度</NText>
+            <NInputNumber
+              v-model:value="gifWidth"
+              data-testid="gif-width"
+              :min="0"
+              :max="4096"
+              :step="64"
+              :disabled="phase === 'running'"
+              class="w-40"
+            >
+              <template #suffix>px</template>
+            </NInputNumber>
+            <NText depth="3" class="text-xs">0 = 按首张图片宽</NText>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">高度</NText>
+            <span data-testid="gif-height" class="text-sm">
+              {{ gifCanvas === null ? '—' : `${gifCanvas.height} px` }}
+            </span>
+            <NText depth="3" class="text-xs">按目标宽等比缩放后的最大高（自动）</NText>
+          </div>
         </template>
-      </template>
-      <template v-else-if="tab === 'effect'">
         <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">效果</NText>
-          <select
-            v-model="effectKind"
-            data-testid="effect-kind"
+          <NText depth="2" class="w-20 text-sm">输出目录</NText>
+          <NInput
+            v-model:value="outputDir"
             :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option value="grayscale">灰度</option>
-            <option value="invert">反色</option>
-            <option value="binary">黑白二值</option>
-          </select>
-          <NText depth="3" class="text-xs">输出沿用原格式</NText>
-        </div>
-        <div v-if="effectKind === 'binary'" class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">二值阈值</NText>
-          <NSlider
-            v-model:value="effectThreshold"
-            data-testid="effect-threshold"
-            :min="0"
-            :max="255"
-            :disabled="phase === 'running'"
+            placeholder="输出目录"
             class="flex-1"
           />
-          <span class="w-10 text-right text-sm">{{ effectThreshold }}</span>
-        </div>
-        <!-- 调色（M55 §4.55）：0 = 不生效，与效果叠加 -->
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">调色</NText>
-          <NButton
-            size="tiny"
-            quaternary
-            data-testid="adjust-reset"
-            :disabled="phase === 'running'"
-            @click="resetAdjust"
-          >
-            复位
+          <NButton :disabled="phase === 'running'" @click="chooseDir">
+            <FolderOpen class="mr-1 h-3.5 w-3.5" />选择
           </NButton>
-          <NText depth="3" class="text-xs">0 = 不生效，可与效果叠加</NText>
         </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">亮度</NText>
-          <NSlider
-            v-model:value="effectBrightness"
-            data-testid="adjust-brightness"
-            :min="-100"
-            :max="100"
-            :disabled="phase === 'running'"
-            class="flex-1"
-          />
-          <span class="w-10 text-right text-sm">{{ effectBrightness }}</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">对比度</NText>
-          <NSlider
-            v-model:value="effectContrast"
-            data-testid="adjust-contrast"
-            :min="-100"
-            :max="100"
-            :disabled="phase === 'running'"
-            class="flex-1"
-          />
-          <span class="w-10 text-right text-sm">{{ effectContrast }}</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">饱和度</NText>
-          <NSlider
-            v-model:value="effectSaturation"
-            data-testid="adjust-saturation"
-            :min="-100"
-            :max="100"
-            :disabled="phase === 'running'"
-            class="flex-1"
-          />
-          <span class="w-10 text-right text-sm">{{ effectSaturation }}</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">锐化</NText>
-          <NSlider
-            v-model:value="effectSharpen"
-            data-testid="adjust-sharpen"
-            :min="0"
-            :max="100"
-            :disabled="phase === 'running'"
-            class="flex-1"
-          />
-          <span class="w-10 text-right text-sm">{{ effectSharpen }}</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">模糊</NText>
-          <NSlider
-            v-model:value="effectBlur"
-            data-testid="adjust-blur"
-            :min="0"
-            :max="100"
-            :disabled="phase === 'running'"
-            class="flex-1"
-          />
-          <span class="w-10 text-right text-sm">{{ effectBlur }}</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">质量</NText>
-          <NSlider
-            v-model:value="effectQuality"
-            :min="1"
-            :max="100"
-            :disabled="phase === 'running' || effectIsLossless"
-            class="flex-1"
-          />
-          <span class="w-10 text-right text-sm">{{ effectQuality }}</span>
-        </div>
-      </template>
-      <template v-else-if="tab === 'gif'">
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">帧时长</NText>
-          <NInputNumber
-            v-model:value="gifDuration"
-            data-testid="gif-duration"
-            :min="50"
-            :max="5000"
-            :step="50"
-            :disabled="phase === 'running'"
-            class="w-40"
-          >
-            <template #suffix>ms</template>
-          </NInputNumber>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">循环</NText>
-          <select
-            v-model.number="gifLoop"
-            data-testid="gif-loop"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option :value="0">无限</option>
-            <option :value="-1">不循环</option>
-            <option v-for="n in [2, 3, 4, 5, 6, 7, 8, 9, 10]" :key="n" :value="n">
-              {{ n }} 次
-            </option>
-          </select>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">宽度</NText>
-          <NInputNumber
-            v-model:value="gifWidth"
-            data-testid="gif-width"
-            :min="0"
-            :max="4096"
-            :step="64"
-            :disabled="phase === 'running'"
-            class="w-40"
-          >
-            <template #suffix>px</template>
-          </NInputNumber>
-          <NText depth="3" class="text-xs">0 = 按首张图片宽</NText>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">高度</NText>
-          <span data-testid="gif-height" class="text-sm">
-            {{ gifCanvas === null ? '—' : `${gifCanvas.height} px` }}
-          </span>
-          <NText depth="3" class="text-xs">按目标宽等比缩放后的最大高（自动）</NText>
-        </div>
-      </template>
-      <div class="flex items-center gap-3">
-        <NText depth="2" class="w-20 text-sm">输出目录</NText>
-        <NInput
-          v-model:value="outputDir"
-          :disabled="phase === 'running'"
-          placeholder="输出目录"
-          class="flex-1"
-        />
-        <NButton :disabled="phase === 'running'" @click="chooseDir">
-          <FolderOpen class="mr-1 h-3.5 w-3.5" />选择
-        </NButton>
-      </div>
-    </NSpace>
+      </NSpace>
 
-    <!-- 操作区 -->
-    <NSpace>
-      <NButton
-        v-if="tab === 'gif'"
-        type="primary"
-        data-testid="gif-run"
-        :disabled="phase !== 'idle' || rows.length === 0 || gifCanvas === null"
-        @click="runGif"
-      >
-        生成 GIF
-      </NButton>
-      <NButton
-        v-else
-        type="primary"
-        :disabled="startDisabled"
-        @click="runProcess"
-      >
-        开始处理
-      </NButton>
-    </NSpace>
-
-    <!-- 加载态：进度可见 + 可取消（R4 强制） -->
-    <TaskProgress
-      v-if="phase === 'running' && progress !== null"
-      :message="
-        progress.message !== '' && progress.message !== undefined
-          ? `${taskKind === 'gif' ? '生成 GIF' : '处理'}中 · ${progress.message}`
-          : taskKind === 'gif'
-            ? '生成 GIF 中…'
-            : '处理中…'
-      "
-      :current="progress.current"
-      :total="progress.total"
-      @cancel="cancelTask"
-    />
-
-    <!-- 结果区：逐文件成功/失败 -->
-    <div v-if="results.length > 0 || resultFailures.length > 0" class="flex flex-col gap-2">
-      <div class="flex items-center justify-between">
-        <NText depth="2" class="text-sm font-medium">
-          完成 {{ results.length }} 张<template v-if="resultFailures.length > 0"
-            >，失败 {{ resultFailures.length }} 张</template
-          >
-        </NText>
-        <NButton size="tiny" quaternary @click="revealAll">
-          <FolderOpen class="mr-1 h-3.5 w-3.5" />打开所在文件夹
+      <!-- 操作区 -->
+      <NSpace>
+        <NButton
+          v-if="tab === 'gif'"
+          type="primary"
+          data-testid="gif-run"
+          :disabled="phase !== 'idle' || rows.length === 0 || gifCanvas === null"
+          @click="runGif"
+        >
+          生成 GIF
         </NButton>
-      </div>
-      <div
-        v-for="item in results"
-        :key="item.output"
-        class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
-      >
-        <div class="min-w-0 flex-1">
-          <div class="truncate text-sm">
-            <PathLink
-              :path="item.output"
-              :label="item.output.replace(/^.*[\\/]/, '')"
-              :reveal="false"
-            />
-          </div>
-          <div class="text-xs text-[var(--lumin-color-text-secondary)]">
-            {{ formatBytes(item.beforeBytes) }} → {{ formatBytes(item.afterBytes) }}
-            <span v-if="ratioText(item) !== ''">{{ ratioText(item) }}</span>
-          </div>
+        <NButton v-else type="primary" :disabled="startDisabled" @click="runProcess">
+          开始处理
+        </NButton>
+      </NSpace>
+
+      <!-- 加载态：进度可见 + 可取消（R4 强制） -->
+      <TaskProgress
+        v-if="phase === 'running' && progress !== null"
+        :message="
+          progress.message !== '' && progress.message !== undefined
+            ? `${taskKind === 'gif' ? '生成 GIF' : '处理'}中 · ${progress.message}`
+            : taskKind === 'gif'
+              ? '生成 GIF 中…'
+              : '处理中…'
+        "
+        :current="progress.current"
+        :total="progress.total"
+        @cancel="cancelTask"
+      />
+
+      <!-- 结果区：逐文件成功/失败 -->
+      <div v-if="results.length > 0 || resultFailures.length > 0" class="flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <NText depth="2" class="text-sm font-medium">
+            完成 {{ results.length }} 张<template v-if="resultFailures.length > 0"
+              >，失败 {{ resultFailures.length }} 张</template
+            >
+          </NText>
+          <NButton size="tiny" quaternary @click="revealAll">
+            <FolderOpen class="mr-1 h-3.5 w-3.5" />打开所在文件夹
+          </NButton>
         </div>
-        <NButton size="tiny" quaternary @click="reveal(item)">
-          <FolderOpen class="h-3.5 w-3.5" />
-        </NButton>
-      </div>
-      <div
-        v-for="fail in resultFailures"
-        :key="fail.input"
-        class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-error, #e88080)] px-3 py-1.5"
-      >
-        <NText type="error" class="block truncate text-sm">{{
-          fail.input.replace(/^.*[\\/]/, '')
-        }}</NText>
-        <NText depth="3" class="block text-xs">{{ fail.message }}</NText>
-      </div>
-    </div>
-
-    <!-- GIF 结果（M40）：单文件 + 尺寸/帧数/体积 + 打开目录 -->
-    <div
-      v-if="gifResult !== null"
-      data-testid="gif-result"
-      class="flex flex-col gap-1 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-2"
-    >
-      <div class="flex items-center justify-between">
-        <NText depth="2" class="text-sm font-medium">
-          已生成 {{ gifResult.frames }} 帧 · {{ gifResult.width }}×{{ gifResult.height }} ·
-          {{ formatBytes(gifResult.sizeBytes) }}
-        </NText>
-        <NButton size="tiny" quaternary @click="revealPath(gifResult.outputPath)">
-          <FolderOpen class="mr-1 h-3.5 w-3.5" />打开所在文件夹
-        </NButton>
-      </div>
-      <PathLink :path="gifResult.outputPath" :reveal="false" />
-    </div>
-
-    <!-- 处理历史（M63，P1-6）：最近 20 条，可定位首个产物 / 清空 -->
-    <details
-      v-if="history.length > 0"
-      data-testid="history-panel"
-      class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-2"
-    >
-      <summary class="flex cursor-pointer items-center justify-between text-sm">
-        <span class="flex items-center gap-1">
-          <History class="h-4 w-4" />处理历史（最近 {{ history.length }} 条）
-        </span>
-        <NButton size="tiny" quaternary type="error" @click.prevent="clearAllHistory">
-          清空历史
-        </NButton>
-      </summary>
-      <div class="mt-2 flex flex-col gap-1">
         <div
-          v-for="(entry, index) in history"
-          :key="`${entry.at}-${index}`"
-          class="flex items-center justify-between gap-2 rounded-[var(--lumin-radius-sm)] px-1 py-1"
+          v-for="item in results"
+          :key="item.output"
+          class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
         >
           <div class="min-w-0 flex-1">
-            <div class="truncate text-xs">
-              {{ formatHistoryTime(entry.at) }} · {{ MODE_LABEL[entry.mode] }} · 成功
-              {{ entry.success }}<template v-if="entry.failed > 0"> · 失败 {{ entry.failed }}</template>
+            <div class="truncate text-sm">
+              <PathLink
+                :path="item.output"
+                :label="item.output.replace(/^.*[\\/]/, '')"
+                :reveal="false"
+              />
             </div>
-            <div class="truncate text-xs">
-              <PathLink :path="entry.outputDir" :reveal="false" />
+            <div class="text-xs text-[var(--lumin-color-text-secondary)]">
+              {{ formatBytes(item.beforeBytes) }} → {{ formatBytes(item.afterBytes) }}
+              <span v-if="ratioText(item) !== ''">{{ ratioText(item) }}</span>
             </div>
           </div>
-          <NButton
-            v-if="entry.firstOutput !== null"
-            size="tiny"
-            quaternary
-            @click="revealPath(entry.firstOutput)"
-          >
+          <NButton size="tiny" quaternary @click="reveal(item)">
             <FolderOpen class="h-3.5 w-3.5" />
           </NButton>
         </div>
+        <div
+          v-for="fail in resultFailures"
+          :key="fail.input"
+          class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-error, #e88080)] px-3 py-1.5"
+        >
+          <NText type="error" class="block truncate text-sm">{{
+            fail.input.replace(/^.*[\\/]/, '')
+          }}</NText>
+          <NText depth="3" class="block text-xs">{{ fail.message }}</NText>
+        </div>
       </div>
-    </details>
 
-    <!-- 报错态：结构化错误码 → 中文文案 + 详情 -->
-    <div v-if="error !== null" class="flex flex-col gap-1">
-      <NText type="error" class="text-sm">
-        <Images class="mr-1 inline h-3.5 w-3.5" />{{ error.message }}
-      </NText>
-      <details v-if="errorDetail !== ''">
-        <summary class="cursor-pointer text-xs text-[var(--lumin-color-text-secondary)]">
-          详情
+      <!-- GIF 结果（M40）：单文件 + 尺寸/帧数/体积 + 打开目录 -->
+      <div
+        v-if="gifResult !== null"
+        data-testid="gif-result"
+        class="flex flex-col gap-1 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-2"
+      >
+        <div class="flex items-center justify-between">
+          <NText depth="2" class="text-sm font-medium">
+            已生成 {{ gifResult.frames }} 帧 · {{ gifResult.width }}×{{ gifResult.height }} ·
+            {{ formatBytes(gifResult.sizeBytes) }}
+          </NText>
+          <NButton size="tiny" quaternary @click="revealPath(gifResult.outputPath)">
+            <FolderOpen class="mr-1 h-3.5 w-3.5" />打开所在文件夹
+          </NButton>
+        </div>
+        <PathLink :path="gifResult.outputPath" :reveal="false" />
+      </div>
+
+      <!-- 处理历史（M63，P1-6）：最近 20 条，可定位首个产物 / 清空 -->
+      <details
+        v-if="history.length > 0"
+        data-testid="history-panel"
+        class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-2"
+      >
+        <summary class="flex cursor-pointer items-center justify-between text-sm">
+          <span class="flex items-center gap-1">
+            <History class="h-4 w-4" />处理历史（最近 {{ history.length }} 条）
+          </span>
+          <NButton size="tiny" quaternary type="error" @click.prevent="clearAllHistory">
+            清空历史
+          </NButton>
         </summary>
-        <NText depth="3" class="block break-all text-xs">{{ errorDetail }}</NText>
+        <div class="mt-2 flex flex-col gap-1">
+          <div
+            v-for="(entry, index) in history"
+            :key="`${entry.at}-${index}`"
+            class="flex items-center justify-between gap-2 rounded-[var(--lumin-radius-sm)] px-1 py-1"
+          >
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-xs">
+                {{ formatHistoryTime(entry.at) }} · {{ MODE_LABEL[entry.mode] }} · 成功
+                {{ entry.success
+                }}<template v-if="entry.failed > 0"> · 失败 {{ entry.failed }}</template>
+              </div>
+              <div class="truncate text-xs">
+                <PathLink :path="entry.outputDir" :reveal="false" />
+              </div>
+            </div>
+            <NButton
+              v-if="entry.firstOutput !== null"
+              size="tiny"
+              quaternary
+              @click="revealPath(entry.firstOutput)"
+            >
+              <FolderOpen class="h-3.5 w-3.5" />
+            </NButton>
+          </div>
+        </div>
       </details>
+
+      <!-- 报错态：结构化错误码 → 中文文案 + 详情 -->
+      <div v-if="error !== null" class="flex flex-col gap-1">
+        <NText type="error" class="text-sm">
+          <Images class="mr-1 inline h-3.5 w-3.5" />{{ error.message }}
+        </NText>
+        <details v-if="errorDetail !== ''">
+          <summary class="cursor-pointer text-xs text-[var(--lumin-color-text-secondary)]">
+            详情
+          </summary>
+          <NText depth="3" class="block break-all text-xs">{{ errorDetail }}</NText>
+        </details>
+      </div>
     </div>
+
+    <!-- M72：水印 / 去水印 / 拼接三页签（各自独立视图与任务，v-show 保留状态） -->
+    <WatermarkTab v-show="tab === 'watermark'" />
+    <DewatermarkTab v-show="tab === 'dewatermark'" />
+    <StitchTab v-show="tab === 'stitch'" />
   </div>
 </template>

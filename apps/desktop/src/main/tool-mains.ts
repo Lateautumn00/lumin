@@ -10,10 +10,7 @@ import { registerMain as filePreviewRegisterMain } from '@lumin/tool-file-previe
 import { registerMain as fileRenamerRegisterMain } from '@lumin/tool-file-renamer/node'
 import { registerMain as fileScannerRegisterMain } from '@lumin/tool-file-scanner/node'
 import { registerMain as fsCleanerRegisterMain } from '@lumin/tool-fs-cleaner/node'
-import { registerMain as imageDewatermarkRegisterMain } from '@lumin/tool-image-dewatermark/node'
 import { registerMain as imageToolboxRegisterMain } from '@lumin/tool-image-toolbox/node'
-import { registerMain as imageStitchRegisterMain } from '@lumin/tool-image-stitch/node'
-import { registerMain as imageWatermarkRegisterMain } from '@lumin/tool-image-watermark/node'
 import { registerMain as markdownToolRegisterMain } from '@lumin/tool-markdown-tool/node'
 import { registerMain as mediaConvertRegisterMain } from '@lumin/tool-media-convert/node'
 import { registerMain as mindmapRegisterMain } from '@lumin/tool-mindmap/node'
@@ -43,9 +40,6 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'file-scanner': fileScannerRegisterMain,
   'fs-cleaner': fsCleanerRegisterMain,
   'image-toolbox': imageToolboxRegisterMain,
-  'image-dewatermark': imageDewatermarkRegisterMain,
-  'image-stitch': imageStitchRegisterMain,
-  'image-watermark': imageWatermarkRegisterMain,
   'markdown-tool': markdownToolRegisterMain,
   'media-convert': mediaConvertRegisterMain,
   mindmap: mindmapRegisterMain,
