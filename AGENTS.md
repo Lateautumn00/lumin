@@ -17,7 +17,7 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 - Vue 3 + Vite + Pinia + Vue Router + Naive UI + Tailwind CSS
 - Vitest（测试）· ESLint + Prettier（格式）· dependency-cruiser（边界）
 - pdf-lib + pdfjs-dist（PDF）· mathjs（表达式）· PP-OCR ONNX + onnxruntime-node（OCR，M3b P4 由 onnxruntime-web 切换，2026-11-18，见 plan §4.4）· marked 18.2.1 + js-yaml 5.5.0（Markdown 工具，M39，2026-11-21 R8 登记，见 plan §4.39）
-- CodeMirror 6 最小集（文本编辑器，M56，2026-11-22 R8 登记，见 plan §4.56）· iconv-lite 0.7.3（非 UTF 编码保存，仅主进程）
+- CodeMirror 6 最小集（文本编辑器，M56，2026-11-22 R8 登记，见 plan §4.56）· `@codemirror/lang-markdown` 6.5.2 + `@codemirror/language` 6.13.1（Markdown 工具语法高亮，M67，2026-11-24 R8 登记，见 plan §4.39）· iconv-lite 0.7.3（非 UTF 编码保存，仅主进程）
 - lunar-javascript 1.7.8（日历农历/节气/黄历/节假日库，M58，2026-11-23 R8 登记，见 plan §4.58；MIT 零依赖、无内置类型手写 d.ts、动态 import 分包）
 - mind-elixir 6.0.3（思维导图库，M66，2026-11-24 R8 登记，见 plan §4.66；MIT、零传递依赖、自带 TS 类型，实测 42,200 B gzip JS + 4,858 B gzip CSS）
 - electron-builder（NSIS + portable）· electron-updater（generic provider）

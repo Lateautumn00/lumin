@@ -1,12 +1,16 @@
 /**
  * @file IPC schema 单测（合法/非法载荷）
  * @author cuilanchao
- * @date 2026-11-21
+ * @date 2026-11-24
  */
 import { describe, expect, it } from 'vitest'
 import {
   configResultSchema,
   MAX_SAVE_CONTENT_CHARS,
+  openFilePayloadSchema,
+  openFileResultSchema,
+  saveFilePayloadSchema,
+  saveFileResultSchema,
   savePayloadSchema,
   saveResultSchema,
   setOutputDirPayloadSchema
@@ -58,5 +62,47 @@ describe('configResultSchema / saveResultSchema', () => {
     expect(configResultSchema.safeParse({ outputDir: '' }).success).toBe(false)
     expect(saveResultSchema.parse({ output: 'C:\\out\\a.html' }).output).toContain('a.html')
     expect(saveResultSchema.safeParse({ output: '' }).success).toBe(false)
+  })
+})
+
+describe('openFilePayloadSchema / openFileResultSchema', () => {
+  it('path 可省略，空串被拒绝', () => {
+    expect(openFilePayloadSchema.parse({})).toEqual({})
+    expect(openFilePayloadSchema.parse({ path: 'C:\\a.md' }).path).toBe('C:\\a.md')
+    expect(openFilePayloadSchema.safeParse({ path: '' }).success).toBe(false)
+    expect(openFilePayloadSchema.safeParse({ path: 'a'.repeat(4097) }).success).toBe(false)
+  })
+
+  it('结果要求完整文件信息', () => {
+    const value = {
+      path: 'C:\\a.md',
+      name: 'a.md',
+      content: '# a',
+      size: 3,
+      mtimeMs: 1
+    }
+    expect(openFileResultSchema.parse(value).content).toBe('# a')
+    expect(openFileResultSchema.safeParse({ ...value, name: '' }).success).toBe(false)
+    expect(openFileResultSchema.safeParse({ ...value, size: -1 }).success).toBe(false)
+  })
+})
+
+describe('saveFilePayloadSchema / saveFileResultSchema', () => {
+  it('覆盖保存允许可选 mtime 与 force', () => {
+    const base = { path: 'C:\\a.md', content: '# a' }
+    expect(saveFilePayloadSchema.parse(base).expectedMtimeMs).toBeUndefined()
+    const forced = saveFilePayloadSchema.parse({ ...base, expectedMtimeMs: 1, force: true })
+    expect(forced.force).toBe(true)
+    expect(saveFilePayloadSchema.safeParse({ ...base, path: '' }).success).toBe(false)
+    expect(saveFilePayloadSchema.safeParse({ content: '# a' }).success).toBe(false)
+    expect(
+      saveFilePayloadSchema.safeParse({ ...base, content: 'a'.repeat(MAX_SAVE_CONTENT_CHARS + 1) })
+        .success
+    ).toBe(false)
+  })
+
+  it('结果要求路径与 mtime', () => {
+    expect(saveFileResultSchema.parse({ path: 'C:\\a.md', mtimeMs: 1 }).mtimeMs).toBe(1)
+    expect(saveFileResultSchema.safeParse({ path: 'C:\\a.md', mtimeMs: -1 }).success).toBe(false)
   })
 })

@@ -48,34 +48,34 @@
 
 ### 3.3 chunk 体积（R5）
 
-构建产物 `apps/desktop/out/renderer/assets/`，工具 chunk + 其独占 CodeMirror chunk：
+构建产物 `apps/desktop/out/renderer/assets/`，工具 chunk + 其独占 CodeMirror chunk（M67 起 CodeMirror 封装上提 `packages/ui/create-editor`，与 markdown-tool 共享）：
 
-| 文件                                              | raw (B)     | gzip (B)    |
-| ------------------------------------------------- | ----------- | ----------- |
-| `text-editor-CfqU6HxY.js`                         | 27,969      | 7,577       |
-| `dist-ChOqyWHd.js`（@codemirror/view）            | 377,367     | 99,976      |
-| `dist-B1D0oc76.js`（@codemirror/state）           | 121,707     | 32,923      |
-| `dist-B16xA5iq.js`（@codemirror/commands 等）       | 177,274     | 44,312      |
-| `dist-_5SobO52.js`（@codemirror/search）          | 41,325      | 10,996      |
-| **合计**                                          | **745,642** | **195,784** |
+| 文件                                          | raw (B)     | gzip (B)    |
+| --------------------------------------------- | ----------- | ----------- |
+| `text-editor-C-XvnTge.js`                     | 27,578      | 7,187       |
+| `dist-ChOqyWHd.js`（@codemirror/view）        | 377,367     | 99,976      |
+| `dist-B1D0oc76.js`（@codemirror/state）       | 121,707     | 32,923      |
+| `dist-B16xA5iq.js`（@codemirror/commands 等） | 177,274     | 44,312      |
+| `dist-_5SobO52.js`（@codemirror/search）      | 41,325      | 10,996      |
+| **合计**                                      | **745,251** | **195,394** |
 
-结论：**195,784 B gzip < 200KB**，达标。
+结论：**195,394 B gzip < 200KB**，达标（CodeMirror 相关 chunk 自 M67 起与 markdown-tool 共享，仍按单工具预算计）。
 
 **R5 取舍说明**：初版引入 `@codemirror/lang-javascript`、`lang-json`、`lang-markdown` 与 `theme-one-dark`，合计 gzip 约 315KB 超限。按规格的降级顺序依次移除 JavaScript/Markdown/JSON 语言包与 one-dark 主题后达标，因此**首版为纯文本编辑器（行号、撤销/重做、查找、高亮当前行）**，无语法高亮与深色编辑器主题；`formats.languageForPath` 保留备用，后续若拿到 chunk 预算再接入。
 
 ## 4. 门禁结论
 
-| 命令                                                         | 结果                                                                                                                                                                                                                                                            |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm lint`                                                  | 通过（text-editor 与壳改动文件无告警）                                                                                                                                                                                                                          |
-| `pnpm typecheck`                                             | `@lumin/tool-text-editor`、`@lumin/desktop` 通过                                                                                                                                                                                                                |
-| `pnpm test`                                                  | 通过（含本工具 69 例）                                                                                                                                                                                                                                          |
-| `pnpm coverage`                                              | 退出码 0，全仓与包阈值均达标                                                                                                                                                                                                                                    |
-| `pnpm audit:high`                                            | 无 high/critical（2 moderate），退出码 0                                                                                                                                                                                                                        |
-| `pnpm boundary`                                              | 863 modules，无违规                                                                                                                                                                                                                                             |
-| `pnpm --filter @lumin/desktop build`                         | 通过                                                                                                                                                                                                                                                            |
-| `pnpm --filter @lumin/desktop test:e2e -- text-editor-smoke` | 9 passed                                                                                                                                                                                                                                                        |
-| `pnpm gate`                                                  | 通过（lint → typecheck → test → audit → boundary 全绿；此前记录的 docx2pdf 测试类型问题已修复）
+| 命令                                                         | 结果                                                                                            |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `pnpm lint`                                                  | 通过（text-editor 与壳改动文件无告警）                                                          |
+| `pnpm typecheck`                                             | `@lumin/tool-text-editor`、`@lumin/desktop` 通过                                                |
+| `pnpm test`                                                  | 通过（含本工具 69 例）                                                                          |
+| `pnpm coverage`                                              | 退出码 0，全仓与包阈值均达标                                                                    |
+| `pnpm audit:high`                                            | 无 high/critical（2 moderate），退出码 0                                                        |
+| `pnpm boundary`                                              | 863 modules，无违规                                                                             |
+| `pnpm --filter @lumin/desktop build`                         | 通过                                                                                            |
+| `pnpm --filter @lumin/desktop test:e2e -- text-editor-smoke` | 9 passed                                                                                        |
+| `pnpm gate`                                                  | 通过（lint → typecheck → test → audit → boundary 全绿；此前记录的 docx2pdf 测试类型问题已修复） |
 
 ## 5. 待手工复核清单
 

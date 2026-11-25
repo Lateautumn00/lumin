@@ -1,10 +1,11 @@
 /**
  * @file markdown-tool（Markdown 工具）e2e 冒烟：真实 Electron 驱动页面交互
  * @author cuilanchao
- * @date 2026-11-21
- * @description 覆盖：三页签与 Markdown 预览、JSON→TS 生成与报错恢复、JSON Schema 模式、YAML 三模式与报错、导出 HTML 与重名递增。
+ * @date 2026-11-24
+ * @description 覆盖：三页签与 Markdown 预览、JSON→TS 生成与报错恢复、JSON Schema 模式、YAML 三模式与报错、
+ *              导出 HTML 与重名递增、CodeMirror 编辑/脏标记/查找面板、已有 .md 打开与 mtime 冲突覆盖。
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
@@ -56,6 +57,16 @@ test.describe('markdown-tool（Markdown 工具）冒烟', () => {
       await expect(preview.locator('table')).toBeVisible()
       await expect(page.getByTestId('md-stats')).toContainText('字符')
       await expect(page.getByTestId('md-stats')).not.toContainText('字符 0')
+
+      // 编辑区高度随窗口拉伸（不再固定高度）
+      const editorHeight = async (): Promise<number> =>
+        (await page.getByTestId('md-input').boundingBox())?.height ?? 0
+      const before = await editorHeight()
+      await app.evaluate(({ BrowserWindow }) => {
+        BrowserWindow.getAllWindows()[0]?.setSize(1200, 980)
+      })
+      await page.waitForTimeout(300)
+      expect(await editorHeight()).toBeGreaterThan(before + 60)
     } finally {
       await app.close()
     }
@@ -172,6 +183,99 @@ test.describe('markdown-tool（Markdown 工具）冒烟', () => {
     } finally {
       await app.close()
       rmSync(outputDir, { recursive: true, force: true })
+    }
+  })
+
+  test('编辑区：CodeMirror 输入即预览 + 未保存标记 + 查找面板', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, 'Markdown 工具')
+
+      const content = page.locator('[data-testid="md-input"] .cm-content')
+      await content.click()
+      await page.keyboard.insertText('# 标题')
+
+      const preview = page.frameLocator('[data-testid="md-preview"]')
+      await expect(preview.locator('h1')).toHaveText('标题')
+      await expect(page.getByTestId('md-dirty')).toBeVisible()
+      // Markdown 语法高亮：标题行被 token span 包裹（纯文本模式无 span）
+      await expect(content.locator('.cm-line span').first()).toBeVisible()
+
+      // 工具栏：选中全文后点「粗体」→ 正文被 ** 包裹
+      await content.click()
+      await page.keyboard.press('Control+a')
+      await page.getByTestId('md-fmt-bold').click()
+      await expect(content).toContainText('**# 标题**')
+
+      await page.getByTestId('md-search').click()
+      await expect(page.locator('.cm-search')).toBeVisible()
+
+      // 切走工具会卸载 beforeunload 守卫，避免脏状态阻塞进程关闭
+      await clickSidebarTool(page, '计算器')
+      await expect(page.locator('.cm-editor')).toHaveCount(0)
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('已有 .md：open-file 读取 → save-file mtime 冲突 → force 覆盖', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const workDir = mkdtempSync(path.join(tmpdir(), 'lumin-md-open-'))
+    const file = path.join(workDir, '文档 空格.md')
+    writeFileSync(file, '# 旧标题\n', 'utf8')
+    try {
+      await clickSidebarTool(page, 'Markdown 工具')
+
+      const opened = await page.evaluate(
+        (p) =>
+          window.lumin.invoke<{
+            path: string
+            name: string
+            content: string
+            size: number
+            mtimeMs: number
+          }>('markdown-tool:open-file', { path: p }),
+        file
+      )
+      expect(opened.name).toBe('文档 空格.md')
+      expect(opened.content).toBe('# 旧标题\n')
+      expect(opened.size).toBeGreaterThan(0)
+
+      const conflictCode = await page.evaluate(
+        async ({ p, mtime }) => {
+          try {
+            await window.lumin.invoke('markdown-tool:save-file', {
+              path: p,
+              content: '# 冲突',
+              expectedMtimeMs: mtime + 1000
+            })
+            return 'NO_ERROR'
+          } catch (err) {
+            return (err as { code?: string }).code ?? 'UNKNOWN'
+          }
+        },
+        { p: file, mtime: opened.mtimeMs }
+      )
+      expect(conflictCode).toBe('MD_FILE_CHANGED')
+      expect(readFileSync(file, 'utf8')).toBe('# 旧标题\n')
+
+      const forced = await page.evaluate(
+        ({ p, mtime }) =>
+          window.lumin.invoke<{ path: string; mtimeMs: number }>('markdown-tool:save-file', {
+            path: p,
+            content: '# 新标题\n',
+            expectedMtimeMs: mtime + 1000,
+            force: true
+          }),
+        { p: file, mtime: opened.mtimeMs }
+      )
+      expect(forced.path).toBe(file)
+      expect(readFileSync(file, 'utf8')).toBe('# 新标题\n')
+    } finally {
+      rmSync(workDir, { recursive: true, force: true })
+      await app.close()
     }
   })
 })

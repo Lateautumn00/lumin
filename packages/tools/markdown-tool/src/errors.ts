@@ -1,7 +1,7 @@
 /**
  * @file 工具错误码与统一结果形状（UPPER_SNAKE；文案见 spec/markdown-tool.md §4，改动须同步 spec）
  * @author cuilanchao
- * @date 2026-11-21
+ * @date 2026-11-24
  * @description 纯函数返回结构化错误（code + 中文文案），UI 按 code 展示；主进程复用同一张表
  */
 import type { StructuredError } from '@lumin/shared'
@@ -13,7 +13,13 @@ export const MARKDOWN_TOOL_ERROR_CODES = [
   'MD_TS_NAME_INVALID',
   'MD_YAML_INVALID',
   'MD_CLIPBOARD_FAILED',
-  'MD_SAVE_FAILED'
+  'MD_SAVE_FAILED',
+  'MD_NOT_FOUND',
+  'MD_LOCKED',
+  'MD_FILE_TOO_LARGE',
+  'MD_READ_FAILED',
+  'MD_FILE_CHANGED',
+  'MD_EDITOR_FAILED'
 ] as const
 
 export type MarkdownToolErrorCode = (typeof MARKDOWN_TOOL_ERROR_CODES)[number]
@@ -25,7 +31,13 @@ const MESSAGES: Record<MarkdownToolErrorCode, string> = {
   MD_TS_NAME_INVALID: '根类型名不合法，需为合法 TypeScript 标识符',
   MD_YAML_INVALID: 'YAML 格式不合法，请检查语法',
   MD_CLIPBOARD_FAILED: '复制失败，请手动选择文本复制',
-  MD_SAVE_FAILED: '导出失败，请检查输出目录'
+  MD_SAVE_FAILED: '导出失败，请检查输出目录',
+  MD_NOT_FOUND: '文件不存在或已被移动',
+  MD_LOCKED: '文件被占用或没有访问权限',
+  MD_FILE_TOO_LARGE: '文件过大（上限 5 MiB）',
+  MD_READ_FAILED: '读取文件失败，请确认文件可正常访问',
+  MD_FILE_CHANGED: '文件已被其他程序修改，请确认是否覆盖',
+  MD_EDITOR_FAILED: '编辑器加载失败，请重新打开页面'
 }
 
 /**
@@ -38,9 +50,7 @@ export function toolError(
   detail?: string
 ): StructuredError & { code: MarkdownToolErrorCode } {
   const message = MESSAGES[code]
-  return detail === undefined || detail === ''
-    ? { code, message }
-    : { code, message, detail }
+  return detail === undefined || detail === '' ? { code, message } : { code, message, detail }
 }
 
 /**

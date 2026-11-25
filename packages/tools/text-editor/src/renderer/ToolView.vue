@@ -15,7 +15,7 @@ import DropZone from '@lumin/ui/DropZone.vue'
 import { splitPath, type EolKind } from '../formats'
 import type { OpenResult } from '../schema'
 import { open as openDocument, save as saveDocument, saveAs as saveAsDocument } from './client'
-import { createEditor, type EditorHandle } from './createEditor'
+import { createEditor, type EditorHandle } from '@lumin/ui/create-editor'
 
 type Phase = 'empty' | 'loading' | 'ready' | 'error'
 
@@ -91,7 +91,7 @@ function destroyEditor(): void {
 }
 
 /**
- * 挂载 CodeMirror（动态 import；R5 取舍见 createEditor 注释）
+ * 挂载 CodeMirror（动态 import；R5 取舍见 @lumin/ui/create-editor 注释）
  * @param content 初始正文
  */
 async function mountEditor(content: string): Promise<void> {

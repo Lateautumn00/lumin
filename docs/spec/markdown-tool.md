@@ -1,8 +1,8 @@
 # Markdown 工具（markdown-tool）字段级功能清单
 
-> 版本：v0.2.0 · 定稿日期：2026-11-21（R8）· 工具 id：`markdown-tool` · 里程碑 M39（M55 ⑤ 增 JSON Schema）
+> 版本：v0.4.0 · 定稿日期：2026-11-24（R8）· 工具 id：`markdown-tool` · 里程碑 M39（M55 ⑤ 增 JSON Schema、M67 增 CodeMirror 编辑与 .md 读写、工具栏与状态栏）
 > 决策：plan §1 Q39 / §4.39；本文件为该里程碑验收附件，实现与本文件不一致时以本文件为准，变更须走 R8。
-> 新增依赖：`marked`（Markdown 解析）、`js-yaml`（YAML 解析/序列化），均精确钉版，登记于 plan §1.1。
+> 新增依赖：`marked`（Markdown 解析）、`js-yaml`（YAML 解析/序列化），均精确钉版，登记于 plan §1.1；M67 起编辑区复用 `@codemirror/*`（依赖归属 `packages/ui`，与 text-editor 共享，见 §M67）。
 
 ## 1. 范围与边界
 
@@ -12,9 +12,9 @@
 2. **JSON→TypeScript / JSON Schema 生成**：对象/数组/联合推断，输出 `interface`、`type` 声明或 JSON Schema（draft-07），支持嵌套命名、可选字段与字段名引号化。
 3. **YAML 工具**：YAML→JSON、JSON→YAML、YAML 格式化（缩进 2）。
 
-**不做**：Markdown 编辑器工具栏（粗体/插入表格按钮）、导出 PDF/Word、图片上传与本地图片引用、外链图片代理、YAML 锚点保留（格式化后锚点展开）、多文档 YAML、历史记录持久化、联网。
+**不做**：导出 PDF/Word、图片上传与本地图片引用、外链图片代理、Mermaid/KaTeX 渲染、脚注与 TOC 生成、localStorage 自动草稿（与「保存到文件 + 脏状态守卫」冲突）、YAML 锚点保留（格式化后锚点展开）、多文档 YAML、历史记录持久化、联网。
 
-**形态**：解析与生成全部在 renderer（同步纯函数）；主进程仅 3 个同步短通道（`config` / `set-output-dir` / `save`）做输出目录记忆与原子写盘，无三段式长任务。
+**形态**：解析与生成全部在 renderer（同步纯函数）；主进程 5 个同步短通道（`config` / `set-output-dir` / `save` / `open-file` / `save-file`）做输出目录记忆、原子写盘与已有 `.md` 读写，无三段式长任务。
 
 **安全口径**：
 
@@ -24,84 +24,89 @@
 
 ## 2. 页面字段清单
 
-单页 + 3 个页签（`NTabs` 仅作切换器，内容 `v-if` 渲染，标签走 `#tab` 插槽——与 text-toolbox 同范式）。
+单页 + 3 个页签（`NTabs` 仅作切换器，`display-directive="show"` 保持 CodeMirror 状态不因切页销毁，标签走 `#tab` 插槽——与 text-toolbox 同范式）。页面顶部只保留标题与输出目录（路径截断 + 「选择」按钮），不设说明段落。Markdown 页签内编辑卡片与预览区**高度随窗口自适应**（`md` 及以上单行 `minmax(0,1fr)`，页签内容区内滚动），不使用固定高度。
 
 ### 2.1 Tab1 Markdown 预览
 
-| 区域     | 控件                                          | 行为                                                                  | 空/默认           |
-| -------- | --------------------------------------------- | --------------------------------------------------------------------- | ----------------- |
-| 输入     | `NInput` textarea，等宽字体，最小 16 行       | 输入即渲染（防抖 150ms）；超过 2,000,000 字符 → `MD_INPUT_TOO_LONG`   | 空                |
-| 示例     | `[载入示例]`                                  | 填入内置示例 Markdown（标题/列表/表格/代码块/引用/链接）              | —                 |
-| 清空     | `[清空]`                                      | 清空输入与预览                                                        | —                 |
-| 预览     | `iframe[data-md-preview]`（sandbox 空值）     | 始终渲染最新 HTML；无输入时展示引导文案「在左侧输入 Markdown」        | 空态引导          |
-| 统计     | 文本                                          | 字符数 / 行数                                                         | 0                 |
-| 复制     | `[复制 HTML]`                                 | 复制渲染后的片段 HTML；失败 → `MD_CLIPBOARD_FAILED`                   | —                 |
-| 导出     | 输出目录显示 + `[选择目录]` + 文件名 + `[导出 HTML]` | 文件名默认 `document`（≤80 字，禁 `\ / : * ? " < > \|`）；产物冲突 `(n)` 递增；写盘失败 → `MD_SAVE_FAILED` | `userData/markdown` |
+| 区域   | 控件                                                                                                                                      | 行为                                                                                                                                                  | 空/默认             |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| 输入   | CodeMirror 6 编辑器（行号、搜索面板、Markdown 语法高亮）                                                                                  | 输入即渲染（防抖 150ms）；超过 2,000,000 字符 → `MD_INPUT_TOO_LONG`                                                                                   | 空                  |
+| 工具栏 | 编辑卡片顶栏，5 组 16 个图标按钮（粗体/斜体/删除线/行内代码 · 标题/引用/代码块 · 无序/有序/任务列表 · 链接/图片/表格/分隔线 · 撤销/重做） | 作用于当前选区；无选中时 wrap 类插入标记对、行前缀类处理整行、表格/分隔线/链接按模板插入；wrap 类与前缀类再次点击可取消（toggle）；编辑器未就绪时禁用 | 编辑器未就绪时禁用  |
+| 打开   | `[打开 .md]`                                                                                                                              | 系统对话框（`.md/.markdown/.txt`）→ 主进程读取（≤5 MiB，UTF-8 去 BOM）；未保存修改先确认放弃                                                          | —                   |
+| 保存   | `[保存]` / `Ctrl+S`                                                                                                                       | 有路径则覆盖原文件（`writeAtomic` + mtime 冲突检测）；未命名转另存为                                                                                  | —                   |
+| 另存为 | `[另存为]`                                                                                                                                | 壳 `pickSaveFile` 选路径 → 原子写盘；成功后路径与文件名同步                                                                                           | —                   |
+| 查找   | `[查找]`                                                                                                                                  | 打开 CodeMirror 搜索面板                                                                                                                              | —                   |
+| 示例   | `[载入示例]`                                                                                                                              | 填入内置示例 Markdown（标题/列表/表格/代码块/引用/链接）                                                                                              | —                   |
+| 清空   | `[清空]`                                                                                                                                  | 清空编辑器与预览                                                                                                                                      | —                   |
+| 预览   | `iframe[data-md-preview]`（sandbox 空值）                                                                                                 | 始终渲染最新 HTML；无输入时展示引导文案「在左侧输入 Markdown」                                                                                        | 空态引导            |
+| 状态栏 | 编辑卡片底栏，左「文件名 · 已保存 / 未保存 ●」+ 右「字符 N · 行 N」与「行 x, 列 y」                                                       | 光标移动实时更新行列（1 基）；有未保存修改时关闭窗口前拦截                                                                                            | 已保存              |
+| 复制   | `[复制 HTML]`（与 `[保存]` 同一操作行）                                                                                                   | 复制渲染后的片段 HTML；失败 → `MD_CLIPBOARD_FAILED`                                                                                                   | —                   |
+| 导出   | 同一操作行右侧：文件名 `NInput`（9rem）+ `[导出 HTML]`；输出目录在页头右侧（截断显示 + `[选择]`）                                         | 文件名默认 `document`（≤80 字，禁 `\ / : * ? " < > \|`）；产物冲突 `(n)` 递增；写盘失败 → `MD_SAVE_FAILED`；结果提示显示在页头下方                    | `userData/markdown` |
 
 ### 2.2 Tab2 JSON→TypeScript
 
-| 区域     | 控件                                             | 行为                                                                 | 空/默认   |
-| -------- | ------------------------------------------------ | -------------------------------------------------------------------- | --------- |
-| 输入     | `NInput` textarea，等宽字体                      | JSON 文本；超过 2,000,000 字符 → `MD_INPUT_TOO_LONG`                 | 空        |
-| 根类型名 | `NInput`（默认 `Root`）                          | json-schema 模式显示为「根标题」；TypeScript 模式必须匹配 `^[A-Za-z_$][A-Za-z0-9_$]*$` 且非 TS 保留字，否则 `MD_TS_NAME_INVALID` | `Root`    |
-| 声明方式 | `NRadioGroup`：`interface` / `type` / `json-schema` | 切换即重算；json-schema 模式输出 draft-07              | `interface` |
-| 输出     | 只读 textarea（等宽）                            | 生成代码/JSON；JSON 非法 → `MD_JSON_INVALID`（含解析位置），输出区隐藏为空态引导 | —   |
-| 复制     | `[复制代码]`                                     | 复制生成代码；失败 → `MD_CLIPBOARD_FAILED`                           | —         |
-| 导出     | 同 Tab1 目录/文件名机制                          | 扩展名按模式 `.ts` / `.json`；文件名默认 `types` / `schema`；冲突递增；失败 → `MD_SAVE_FAILED` | —         |
+| 区域     | 控件                                                | 行为                                                                                                                             | 空/默认     |
+| -------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| 输入     | `NInput` textarea，等宽字体                         | JSON 文本；超过 2,000,000 字符 → `MD_INPUT_TOO_LONG`                                                                             | 空          |
+| 根类型名 | `NInput`（默认 `Root`）                             | json-schema 模式显示为「根标题」；TypeScript 模式必须匹配 `^[A-Za-z_$][A-Za-z0-9_$]*$` 且非 TS 保留字，否则 `MD_TS_NAME_INVALID` | `Root`      |
+| 声明方式 | `NRadioGroup`：`interface` / `type` / `json-schema` | 切换即重算；json-schema 模式输出 draft-07                                                                                        | `interface` |
+| 输出     | 只读 textarea（等宽）                               | 生成代码/JSON；JSON 非法 → `MD_JSON_INVALID`（含解析位置），输出区隐藏为空态引导                                                 | —           |
+| 复制     | `[复制代码]`                                        | 复制生成代码；失败 → `MD_CLIPBOARD_FAILED`                                                                                       | —           |
+| 导出     | 同 Tab1 目录/文件名机制                             | 扩展名按模式 `.ts` / `.json`；文件名默认 `types` / `schema`；冲突递增；失败 → `MD_SAVE_FAILED`                                   | —           |
 
 ### 2.3 Tab3 YAML
 
-| 区域   | 控件                                              | 行为                                                                 | 空/默认       |
-| ------ | ------------------------------------------------- | -------------------------------------------------------------------- | ------------- |
-| 模式   | `NRadioGroup`：`YAML→JSON` / `JSON→YAML` / `格式化 YAML` | 切换模式清空输出、保留输入；输入框占位文案随模式变化                 | `YAML→JSON`   |
-| 输入   | `NInput` textarea，等宽字体                       | 超过 2,000,000 字符 → `MD_INPUT_TOO_LONG`                            | 空            |
-| 输出   | 只读 textarea（等宽）                             | 转换/格式化结果；语法错误 → `MD_YAML_INVALID`（含行/列）；JSON 模式非法 → `MD_JSON_INVALID` | — |
-| 提示   | 文本                                              | 「格式化会移除注释、展开锚点」常驻                                   | —             |
-| 复制   | `[复制结果]`                                      | 失败 → `MD_CLIPBOARD_FAILED`                                         | —             |
-| 导出   | 同 Tab1 目录/文件名机制                          | 扩展名按模式 `.json` / `.yaml`；冲突递增；失败 → `MD_SAVE_FAILED`     | —             |
+| 区域 | 控件                                                     | 行为                                                                                        | 空/默认     |
+| ---- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ----------- |
+| 模式 | `NRadioGroup`：`YAML→JSON` / `JSON→YAML` / `格式化 YAML` | 切换模式清空输出、保留输入；输入框占位文案随模式变化                                        | `YAML→JSON` |
+| 输入 | `NInput` textarea，等宽字体                              | 超过 2,000,000 字符 → `MD_INPUT_TOO_LONG`                                                   | 空          |
+| 输出 | 只读 textarea（等宽）                                    | 转换/格式化结果；语法错误 → `MD_YAML_INVALID`（含行/列）；JSON 模式非法 → `MD_JSON_INVALID` | —           |
+| 提示 | 文本                                                     | 「格式化会移除注释、展开锚点」常驻                                                          | —           |
+| 复制 | `[复制结果]`                                             | 失败 → `MD_CLIPBOARD_FAILED`                                                                | —           |
+| 导出 | 同 Tab1 目录/文件名机制                                  | 扩展名按模式 `.json` / `.yaml`；冲突递增；失败 → `MD_SAVE_FAILED`                           | —           |
 
 ### 2.4 三态
 
-| 状态   | 实现                                                                                                             |
-| ------ | ---------------------------------------------------------------------------------------------------------------- |
-| 空态   | 三页签均有引导文案与主操作（Markdown 示例/清空；JSON 输入占位；YAML 模式 + 占位），无白屏                        |
-| 加载态 | **不适用**（同步纯函数，单次 <50ms；spec 登记豁免，与 text-toolbox / life-calculator 同口径）；导出按钮写入中显示 loading |
-| 报错态 | 各页签独立 `role="alert"` 行内错误（错误码 + 中文文案），互不阻塞；导出失败保留输入与输出                         |
+| 状态   | 实现                                                                                                                          |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| 空态   | 三页签均有引导文案与主操作（Markdown 示例/清空；JSON 输入占位；YAML 模式 + 占位），无白屏                                     |
+| 加载态 | 解析为同步纯函数（单次 <50ms，豁免进度条）；打开/保存/另存为按钮写入中显示 loading 并防止重复触发；打开大文件期间按钮 loading |
+| 报错态 | 各页签独立 `role="alert"` 行内错误（错误码 + 中文文案），互不阻塞；读写失败保留当前正文与修改                                 |
 
 ## 3. 纯函数契约（`src/*.ts`，≥80% 覆盖）
 
 ### 3.1 `src/markdown.ts`
 
-| 函数                                   | 入参 / 输出                                                                                  |
-| -------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `renderMarkdown(input)`                | `string` → `{ ok:true, value:{ html, chars, lines } }` 或 `{ ok:false, message }`            |
-| `buildHtmlDocument(bodyHtml, title)`   | 生成完整 HTML 文档（含 `<meta charset>`、CSP meta、内嵌预览样式、转义后的 `<title>`）        |
-| `escapeHtml(value)`                    | `& < > " '` 转义                                                                             |
-| `MARKDOWN_LIMIT = 2_000_000`           | 输入字符上限                                                                                 |
+| 函数                                 | 入参 / 输出                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------- |
+| `renderMarkdown(input)`              | `string` → `{ ok:true, value:{ html, chars, lines } }` 或 `{ ok:false, message }`     |
+| `buildHtmlDocument(bodyHtml, title)` | 生成完整 HTML 文档（含 `<meta charset>`、CSP meta、内嵌预览样式、转义后的 `<title>`） |
+| `escapeHtml(value)`                  | `& < > " '` 转义                                                                      |
+| `MARKDOWN_LIMIT = 2_000_000`         | 输入字符上限                                                                          |
 
 解析口径：`marked`（`gfm: true`、`breaks: false`）；空输入返回空 HTML；`chars` 为输入字符数、`lines` 为按 `\n` 计数。
 
 ### 3.2 `src/json-to-ts.ts`
 
-| 函数                            | 入参 / 输出                                                                       |
-| ------------------------------- | --------------------------------------------------------------------------------- |
-| `generateTypes(input, options)` | `{ rootName: string; style: 'interface' \| 'type' \| 'json-schema' }` → `{ ok:true, value:{ code } }` 或 `{ ok:false, message }` |
-| `jsonToSchema(value, rootName)` | 已解析 JSON 值 → JSON Schema 对象（draft-07 子集）；供 `json-schema` 模式与单测直接调用 |
-| 值类型                          | `null` → `null`；string/number/boolean → 原语；数组 → `T[]`；对象 → 具名声明       |
-| 对象合并（数组元素联合）        | 键在全部元素中出现 → 必选；部分出现 → `?`；同名键类型不同 → 联合 `A \| B`         |
-| 命名                            | 根类型名按用户输入；嵌套对象 `根名 + PascalCase(键路径)`；冲突追加 `2/3…`          |
-| 字段名                          | 合法标识符原样；否则单引号包裹（`'a-b': string`）                                  |
-| 边界                            | 空对象 → `Record<string, never>`；空数组 → `unknown[]`；嵌套深度 >64 → `MD_JSON_INVALID`（detail「嵌套过深」） |
-| 输出                            | 2 空格缩进、声明间空行、文件末尾换行；`interface` 模式 `export interface X {…}`，`type` 模式 `export type X = {…}` |
+| 函数                            | 入参 / 输出                                                                                                                                                                             |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generateTypes(input, options)` | `{ rootName: string; style: 'interface' \| 'type' \| 'json-schema' }` → `{ ok:true, value:{ code } }` 或 `{ ok:false, message }`                                                        |
+| `jsonToSchema(value, rootName)` | 已解析 JSON 值 → JSON Schema 对象（draft-07 子集）；供 `json-schema` 模式与单测直接调用                                                                                                 |
+| 值类型                          | `null` → `null`；string/number/boolean → 原语；数组 → `T[]`；对象 → 具名声明                                                                                                            |
+| 对象合并（数组元素联合）        | 键在全部元素中出现 → 必选；部分出现 → `?`；同名键类型不同 → 联合 `A \| B`                                                                                                               |
+| 命名                            | 根类型名按用户输入；嵌套对象 `根名 + PascalCase(键路径)`；冲突追加 `2/3…`                                                                                                               |
+| 字段名                          | 合法标识符原样；否则单引号包裹（`'a-b': string`）                                                                                                                                       |
+| 边界                            | 空对象 → `Record<string, never>`；空数组 → `unknown[]`；嵌套深度 >64 → `MD_JSON_INVALID`（detail「嵌套过深」）                                                                          |
+| 输出                            | 2 空格缩进、声明间空行、文件末尾换行；`interface` 模式 `export interface X {…}`，`type` 模式 `export type X = {…}`                                                                      |
 | JSON Schema 规则                | 根对象内联 `type/properties/required`；嵌套对象抽 `$defs` + `$ref`；数组 `items` 取首元素；整数 `integer`/小数 `number`；字符串不产生 `format`；空容器只输出 `type`；`$defs` 名冲突递增 |
 
 ### 3.3 `src/yaml.ts`
 
-| 函数              | 入参 / 输出                                                                 |
-| ----------------- | ---------------------------------------------------------------------------- |
-| `yamlToJson(text)` | YAML → 美化 JSON（2 空格）；多文档/语法错误 → `MD_YAML_INVALID`（detail 行/列） |
+| 函数               | 入参 / 输出                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------- |
+| `yamlToJson(text)` | YAML → 美化 JSON（2 空格）；多文档/语法错误 → `MD_YAML_INVALID`（detail 行/列）             |
 | `jsonToYaml(text)` | JSON → YAML（`indent: 2`、`lineWidth: 120`、`noRefs: true`）；JSON 非法 → `MD_JSON_INVALID` |
-| `formatYaml(text)` | YAML → YAML（同 dump 口径；注释丢失、锚点展开）                              |
+| `formatYaml(text)` | YAML → YAML（同 dump 口径；注释丢失、锚点展开）                                             |
 
 空输入统一返回 `{ ok:true, value:{ text: '' } }`（UI 保持空态）。
 
@@ -113,28 +118,40 @@
 ### 3.5 `src/schema.ts`（主进程 zod）
 
 `savePayloadSchema = { outputDir: string(1..4096), baseName: string(1..80), extension: enum(EXTENSIONS), content: string }`；
-`configResultSchema = { outputDir: string }`；`setOutputDirPayloadSchema = { outputDir: string }`。
+`configResultSchema = { outputDir: string }`；`setOutputDirPayloadSchema = { outputDir: string }`；
+`openFilePayloadSchema = { path?: string(1..4096) }`；`openFileResultSchema = { path, name, content, size, mtimeMs }`（`MAX_MD_FILE_BYTES = 5 MiB` 读取上限）；
+`saveFilePayloadSchema = { path, content, expectedMtimeMs?, force? }`；`saveFileResultSchema = { path, mtimeMs }`。
 
 ## 4. 错误码（`src/errors.ts`）
 
-| 码                    | 中文文案                                   | 触发来源                                       |
-| --------------------- | ------------------------------------------ | ---------------------------------------------- |
-| `MD_INPUT_TOO_LONG`   | 输入内容过长（上限 200 万字符）            | 任一页签输入超限                               |
-| `MD_JSON_INVALID`     | JSON 格式不合法，请检查语法                | JSON 解析失败 / 嵌套过深                       |
-| `MD_TS_NAME_INVALID`  | 根类型名不合法，需为合法 TypeScript 标识符 | 根类型名不符规则或为保留字                     |
-| `MD_YAML_INVALID`     | YAML 格式不合法，请检查语法                | YAML 解析失败 / 多文档                         |
-| `MD_CLIPBOARD_FAILED` | 复制失败，请手动选择文本复制               | 渲染层剪贴板写入失败                           |
+| 码                    | 中文文案                                   | 触发来源                                        |
+| --------------------- | ------------------------------------------ | ----------------------------------------------- |
+| `MD_INPUT_TOO_LONG`   | 输入内容过长（上限 200 万字符）            | 任一页签输入超限                                |
+| `MD_JSON_INVALID`     | JSON 格式不合法，请检查语法                | JSON 解析失败 / 嵌套过深                        |
+| `MD_TS_NAME_INVALID`  | 根类型名不合法，需为合法 TypeScript 标识符 | 根类型名不符规则或为保留字                      |
+| `MD_YAML_INVALID`     | YAML 格式不合法，请检查语法                | YAML 解析失败 / 多文档                          |
+| `MD_CLIPBOARD_FAILED` | 复制失败，请手动选择文本复制               | 渲染层剪贴板写入失败                            |
 | `MD_SAVE_FAILED`      | 导出失败，请检查输出目录                   | 目录创建/写盘失败、同名文件超过 99 个、载荷非法 |
+| `MD_NOT_FOUND`        | 文件不存在或已被移动                       | 打开或覆盖保存时文件已删除（ENOENT）            |
+| `MD_LOCKED`           | 文件被占用或没有访问权限                   | 读写遇到 EBUSY/EPERM/EACCES                     |
+| `MD_FILE_TOO_LARGE`   | 文件过大（上限 5 MiB）                     | 打开文件超过读取上限                            |
+| `MD_READ_FAILED`      | 读取文件失败，请确认文件可正常访问         | 其它读取失败 / 目标不是普通文件                 |
+| `MD_FILE_CHANGED`     | 文件已被其他程序修改，请确认是否覆盖       | 覆盖保存时 mtime 与打开时不一致（可 force）     |
+| `MD_EDITOR_FAILED`    | 编辑器加载失败，请重新打开页面             | CodeMirror 动态加载失败                         |
 
 ## 5. 主进程通道（`src/node.ts`）
 
-| 通道                        | 类型 | 入参                                                      | 返回                 |
-| --------------------------- | ---- | --------------------------------------------------------- | -------------------- |
-| `markdown-tool:config`      | 同步 | —                                                         | `{ outputDir }`      |
-| `markdown-tool:set-output-dir` | 同步 | `{ outputDir }`                                        | `void`               |
-| `markdown-tool:save`        | 同步 | `{ outputDir, baseName, extension, content }`             | `{ output }`         |
+| 通道                           | 类型 | 入参                                          | 返回                                             |
+| ------------------------------ | ---- | --------------------------------------------- | ------------------------------------------------ |
+| `markdown-tool:config`         | 同步 | —                                             | `{ outputDir }`                                  |
+| `markdown-tool:set-output-dir` | 同步 | `{ outputDir }`                               | `void`                                           |
+| `markdown-tool:save`           | 同步 | `{ outputDir, baseName, extension, content }` | `{ output }`                                     |
+| `markdown-tool:open-file`      | 同步 | `{ path? }`（缺省弹系统对话框）               | `{ path, name, content, size, mtimeMs } \| null` |
+| `markdown-tool:save-file`      | 同步 | `{ path, content, expectedMtimeMs?, force? }` | `{ path, mtimeMs }`                              |
 
 `save` 流程：zod 校验 → `mkdirSync(recursive)` → 基名清洗 → `resolveConflictPath` 冲突递增 → `writeAtomic`（UTF-8）→ 记忆 `outputDir`；缺省目录 `userData/markdown`。
+`open-file` 流程：路径（或对话框）→ `stat` 预检（普通文件、≤5 MiB）→ UTF-8 读取去 BOM；取消返回 `null`。
+`save-file` 流程：zod 校验 → 有 `expectedMtimeMs` 时 `stat` 比对 mtime（不一致且未 `force` → `MD_FILE_CHANGED`）→ `writeAtomic` → 回读 mtime（失败回退当前时间）。
 
 ## 6. 壳接线（固定 7 处 + tool-mains）
 
@@ -150,16 +167,18 @@
 
 ## 7. 依赖与安全（R8）
 
-| 依赖      | 版本   | 用途                 | 体积口径                     |
-| --------- | ------ | -------------------- | ---------------------------- |
-| `marked`  | 18.2.1 | Markdown → HTML      | 纯 JS、MIT、无原生、无网络   |
-| `js-yaml` | 5.5.0  | YAML 解析与序列化    | 纯 JS、MIT、无原生、无网络   |
+| 依赖                                                 | 版本                             | 用途              | 体积口径                                              |
+| ---------------------------------------------------- | -------------------------------- | ----------------- | ----------------------------------------------------- |
+| `marked`                                             | 18.2.1                           | Markdown → HTML   | 纯 JS、MIT、无原生、无网络                            |
+| `js-yaml`                                            | 5.5.0                            | YAML 解析与序列化 | 纯 JS、MIT、无原生、无网络                            |
+| `@codemirror/{state,view,commands,search}`           | 6.7.6 / 6.43.15 / 6.11.1 / 6.7.2 | 编辑区（M67）     | 归属 `packages/ui`，与 text-editor 共享；动态 import  |
+| `@codemirror/lang-markdown` / `@codemirror/language` | 6.5.2 / 6.13.1                   | Markdown 语法高亮 | 归属 `packages/ui`，`language: 'markdown'` 时按需加载 |
 
 `js-yaml` 使用 `load`/`dump`（v4+ 已移除 `!!js/function` 等可执行类型），不接受自定义 schema；渲染安全由 §1 的 CSP + sandbox iframe 兜底。
 
 ## 8. R5 体积口径
 
-无 worker / wasm / 模型 / 字体资产；`marked` 与 `js-yaml` 为该工具独占依赖，计入工具增量（预期 ≈50–70KB gzip，上限 200KB gzip）。交付时以 `pnpm build` 产物实测工具 chunk 与其独占依赖 chunk，记入 `docs/smoke/markdown-tool.md`。
+无 worker / wasm / 模型 / 字体资产；`marked` 与 `js-yaml` 为该工具独占依赖，计入工具增量。M67 起 CodeMirror 核心由 `packages/ui` 动态 import 且与 text-editor 共享 vendor chunk，按 R5「增量不含共享 vendor」口径不计入；**Markdown 语言包（`@codemirror/lang-markdown` + `@codemirror/language` + `@lezer/*`）仅本工具加载，计入增量**。交付时以 `pnpm build` 产物实测工具 chunk 与其独占依赖 chunk，记入 `docs/smoke/markdown-tool.md`。
 
 ## 9. 验收
 
@@ -186,3 +205,17 @@
   4. 空数组/空对象 → 照实输出 `type: array`（无 items）/ `type: object`（无 properties）
 - **实现**：与 `json-to-ts` 同源遍历，`json-to-ts.ts` 新增 `jsonToSchema(value, rootName)` 纯函数与 `SchemaBuilder`（根对象内联、嵌套对象 `$defs`、命名冲突递增）；`generateTypes` 在 `style === 'json-schema'` 时输出 2 空格 JSON + 末尾换行；UI 增加第三个单选项，根名标签切为「根标题」，文件名/导出扩展名随模式切换；纯 renderer、零 IPC、零新增依赖
 - **验收**：`json-schema.test.ts` 9 例（扁平对象/字符串无 format/根值/嵌套 $defs/数组首元素/空容器/$defs 命名冲突/输出 draft-07 文本/非法 JSON·超深·非法根名）本包 73 例全绿且 ≥80%；e2e 新增「切 json-schema → draft-07 + `$defs` + 文件名 schema → 切回 interface」；R2 记入 `docs/smoke/markdown-tool.md` M55 增量节；chunk <200KB gzip
+
+---
+
+## M67 追加节（2026-11-24 R8 登记：CodeMirror 编辑 + 已有 .md 读写）
+
+> 状态：已实施（2026-11-24）。用户拍板两决策：①输入框换 CodeMirror 编辑器；②编辑已有 .md 后「覆盖原文件 + 另存为」。
+
+- **编辑器**：Markdown 页签输入区由 `NInput textarea` 换成 CodeMirror 6（行号 + 搜索面板 + 历史 + **Markdown 语法高亮**），封装上提至 `packages/ui/src/create-editor.ts`（`@lumin/ui/create-editor`）与 text-editor 共享；`language: 'markdown'` 时按需动态 import `@codemirror/lang-markdown 6.5.2` + `@codemirror/language 6.13.1`（`markdown()` + `syntaxHighlighting(defaultHighlightStyle)`），标题/粗体/斜体/行内代码/代码块/引用/列表/链接着色；text-editor 不传 `language`，保持纯文本。预览仍由 `marked` 渲染。
+- **打开**：`markdown-tool:open-file`（`{ path? }`），缺省弹系统对话框（`.md/.markdown/.txt`）；`stat` 预检（普通文件、≤`MAX_MD_FILE_BYTES` = 5 MiB）→ UTF-8 读取去 BOM → 返回 `{ path, name, content, size, mtimeMs }`；取消返回 `null`。
+- **保存**：`markdown-tool:save-file`（`{ path, content, expectedMtimeMs?, force? }`）→ 有 `expectedMtimeMs` 时比对 mtime（不一致且非 `force` → `MD_FILE_CHANGED`，UI 弹「覆盖保存」确认）→ `writeAtomic`；`[保存]`/`Ctrl+S` 覆盖原路径，未命名转另存为。
+- **另存为**：壳 `window.lumin.pickSaveFile({ title, defaultName, filters })` 选路径 → `save-file`（不带 `expectedMtimeMs`，允许新建）→ 同步 `mdFilePath/mdFileName`。
+- **脏状态守卫**：任何编辑（含载入示例/清空）标记「未保存 ●」；有未保存修改时「打开 .md」先确认放弃；`beforeunload` 拦截窗口关闭（与 mindmap 同口径）。
+- **错误码增量**：`MD_NOT_FOUND` / `MD_LOCKED` / `MD_FILE_TOO_LARGE` / `MD_READ_FAILED` / `MD_FILE_CHANGED` / `MD_EDITOR_FAILED`（见 §4）。
+- **验收**：`node.test.ts` 增 open-file 8 例与 save-file 8 例（对话框取消/非文件/超限/errno 映射/结构化透传/mtime 冲突与 force/另存为新建/mtime 回读失败回退）；`schema.test.ts` 增 4 个 schema；`client.test.ts` 增 2 例；e2e 增「打开已有 .md → 编辑 → 保存落盘」与「mtime 冲突」链路；本包覆盖率 ≥80%；R5 以构建产物实测 CodeMirror 共享 vendor chunk 并记入 smoke。

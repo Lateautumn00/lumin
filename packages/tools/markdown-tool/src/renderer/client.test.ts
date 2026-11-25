@@ -1,10 +1,17 @@
 /**
  * @file renderer client 单测（白名单 bridge 通道名与载荷）
  * @author cuilanchao
- * @date 2026-11-21
+ * @date 2026-11-24
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { config, revealPath, saveFile, saveOutputDir } from './client'
+import {
+  config,
+  openMarkdownFile,
+  revealPath,
+  saveFile,
+  saveMarkdownFile,
+  saveOutputDir
+} from './client'
 
 const invoke = vi.fn()
 const reveal = vi.fn()
@@ -45,5 +52,23 @@ describe('client', () => {
     reveal.mockResolvedValue(undefined)
     await revealPath('C:\\out')
     expect(reveal).toHaveBeenCalledWith('C:\\out')
+  })
+
+  it('openMarkdownFile 不传路径时发送空载荷，传路径时透传', async () => {
+    invoke.mockResolvedValue(null)
+    await expect(openMarkdownFile()).resolves.toBeNull()
+    expect(invoke).toHaveBeenCalledWith('markdown-tool:open-file', {})
+
+    const opened = { path: 'C:\\a.md', name: 'a.md', content: '# a', size: 3, mtimeMs: 1 }
+    invoke.mockResolvedValue(opened)
+    await expect(openMarkdownFile('C:\\a.md')).resolves.toEqual(opened)
+    expect(invoke).toHaveBeenCalledWith('markdown-tool:open-file', { path: 'C:\\a.md' })
+  })
+
+  it('saveMarkdownFile 透传覆盖保存载荷', async () => {
+    invoke.mockResolvedValue({ path: 'C:\\a.md', mtimeMs: 2 })
+    const payload = { path: 'C:\\a.md', content: '# b', expectedMtimeMs: 1, force: true }
+    await expect(saveMarkdownFile(payload)).resolves.toEqual({ path: 'C:\\a.md', mtimeMs: 2 })
+    expect(invoke).toHaveBeenCalledWith('markdown-tool:save-file', payload)
   })
 })
