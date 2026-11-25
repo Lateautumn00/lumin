@@ -16,8 +16,8 @@ import {
 } from './progress'
 
 describe('parseProgressLine', () => {
-  it('解析完整四段进度行', () => {
-    expect(parseProgressLine('PROGRESS|1024|2048|512|30')).toEqual({
+  it('解析完整五段进度行（downloaded | total | estimate | speed | eta）', () => {
+    expect(parseProgressLine('PROGRESS|1024|2048|NA|512|30')).toEqual({
       downloadedBytes: 1024,
       totalBytes: 2048,
       speedBps: 512,
@@ -25,20 +25,29 @@ describe('parseProgressLine', () => {
     })
   })
 
+  it('total_bytes 为 NA 时回退 total_bytes_estimate（B站分片源）', () => {
+    expect(parseProgressLine('PROGRESS|4096|NA|8192|512|20')).toEqual({
+      downloadedBytes: 4096,
+      totalBytes: 8192,
+      speedBps: 512,
+      etaSec: 20
+    })
+  })
+
   it('NA / 空段 / 非数值 → null 字段', () => {
-    expect(parseProgressLine('PROGRESS|NA|NA|NA|NA')).toEqual({
+    expect(parseProgressLine('PROGRESS|NA|NA|NA|NA|NA')).toEqual({
       downloadedBytes: null,
       totalBytes: null,
       speedBps: null,
       etaSec: null
     })
-    expect(parseProgressLine('PROGRESS||| |')).toEqual({
+    expect(parseProgressLine('PROGRESS||||| ')).toEqual({
       downloadedBytes: null,
       totalBytes: null,
       speedBps: null,
       etaSec: null
     })
-    expect(parseProgressLine('PROGRESS|abc|def|xyz|ghi')).toEqual({
+    expect(parseProgressLine('PROGRESS|abc|def|ghi|jkl|mno')).toEqual({
       downloadedBytes: null,
       totalBytes: null,
       speedBps: null,
@@ -47,7 +56,7 @@ describe('parseProgressLine', () => {
   })
 
   it('负数 → null，小数保留', () => {
-    const snapshot = parseProgressLine('PROGRESS|-1|2048.5|12.75|0')
+    const snapshot = parseProgressLine('PROGRESS|-1|NA|2048.5|12.75|0')
     expect(snapshot?.downloadedBytes).toBeNull()
     expect(snapshot?.totalBytes).toBe(2048.5)
     expect(snapshot?.speedBps).toBe(12.75)
@@ -60,7 +69,7 @@ describe('parseProgressLine', () => {
     expect(parseProgressLine('E:\\video\\a.mp4')).toBeNull()
   })
 
-  it('缺段（不足 4 段）解析为 null 字段不崩溃', () => {
+  it('缺段（不足 5 段）解析为 null 字段不崩溃', () => {
     expect(parseProgressLine('PROGRESS|100')).toEqual({
       downloadedBytes: 100,
       totalBytes: null,
@@ -137,8 +146,10 @@ describe('buildStartArgs', () => {
     expect(args).toContain('--continue')
     expect(args).toContain('--no-overwrites')
     expect(args).toContain('--no-playlist')
+    // --print 隐含 --quiet 会吞进度，必须显式 --progress
+    expect(args).toContain('--progress')
     const templateIdx = args.indexOf(
-      'download:PROGRESS|%(progress.downloaded_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s'
+      'download:PROGRESS|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s'
     )
     expect(templateIdx).toBeGreaterThan(-1)
     expect(args[templateIdx - 1]).toBe('--progress-template')

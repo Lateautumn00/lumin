@@ -21,7 +21,11 @@ export const VIDEO_DOWNLOAD_ERROR_CODES = [
   'VD_HISTORY_FAILED',
   'VD_COOKIE_FORMAT_INVALID',
   'VD_COOKIE_IMPORT_FAILED',
-  'VD_COOKIE_STORE_UNAVAILABLE'
+  'VD_COOKIE_STORE_UNAVAILABLE',
+  'VD_LINK_EXPIRED',
+  'VD_LOGIN_REQUIRED',
+  'VD_REGION_BLOCKED',
+  'VD_FORBIDDEN'
 ] as const
 
 export type VideoDownloadErrorCode = (typeof VIDEO_DOWNLOAD_ERROR_CODES)[number]
@@ -37,7 +41,11 @@ const MESSAGES: Record<VideoDownloadErrorCode, string> = {
   VD_HISTORY_FAILED: '历史记录读写失败',
   VD_COOKIE_FORMAT_INVALID: 'Cookie 格式无法识别，请粘贴浏览器导出的 Cookie',
   VD_COOKIE_IMPORT_FAILED: '从浏览器读取 Cookie 失败，请改用手动粘贴',
-  VD_COOKIE_STORE_UNAVAILABLE: '系统不支持加密存储，Cookie 功能不可用'
+  VD_COOKIE_STORE_UNAVAILABLE: '系统不支持加密存储，Cookie 功能不可用',
+  VD_LINK_EXPIRED: '链接已失效或内容不可访问，请重新复制分享链接后重试',
+  VD_LOGIN_REQUIRED: '该内容需要登录后访问，请先在 Cookie 管理中配置对应平台后重试',
+  VD_REGION_BLOCKED: '该内容在当前地区不可用',
+  VD_FORBIDDEN: '平台拒绝访问（403），请稍后重试或更换链接'
 }
 
 /** 可重试错误码（renderer 据此显示 [重试]） */
@@ -64,6 +72,26 @@ export function toolError(code: VideoDownloadErrorCode, detail?: string): Struct
  */
 export function isRetryable(code: string): boolean {
   return RETRYABLE.has(code as VideoDownloadErrorCode)
+}
+
+/** 引擎 stderr 归因规则（顺序敏感：先具体后宽泛；spec §5.1） */
+const ENGINE_PATTERNS: ReadonlyArray<readonly [RegExp, VideoDownloadErrorCode]> = [
+  [/sign in to confirm|login required|please log in|需要登录|cookies?.*(required|expired)/i, 'VD_LOGIN_REQUIRED'],
+  [/not available in your country|geo.?restrict|地区|region.?lock/i, 'VD_REGION_BLOCKED'],
+  [/http error 403|403 forbidden|forbidden/i, 'VD_FORBIDDEN'],
+  [/unsupported url|no suitable extractor/i, 'VD_UNSUPPORTED_PLATFORM'],
+  [/private video|video unavailable|has been removed|does not exist/i, 'VD_LINK_EXPIRED']
+]
+
+/**
+ * 将 yt-dlp stderr 归因为结构化错误码（无匹配返回 null，调用方回退通用码）
+ * @param text 引擎输出（stdout+stderr 尾部）
+ */
+export function classifyEngineError(text: string): VideoDownloadErrorCode | null {
+  for (const [pattern, code] of ENGINE_PATTERNS) {
+    if (pattern.test(text)) return code
+  }
+  return null
 }
 
 /** 判断抛出物是否已是结构化错误（委托 `@lumin/shared` 单一真相源） */

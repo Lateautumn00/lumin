@@ -38,8 +38,11 @@ class FakeYtDlp
             }
         }
         Directory.CreateDirectory(outDir);
-        Console.Out.WriteLine("PROGRESS|1024|4096|512|10");
-        Console.Out.WriteLine("PROGRESS|4096|4096|512|3");
+        // 每步停顿，保证「进度可见（字节/速度/百分比）」在 e2e 断言窗口内稳定出现
+        Console.Out.WriteLine("PROGRESS|1024|4096|NA|512|10");
+        System.Threading.Thread.Sleep(500);
+        Console.Out.WriteLine("PROGRESS|4096|4096|NA|512|3");
+        System.Threading.Thread.Sleep(400);
         string finalPath = Path.Combine(outDir, "e2e-fake-video.mp4");
         File.WriteAllBytes(finalPath, new byte[4096]);
         Console.Out.WriteLine(finalPath);

@@ -7,10 +7,10 @@
  *              Cookie 按 URL 域名匹配平台 → safeStorage 解密 → 临时 Netscape 文件透传 --cookies，终态删除（spec §9）。
  *              deps 可注入便于单测（docx2pdf node.ts 同口径）
  */
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { runProcess, tail, type RunProcessResult } from '@lumin/node-kit'
-import { isStructuredError, makeError } from '@lumin/shared'
+import { isStructuredError, makeError, uniqueFileName } from '@lumin/shared'
 import type { MainPluginContext, RegisterMain, TaskHandlerContext } from '@lumin/plugin-api'
 import {
   cookieImportBrowserPayloadSchema,
@@ -30,8 +30,26 @@ import {
   type ProbeResult,
   type StartPayload
 } from './schema'
-import { toolError, errnoCode } from './errors'
-import { buildProbeArgs, buildStartArgs, parseProgressLine, progressMessage } from './progress'
+import { toolError, errnoCode, classifyEngineError } from './errors'
+import {
+  buildDirectStartArgs,
+  buildProbeArgs,
+  buildStartArgs,
+  parseProgressLine,
+  progressMessage
+} from './progress'
+import {
+  detectPlatform,
+  resolvePlatformMedia,
+  type ResolvedPlatformMedia
+} from './platforms'
+import {
+  MAX_PAGE_BYTES,
+  MOBILE_UA,
+  PAGE_TIMEOUT_MS,
+  safeFileTitle,
+  type FetchPage
+} from './platforms/common'
 import {
   buildCookieFileText,
   matchPlatformFor,
@@ -52,6 +70,37 @@ export interface VideoDownloadDeps {
   now: () => number
   /** node:sqlite 可用性探测（浏览器 Cookie 读取用，Electron 主进程运行时决定） */
   hasSqlite: () => boolean
+  /** 分享页抓取（抖音/快手 SSR 解析用；单测注入假实现，不触网） */
+  fetchPage: FetchPage
+}
+
+/** 默认抓页实现：全局 fetch（Node 24 / Electron 主进程可用；跟随 302、移动 UA、15s 超时、5MB 上限） */
+const defaultFetchPage: FetchPage = async (url, options) => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), options?.timeoutMs ?? PAGE_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, {
+      method: options?.method ?? 'GET',
+      headers: {
+        'User-Agent': MOBILE_UA,
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        ...options?.headers
+      },
+      ...(options?.body === undefined ? {} : { body: options.body }),
+      redirect: 'follow',
+      signal: controller.signal
+    })
+    const buffer = await res.arrayBuffer()
+    if (buffer.byteLength > MAX_PAGE_BYTES) throw new Error('分享页体积超过 5MB 上限')
+    return {
+      finalUrl: res.url,
+      status: res.status,
+      body: new TextDecoder('utf-8').decode(buffer),
+      setCookie: res.headers.getSetCookie()
+    }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** 默认依赖（真实 runProcess；reveal 走壳通道，此处无需 electron） */
@@ -60,6 +109,7 @@ function createDefaultDeps(): VideoDownloadDeps {
   return {
     runProcess,
     now: () => Date.now(),
+    fetchPage: defaultFetchPage,
     hasSqlite: () => {
       if (sqliteAvailable === null) {
         try {
@@ -81,11 +131,25 @@ export const PROBE_TIMEOUT_MS = 20_000
 const PROGRESS_STAGE = 'download'
 
 /**
- * stderr/stdout 中判定平台不支持（yt-dlp 错误文案，spec §5 VD_UNSUPPORTED_PLATFORM）
- * @param text 合并后的子进程输出
+ * 平台直链输出路径（定名 + 大小写不敏感唯一化；音频预设落 .mp3）
+ * @param outputDir 输出目录（已创建）
+ * @param title 平台解析出的标题
+ * @param preset 格式预设
  */
-function isUnsupportedPlatform(text: string): boolean {
-  return /unsupported\s+url/i.test(text)
+function allocateDirectOutput(
+  outputDir: string,
+  title: string,
+  preset: StartPayload['preset']
+): string {
+  const ext = preset === 'audio-mp3' ? 'mp3' : 'mp4'
+  let names: string[]
+  try {
+    names = readdirSync(outputDir)
+  } catch (err) {
+    throw toolError('VD_OUTPUT_WRITE_FAILED', errnoCode(err))
+  }
+  const lower = new Set(names.map((name) => name.toLowerCase()))
+  return join(outputDir, uniqueFileName(lower, `${safeFileTitle(title)}.${ext}`))
 }
 
 /**
@@ -231,6 +295,17 @@ export function registerWith(ctx: MainPluginContext, deps: VideoDownloadDeps): v
     if (!parsed.success) throw toolError('VD_URL_INVALID')
     const engineError = ensureEngine()
     if (engineError !== null) throw engineError
+    // 抖音/快手：分享页 SSR 直链解析（不经 yt-dlp，spec §10）
+    const platform = detectPlatform(parsed.data.url)
+    if (platform !== null) {
+      const resolved = await resolvePlatformMedia(parsed.data.url, 'best', deps.fetchPage)
+      if (resolved !== null) {
+        return probeResultSchema.parse({
+          title: resolved.title,
+          platform: resolved.platform
+        }) satisfies ProbeResult
+      }
+    }
     let cookieFile: string | null = null
     try {
       cookieFile = await resolveCookieFile(parsed.data.url, `probe-${deps.now()}`)
@@ -240,9 +315,10 @@ export function registerWith(ctx: MainPluginContext, deps: VideoDownloadDeps): v
         timeoutMs: PROBE_TIMEOUT_MS
       })
       if (result.timedOut || result.code !== 0 || result.aborted) {
-        throw isUnsupportedPlatform(result.stderr + result.stdout)
-          ? toolError('VD_UNSUPPORTED_PLATFORM')
-          : toolError('VD_PROBE_FAILED', diagnose(result))
+        const code = classifyEngineError(result.stderr + result.stdout)
+        throw code === null
+          ? toolError('VD_PROBE_FAILED', diagnose(result))
+          : toolError(code, diagnose(result))
       }
       let json: Record<string, unknown>
       try {
@@ -421,14 +497,43 @@ async function runStart(taskCtx: TaskHandlerContext<StartPayload>, env: StartEnv
     throw toolError('VD_OUTPUT_WRITE_FAILED', errnoCode(err))
   }
 
+  const platform = detectPlatform(input.url)
+  let resolved: ResolvedPlatformMedia | null = null
+  if (platform !== null) {
+    taskCtx.emit({
+      kind: 'progress',
+      current: 0,
+      total: 1,
+      stage: 'resolve',
+      message: '正在解析分享页…'
+    })
+    try {
+      resolved = await resolvePlatformMedia(input.url, input.preset, env.deps.fetchPage)
+    } catch (err) {
+      await env.writeEntry({
+        id: taskId,
+        url: input.url,
+        title: '',
+        preset: input.preset,
+        outputDir,
+        status: 'FAILED',
+        startedAt,
+        endedAt: env.deps.now()
+      })
+      throw err
+    }
+  }
+  const entryTitle = resolved === null ? '' : resolved.title
+
   await env.writeEntry({
     id: taskId,
     url: input.url,
-    title: '',
+    title: entryTitle,
     preset: input.preset,
     outputDir,
     status: 'RUNNING',
-    startedAt
+    startedAt,
+    ...(platform !== null ? { platform } : {})
   })
 
   let lastOutputPath = ''
@@ -455,16 +560,26 @@ async function runStart(taskCtx: TaskHandlerContext<StartPayload>, env: StartEnv
   // Cookie 透传（spec §9.4）：平台匹配 + 已配置 → 临时 Netscape 文件；终态 finally 删除
   let cookieFile: string | null = null
   try {
-    cookieFile = await env.resolveCookieFile(input.url, taskId)
+    cookieFile = resolved === null ? await env.resolveCookieFile(input.url, taskId) : null
+    const args =
+      resolved === null
+        ? buildStartArgs({
+            url: input.url,
+            preset: input.preset,
+            outputDir,
+            engineDir: env.engineDir,
+            ...(cookieFile !== null ? { cookieFile } : {})
+          })
+        : buildDirectStartArgs({
+            url: resolved.directUrl,
+            preset: input.preset,
+            outputPath: allocateDirectOutput(outputDir, resolved.title, input.preset),
+            engineDir: env.engineDir,
+            headers: resolved.headers
+          })
     const result = await env.deps.runProcess({
       command: env.enginePath,
-      args: buildStartArgs({
-        url: input.url,
-        preset: input.preset,
-        outputDir,
-        engineDir: env.engineDir,
-        ...(cookieFile !== null ? { cookieFile } : {})
-      }),
+      args,
       signal: taskCtx.signal,
       // 长任务不限时（用户可取消/暂停）；进度行数多，捕获上限放宽到 1MB
       maxOutputChars: 1024 * 1024,
@@ -479,11 +594,12 @@ async function runStart(taskCtx: TaskHandlerContext<StartPayload>, env: StartEnv
     const baseEntry: Omit<HistoryEntry, 'status'> = {
       id: taskId,
       url: input.url,
-      title: '',
+      title: entryTitle,
       preset: input.preset,
       outputDir,
       startedAt,
       endedAt,
+      ...(platform !== null ? { platform } : {}),
       ...(finalBytes !== undefined ? { downloadedBytes: finalBytes } : {})
     }
 
@@ -494,9 +610,10 @@ async function runStart(taskCtx: TaskHandlerContext<StartPayload>, env: StartEnv
     }
     if (result.code !== 0) {
       await env.writeEntry({ ...baseEntry, status: 'FAILED' })
-      throw isUnsupportedPlatform(result.stderr)
-        ? toolError('VD_UNSUPPORTED_PLATFORM')
-        : toolError('VD_DOWNLOAD_FAILED', diagnose(result))
+      const code = classifyEngineError(result.stderr + result.stdout)
+      throw code === null
+        ? toolError('VD_DOWNLOAD_FAILED', diagnose(result))
+        : toolError(code, diagnose(result))
     }
     await env.writeEntry({
       ...baseEntry,

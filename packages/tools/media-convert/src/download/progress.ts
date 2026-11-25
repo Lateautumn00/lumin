@@ -20,6 +20,14 @@ export interface ProgressSnapshot {
 const PROGRESS_PREFIX = 'PROGRESS|'
 
 /**
+ * yt-dlp 进度模板（start/direct 共用，保证解析口径一致）
+ * 直链实测（2026-11-25）：`total_bytes` 首行即有值、`total_bytes_estimate` 为 NA；
+ * 分片源（B站）相反 → 两段都输出，解析时优先 total_bytes、回退 estimate
+ */
+const PROGRESS_TEMPLATE =
+  'download:PROGRESS|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s'
+
+/**
  * 解析 progress-template 输出行；非 PROGRESS 行（如 [download]、[Merger]）返回 null。
  * 真实引擎实测：进度模板行走 stderr，`NA` 段（如 B站 total 估算缺失）→ null 字段
  * @param line yt-dlp --newline 的一行输出（stdout/stderr 任一）
@@ -27,7 +35,7 @@ const PROGRESS_PREFIX = 'PROGRESS|'
 export function parseProgressLine(line: string): ProgressSnapshot | null {
   if (!line.startsWith(PROGRESS_PREFIX)) return null
   const parts = line.slice(PROGRESS_PREFIX.length).split('|')
-  // 期望 4 段：downloaded | total_estimate | speed | eta
+  // 期望 5 段：downloaded | total_bytes | total_estimate | speed | eta
   const num = (raw: string | undefined): number | null => {
     if (raw === undefined) return null
     const trimmed = raw.trim()
@@ -37,9 +45,9 @@ export function parseProgressLine(line: string): ProgressSnapshot | null {
   }
   return {
     downloadedBytes: num(parts[0]),
-    totalBytes: num(parts[1]),
-    speedBps: num(parts[2]),
-    etaSec: num(parts[3])
+    totalBytes: num(parts[1]) ?? num(parts[2]),
+    speedBps: num(parts[3]),
+    etaSec: num(parts[4])
   }
 }
 
@@ -115,8 +123,10 @@ export function buildStartArgs(input: {
   const args = [
     '--no-playlist',
     '--newline',
+    // `--print` 隐含 `--quiet`，会吞掉进度模板行；显式 `--progress` 才能在 quiet 下恢复进度输出
+    '--progress',
     '--progress-template',
-    'download:PROGRESS|%(progress.downloaded_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s',
+    PROGRESS_TEMPLATE,
     '--ffmpeg-location',
     input.engineDir,
     '--no-overwrites',
@@ -134,6 +144,51 @@ export function buildStartArgs(input: {
   // after_move 不触发 simulate 模式：下载完成后输出最终文件路径（裸路径行）
   args.push('--print', 'after_move:filepath')
   if (input.cookieFile !== undefined) args.push('--cookies', input.cookieFile)
+  args.push(input.url)
+  return args
+}
+
+/**
+ * 组装「平台直链」下载参数（抖音/快手分享页解析结果，spec §10.4）
+ * 直链已定画质，故 `-f b` 直接取唯一格式；音频预设追加提取；输出路径为定名绝对路径
+ * @param input 直链下载输入
+ * @param input.url 平台直链（mp4）
+ * @param input.preset 格式预设
+ * @param input.outputPath 目标文件绝对路径（含扩展名，调用方已做唯一化）
+ * @param input.engineDir 引擎目录（ffmpeg 所在）
+ * @param input.headers `--add-header` 逐项（移动 UA / Referer）
+ */
+export function buildDirectStartArgs(input: {
+  url: string
+  preset: Preset
+  outputPath: string
+  engineDir: string
+  headers: readonly string[]
+}): string[] {
+  const args = [
+    '--no-playlist',
+    '--newline',
+    // `--print` 隐含 `--quiet`，会吞掉进度模板行；显式 `--progress` 才能在 quiet 下恢复进度输出
+    '--progress',
+    '--progress-template',
+    PROGRESS_TEMPLATE,
+    '--ffmpeg-location',
+    input.engineDir,
+    '--no-overwrites',
+    '--continue',
+    '-o',
+    // 输出路径按字面量处理：转义 `%` 防 yt-dlp 当作模板变量
+    input.outputPath.replace(/%/g, '%%'),
+    '-f',
+    'b'
+  ]
+  if (input.preset === 'audio-mp3') {
+    args.push('--extract-audio', '--audio-format', 'mp3')
+  }
+  for (const header of input.headers) {
+    args.push('--add-header', header)
+  }
+  args.push('--print', 'after_move:filepath')
   args.push(input.url)
   return args
 }

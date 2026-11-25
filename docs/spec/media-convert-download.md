@@ -81,6 +81,10 @@
 | `VD_OUTPUT_WRITE_FAILED`  | 输出目录不存在/不可写/磁盘满（errno ENOSPC → 磁盘满专项文案） | 输出目录不可写或磁盘空间不足                        |
 | `VD_DOWNLOAD_FAILED`      | 下载中非零退出（网络中断等），stderr 尾行入 detail            | 下载失败，请查看详情或稍后重试                      |
 | `VD_HISTORY_FAILED`       | 历史读写 settings 失败                                        | 历史记录读写失败                                    |
+| `VD_LINK_EXPIRED`         | 快手 token 过期/作品删除/私密/yt-dlp 报 video unavailable     | 链接已失效或内容不可访问，请重新复制分享链接后重试  |
+| `VD_LOGIN_REQUIRED`       | 引擎报 sign in to confirm / login required / 需要登录         | 该内容需要登录后访问，请先在 Cookie 管理中配置后重试 |
+| `VD_REGION_BLOCKED`       | 引擎报地区限制                                                | 该内容在当前地区不可用                              |
+| `VD_FORBIDDEN`            | 引擎报 HTTP Error 403                                         | 平台拒绝访问（403），请稍后重试或更换链接           |
 | `VD_CANCELLED`            | 用户取消/暂停（复用 shared `CANCELLED` 语义，工具内细分状态） | 已取消                                              |
 
 ## 6. 历史字段（`tools.media-convert.download.history` JSON，滚动 100 条）
@@ -170,3 +174,55 @@
 2. Firefox 真实 profile 读取 → 抖音登录态真实下载一条登录可见内容成功；B站大会员账号 probe 返回会员画质
 3. 存储加密落盘验证（磁盘文件中无明文 cookie）；日志无 cookie 值
 4. 临时 cookie 文件任务终态后不存在；R2 八类在 cookie 场景的等价异常（占用/失效/损坏）逐条入 smoke
+
+## 10. 抖音 / 快手直链下载（三期，2026-11-25 R8 登记，plan Q83/M83）
+
+> 背景与选型依据：`docs/research/downloader-optimization.md §7`。不采用 res-downloader 的**系统代理 + 根证书 MITM**，不采用 galaxy-downloader 的**闭源托管 API**；改为解析平台**分享页 SSR HTML** 中的直链（公开页面、移动 UA、无账号登录、无签名、无 cookie 池）。
+
+> **2026-11-25 真机实测修订**：抖音分享页在**无 cookie 时不内联 `videoInfoRes`**（`_ROUTER_DATA` 仅剩 query/commonContext）。经字节 `ttwid` 注册端点取**匿名访客态 cookie**（`aid=1768, region=cn`，不含任何账号信息）后，同一页面即回传 `video.play_addr.url_list`。实现已在解析前自动获取该 cookie；获取失败退回无 cookie 请求并按解析失败归因。
+
+### 10.1 抖音（Douyin）
+
+| 项 | 规则 |
+| -- | ---- |
+| 链接形态 | `v.douyin.com/<code>`（App 短链，跟随 302）、`www.douyin.com/video/<id>`、`?modal_id=<id>`、`www.iesdouyin.com/share/video/<id>` |
+| 分享口令 | 整段 App 复制文案（「2.58 复制打开抖音… \`https://v.douyin.com/xxx/\` …」）由 schema `extractVideoUrl` 提取首个 URL（squema.test.ts 覆盖） |
+| ID 提取 | `/(video|share/video)/(\d{6,})` → `modal_id=(\d{6,})` → 302 `finalUrl` / 页面正文 |
+| 会话 | `POST https://ttwid.bytedance.com/ttwid/union/register/`（`{region:'cn',aid:1768,service:'www.ixigua.com',union:true}`）→ `Set-Cookie: ttwid=…` → 后续分享页请求带 `Cookie: ttwid=…`；失败不阻断（退回无 cookie 请求） |
+| 分享页 | `https://www.iesdouyin.com/share/video/<aweme_id>/`，UA 固定 iPhone Safari |
+| 直链 | `_ROUTER_DATA` JSON 的 `video.play_addr.url_list`（花括号平衡提取 + 递归查找）；失败退化正则 `"play_addr":{...}`；`\u002F`/`\/` 反转义、`http` 升 `https` |
+| 去水印（用户拍板） | `playwm` → `play`（默认无水印流） |
+| 画质 | `ratio` 参数：`best`/`1080p` → `1080p`（实测 119MB / H.264）；`audio-mp3` → `720p`（实测 90MB，音轨一致、省流量）；**不用 `default`**（实测单条 1.08GB 原始母版） |
+| 标题 | 作品 `desc`；无则 `<title>` 去 `- 抖音` 后缀 |
+
+### 10.2 快手（Kuaishou）
+
+| 项 | 规则 |
+| -- | ---- |
+| 链接形态 | `v.kuaishou.com/<code>`（App 分享）、`www.kuaishou.com/short-video/<photoId>`、`www.kuaishou.com/f/<token>` |
+| 抓页 | 直接 GET（跟随 302），UA 固定 iPhone Safari + `Accept-Language: zh-CN` |
+| 直链 | 页面内全部 `https?://…\.mp4(\?…)`，按 base 去重；`hd15`/`_hd` = 高清、`_b_` = 标清；选择顺序「高清 → 标清 → 其余」 |
+| 标题 | `<title>` 去 `- 快手` 后缀；为空回退 `kuaishou` |
+| 失效 | 无直链且页面含「作品不存在/已删除/链接已失效」→ `VD_LINK_EXPIRED`；否则 `VD_PROBE_FAILED`（提示可能改版） |
+
+### 10.3 链路与下载
+
+1. `download-probe`：`detectPlatform` 命中 → SSR 解析 → 返回 `{ title, platform: douyin|kuaishou }`（不调用 yt-dlp）；未命中走原 yt-dlp `-J`。
+2. `download-start`：命中 → 解析时按预设计算 `ratio` / 清晰度 → 组装 `buildDirectStartArgs`：`-f b`、`--add-header "User-Agent: <iPhone UA>"`、`--add-header "Referer: https://www.douyin.com/|https://www.kuaishou.com/"`、`-o <输出目录>/<安全标题>.<mp4|mp3>`（`uniqueFileName` 大小写不敏感去重，`%` 转义）；`audio-mp3` 追加 `--extract-audio --audio-format mp3`。
+3. 进度/暂停（`.part` 续传）/取消/历史/打开文件夹**全部复用既有实现**；平台任务不再读写 cookie。
+4. **进度输出前置条件（2026-11-25 实测修复）**：`--print after_move:filepath` 隐含 `--quiet`，会吞掉 `--progress-template` 输出（表现为进度条恒为 0 但最终下载成功）；两条 start 参数路径均显式带 **`--progress`**。模板改为五段 `downloaded | total_bytes | total_bytes_estimate | speed | eta`，解析优先 `total_bytes`（直链首行即有值）、`NA` 时回退 `total_bytes_estimate`（B站分片源）。
+5. 解析失败 → 直接写 `FAILED` 历史 + 结构化错误，**不自动重试**（链接失效重试无意义）。
+
+### 10.4 边界与风险
+
+- 抓页超时 15s、正文上限 5MB；实现用全局 `fetch`（Node 24 / Electron 主进程可用），零新增依赖。
+- 抖音访客态 `ttwid` 为**匿名会话标识**（非账号 cookie），每次解析现取不缓存、不落盘、不做多账号池；端点失效时解析失败并提示「改用 cookies 导入」。
+- 平台改版导致解析失败时回退提示「请升级应用后重试」；解析器集中在 `platforms/` 单文件，便于快速修复。
+- 不做：系统代理/MITM/证书、DRM、付费墙、直播录制、签名逆向、cookie 池。
+
+### 10.5 验收标准
+
+1. 单测：抖音长链/短链/modal_id、`playwm→play`、`ratio` 改写/追加、`_ROUTER_DATA` 与正则兜底、`ttwid` 提取/获取失败回退/请求头透传、异常分支；快手三种链接形态、`hd15/_b_` 分桶去重、失效/改版归因；platforms 四文件行/分支/函数覆盖 ≥80%。
+2. 真实链路（2026-11-25 已实测至直链层）：短链 `v.douyin.com/1ksnYsT9MCY/` → 302 → `aweme_id=7707583901452419835` → 带 `ttwid` 分享页拿到 `play_addr` → `play` + `ratio=1080p` 返回 `video/mp4`（119,222,946 B，H.264）；yt-dlp 识别为 `mp4` 单格式（`--max-filesize` 守卫下正常中止）。**待用户真机**：完整下载落盘、无水印画面核对、快手短链/长链（无样本链接）。
+3. 失败归因：失效链接 → `VD_LINK_EXPIRED`；登录可见内容 → `VD_LOGIN_REQUIRED`；`403` → `VD_FORBIDDEN`。
+4. 回归：非目标平台链接行为与三期前完全一致（yt-dlp 分支未改动）。

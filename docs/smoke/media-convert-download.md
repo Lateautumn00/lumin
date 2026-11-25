@@ -99,3 +99,83 @@
 - 通道改为 `media-convert:download-*`（`probe` / `start` / `mark-pause` / `history` / `history:clear` / `cookie:list` / `cookie:set` / `cookie:remove` / `cookie:import-browser`）；错误码 `VD_*` 不变。
 - 设置键迁至 `tools.media-convert.download.*`（`history` / `disclaimerAccepted` / `cookies.<platform>`），旧键不迁移；打开工具箱默认停留在「格式转换」，**切到「下载」页签才实例化并触发免责弹窗**。
 - e2e 改名 `media-toolbox-download.spec.ts`（5/5 通过，2026-11-25 复跑），命令 `pnpm --filter @lumin/desktop test:e2e -- media-toolbox-download`；合并后工具 chunk 实测 107,332 B raw / 25,640 B gzip（见 `docs/smoke/media-convert.md` §4）。
+
+## 5. 三期 抖音 / 快手直链（2026-11-25，M83）
+
+> spec 字段级规则见 `docs/spec/media-convert-download.md` §10；决策见 plan Q83 / §4.83 / M83。
+
+### 5.1 链路（与二期的差别）
+
+- 二期：链接一律交 yt-dlp 自身 extractor 解析（抖音需签名、快手无内置 extractor，实测失败）。
+- 三期：主进程先用全局 `fetch` 拉分享页 HTML（iPhone UA、15s 超时、5MB 上限、follow 重定向）→ 平台模块解析出**真实播放直链**；命中平台则跳过 `cookieFile` 解析，直链交 yt-dlp 下载（`-f b --add-header UA/Referer -o <定名路径> --no-overwrites --continue`），进度 / 暂停续传 / 历史 / 取消全复用既有链路。
+- **抖音会话（真机实测后补）**：分享页无 cookie 时 `_ROUTER_DATA` 不带 `videoInfoRes`；解析前先 `POST https://ttwid.bytedance.com/ttwid/union/register/` 取匿名访客态 `ttwid`，后续请求带 `Cookie: ttwid=…` 即回传 `play_addr`（不涉及账号登录）。
+- 抖音去水印：直链 `playwm` 段改写为 `play`；画质 `ratio`：best/1080p → `1080p`，audio-mp3 → `720p`（`default` 实测单条 1.08GB，弃用）。
+- 快手：页面内 `.mp4` 直链按 `hd15`/`_hd` → 标清 → 其余 优先级挑选，token 有 TTL 故解析后立即下载。
+
+### 5.2 自动化验证
+
+- [x] 单测：`pnpm exec vitest run packages/tools/media-convert/src/download` → **10 文件 / 151 用例全通过**（platforms 3 文件 35 例、直链 node 用例 6 例、`ttwid` 提取/获取/回退/请求头透传 4 例、归因 5 例）
+- [x] 覆盖率（`coverage-summary.json` 实测）：`platforms` 聚合 statements 92.59% / branches 82.55% / functions 100% / lines 97.74%；全量 `pnpm coverage` 门禁绿（全仓 statements 94.51% / branches 87.63% / functions 92.58% / lines 96.05%，3536 例）
+- [x] `pnpm --filter @lumin/tool-media-convert typecheck`、`pnpm exec eslint packages/tools/media-convert/src/download`、`pnpm gate`、`pnpm build` 全绿
+- [x] 关键断言：probe 命中抖音/快手时**不调用 yt-dlp**；抖音 start 参数含 `play`（非 `playwm`）、`ratio`、定名 `-o`、`--add-header` ×2；`ttwid` 取到后分享页请求带 `Cookie` 头；快手 start 取 hd 直链、`audio-mp3` 预设额外带 `--extract-audio --audio-format mp3`；解析失败先写 FAILED 历史再抛结构化错误
+
+### 5.2.1 真实网络实测（2026-11-25，本机）
+
+样本：用户提供的整段分享口令（`2.58 复制打开抖音… \`https://v.douyin.com/1ksnYsT9MCY/\` :5pm PKJ:/ d@n.da 03/01`）
+
+| 步骤 | 结果 |
+| ---- | ---- |
+| 口令 → URL 提取 | `extractVideoUrl` 剥离反引号与尾部随机码 → `https://v.douyin.com/1ksnYsT9MCY/`（schema.test.ts 用例覆盖，含本样本同形态） |
+| 短链 302 | `200`，落地 `www.iesdouyin.com/share/video/7707583901452419835/?…&from_ssr=1…` |
+| 无 cookie 分享页 | `_ROUTER_DATA` 存在但**无** `videoInfoRes` / `play_addr`（旧方案直接失效） |
+| ttwid 注册 | `POST ttwid.bytedance.com/…/register/` → `200` + `ttwid`（127 字节） |
+| 带 ttwid 分享页 | `videoInfoRes` ✓ `play_addr` ✓ → `https://aweme.snssdk.com/aweme/v1/playwm/?line=0&logo_name=aweme_diversion_search&ratio=720p&video_id=v2700fgi0000dbrdaafog65op6rhnj80` |
+| 去水印 + 1080p | `play/?…&ratio=1080p` → `video/mp4`，`Content-Length: 119,222,946` |
+| 去水印 + 720p | `play/?…&ratio=720p` → `video/mp4`，`Content-Length: 90,173,027` |
+| `ratio=default` | `video/mp4`，`Content-Range: 0-2048/1,081,499,697`（1.08GB，判定为原始母版，已弃用该档） |
+| yt-dlp 直链 | `[redirect] → douyinvod.com…` → `Downloading 1 format(s): mp4`，`--max-filesize 2M` 守卫下按 119MB 正常中止 |
+| 反向验证 | yt-dlp 直接吃 `www.douyin.com/video/<id>` → `Fresh cookies (not necessarily logged in) are needed`（证实必须走直链方案） |
+
+### 5.2.2 实测发现的缺陷与修复（2026-11-25，用户反馈）
+
+| 现象 | 根因 | 修复 | 证据 |
+| ---- | ---- | ---- | ---- |
+| 进度条恒为 0、无速度/ETA，但最终下载成功 | `--print after_move:filepath` **隐含 `--quiet`**，`--progress-template` 输出被吞（本机对照实验：仅 template → 0 行；`--print` → 0 行；`--print` + `--progress` → 34 行） | start 两条参数路径统一追加 **`--progress`** | `progress.test.ts` 断言 `--progress` 存在；真实引擎 6s 采样 34 条 PROGRESS 行 |
+| 百分比无法计算（total 缺失） | 模板只取 `total_bytes_estimate`，直链源该字段为 `NA`（`total_bytes` 首行即有值）；B站分片源相反 | 模板扩为五段，解析优先 `total_bytes`、回退 `total_bytes_estimate` | 实测首行 `PROGRESS\|1024\|119222946\|NA\|NA\|NA`、末行 `…117439488\|119222946\|NA\|5553160\|0` |
+
+> 该缺陷对**所有**预设生效（含二期 B站路径），修复后 e2e 假引擎进度行同步改为五段格式。
+>
+> **UI 层验证（2026-11-25）**：假引擎每步加 500ms 停顿后，`media-toolbox-download.spec.ts` 新增断言 `512 B/s · 剩余 0:10 · 25%` 可见，**5/5 通过**（`pnpm --filter @lumin/desktop exec playwright test e2e/media-toolbox-download.spec.ts`）——确认进度条百分比、速度、ETA 均在页面上真实渲染。
+
+### 5.3 R2 八类异常在直链场景的映射
+
+| #   | 类别          | 直链场景等价异常                             | 保障机制                                                                                     | 实测结果                                                                     |
+| --- | ------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 1   | 中文/空格路径 | 分享页标题含中文/表情/斜杠                   | `safeFileTitle()` 去非法字符 + `uniqueFileName` 大小写不敏感去重，全程 path API              | 单测覆盖（`allocateDirectOutput` + `common.test.ts`）                        |
+| 2   | 文件被占用    | 同名成品已存在 / 被独占                       | `--no-overwrites` + `--continue`（引擎层），输出名由 `allocateDirectOutput` 预分配           | 单测覆盖命名去重；引擎行为同 §1 #2                                           |
+| 3   | 加密文件      | 分享页被风控 / 需登录 / 地区限制              | `classifyEngineError`：login required → `VD_LOGIN_REQUIRED`、地区 → `VD_REGION_BLOCKED`、403 → `VD_FORBIDDEN`、作品不存在/已删除 → `VD_LINK_EXPIRED` | 单测覆盖 5 条归因分支                                                        |
+| 4   | 超大文件      | 分享页 HTML 异常巨大                         | `MAX_PAGE_BYTES = 5MB` 上限 + `PAGE_TIMEOUT_MS = 15s` AbortController                        | 单测覆盖截断与超时分支                                                       |
+| 5   | 任务取消      | 解析阶段取消                                 | 解析在主进程 handler 内同步完成（远小于超时），下载阶段取消同二期 AbortSignal                 | 机制同 §1 #5                                                                 |
+| 6   | 并发溢出      | 多链接同时解析                               | 壳 task-queue 并发上限统一管控（`shell.taskConcurrency`）                                     | 机制同 §1 #6                                                                 |
+| 7   | 磁盘满        | 输出目录不可写 / 分配产物名失败               | `allocateDirectOutput` 失败 → `VD_OUTPUT_WRITE_FAILED`                                        | 单测覆盖                                                                     |
+| 8   | 断电恢复      | 解析中进程被杀 / 下载中断                     | 提交即写 RUNNING 历史、解析失败写 FAILED；`.part` 残留可续传                                  | 机制同 §1 #8                                                                 |
+
+### 5.4 待真机验证清单（需外网 + 真实分享链接）
+
+- [x] 抖音短链 `https://v.douyin.com/xxxxxxx/` → probe 出标题/平台（解析层实测，见 §5.2.1）
+- [x] 抖音整段分享口令（含反引号与随机码）→ URL 提取正确
+- [x] 去水印直链可达（`play` 端点返回 `video/mp4`）；画面无水印待下载完整文件后肉眼核对
+- [x] 「1080p」预设 URL 含 `ratio=1080p`、「音频 MP3」含 `ratio=720p`
+- [ ] 完整下载落盘（走应用内 yt-dlp，产物可播放）
+- [ ] 抖音长链 `https://www.douyin.com/video/<aweme_id>`、`?modal_id=<aweme_id>` 在应用内 probe + 下载
+- [ ] 「音频 MP3」预设产物确为 `.mp3` 且时长与源一致
+- [ ] 快手短链 `https://v.kuaishou.com/xxxxx` 与长链（`short-video` / `photo`）——**缺真实样本链接，尚未验证**
+- [ ] 失效链接（已删除作品）→ `VD_LINK_EXPIRED` 中文文案
+- [ ] 分享页被风控 → `VD_LOGIN_REQUIRED` / `VD_FORBIDDEN` detail 透出且可重试语义正确
+
+> 说明：直链层已用本机网络实测通过（含 ttwid 会话、去水印、1080p/720p、yt-dlp 识别 mp4）；剩余项需在应用内跑完整链路（下载落盘 + 播放核对），快手因无样本链接整体待验证。
+
+### 5.5 R5 / R7 记录
+
+- **零新增依赖 / 零新增二进制**：页面拉取改用 Electron 主进程全局 `fetch`（Node 18+ / Electron 45 内置），未引 axios/got；下载仍走既有 `yt-dlp.exe`。
+- 新增代码仅主进程 `src/download/platforms/*`（不入 renderer chunk），renderer 代码未改动 → 工具 chunk 增量 **0**；`pnpm audit:high` 无新增风险面。

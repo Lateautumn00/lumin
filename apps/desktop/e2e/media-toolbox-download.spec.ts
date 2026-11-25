@@ -116,6 +116,8 @@ test.describe('媒体工具箱 - 下载页签（假引擎）', () => {
     await expect(page.getByText('bilibili.com')).toBeVisible()
 
     await page.getByRole('button', { name: '下载', exact: true }).click()
+    // 进度可见：速度/ETA + 百分比（百分比由 total_bytes 推导；修复前 total 缺失只剩转圈、恒为 0）
+    await expect(page.getByText(/512 B\/s.*25%/)).toBeVisible()
     await expect(page.getByText('下载历史')).toBeVisible()
     await expect(page.getByText('https://example.com/watch/1').first()).toBeVisible()
     await expect(page.getByText('已完成').first()).toBeVisible()

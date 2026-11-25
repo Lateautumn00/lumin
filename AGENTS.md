@@ -192,6 +192,7 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 - 文档输出合并决策（2026-11-25，plan Q80/M80）：`print-tool` **整包并入 `docx2pdf`**（显示名「文档输出」，`version 0.3.0`）为「转为 PDF / 打印」两页签（文档入口 2 → 1），删除独立包与侧边栏入口、薄壳页、e2e；通道 `docx2pdf:print-*`，settings `tools.docx2pdf.print.*`，错误码保留 `PR_*`；**零新增依赖/二进制**；修改须重走 R8
 - 压缩包并入文件扫描决策（2026-11-25，plan Q81/M81）：`zip-tool` **整包并入 `file-scanner`** 为第 7 页签「压缩包」（`version 0.3.0`），删除独立包与侧边栏入口、薄壳页、e2e；通道 `file-scanner:zip-*`，settings `tools.file-scanner.zip.*`，错误码保留 `ZP_*`；依赖仅继承 `fflate 0.8.3`；修改须重走 R8
 - OCR/二维码并入图片工具箱决策（2026-11-25，plan Q82/M82）：`ocr-text` / `qr-code` **整包并入 `image-toolbox`** 为「文字识别 / 二维码」两页签（`version 0.5.0`，图片入口 3 → 1），删除两包与侧边栏入口、薄壳页、e2e；通道 `image-toolbox:ocr-* / qr-*`，settings `tools.image-toolbox.ocr|qr.*`，错误码保留 `OCR_*`/`QR_*`；依赖继承 `@lumin/ocr-kit`/`jsqr`/`qrcode`；**e2e 必须按 DropZone `aria-label` 与占位符定位输入框**（多页签常驻挂载）；修改须重走 R8
+- 抖音/快手下载决策（2026-11-25，plan Q83/M83）：`media-convert` 下载页签新增**分享页 SSR 直链解析**（`download/platforms/`，iPhone UA + `_ROUTER_DATA.play_addr` / 页面内 `.mp4`），probe/start 前置分流，直链交 yt-dlp `-f b --add-header` 下载；抖音分享页需**匿名访客态 `ttwid`**（字节 ttwid 注册端点 GET/POST 现取现用，非账号 cookie，不落盘不缓存池化）才下发 `videoInfoRes`；`playwm→play` **默认去水印**，`ratio` 映射 `best/1080p→1080p`、`audio-mp3→720p`（实测 `default` 单条 1.08GB 弃用），快手 `hd15/_hd` 优先；新增错误码 `VD_LINK_EXPIRED / VD_LOGIN_REQUIRED / VD_REGION_BLOCKED / VD_FORBIDDEN`；**禁止**引入系统代理 + 根证书 MITM、闭源解析 API、签名逆向、cookie 池；**零新增依赖/二进制**；修改须重走 R8
 
 ---
 

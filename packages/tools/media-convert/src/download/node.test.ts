@@ -29,6 +29,7 @@ import type { StructuredError, TaskUpdate } from '@lumin/shared'
 import { manifest } from '../manifest'
 import { importBrowserCookies } from './browser-cookies'
 import { PROBE_TIMEOUT_MS, registerMain, registerWith, type VideoDownloadDeps } from './node'
+import type { FetchPage } from './platforms/common'
 import type { HistoryEntry, StartPayload } from './schema'
 import type { NetscapeCookieLine } from './cookies'
 
@@ -75,7 +76,7 @@ afterEach(() => {
 function createHarness(
   scripts: RunScript[],
   initialSettings: Record<string, unknown> = {},
-  options: { secure?: boolean } = {}
+  options: { secure?: boolean; fetchPage?: FetchPage } = {}
 ): Harness {
   const root = mkdtempSync(join(tmpdir(), 'lumin-vd-test-'))
   roots.push(root)
@@ -117,7 +118,10 @@ function createHarness(
       )
     },
     now: () => 1700000000000 + calls.length * 1000,
-    hasSqlite: () => false
+    hasSqlite: () => false,
+    fetchPage:
+      options.fetchPage ??
+      (() => Promise.reject(new Error('本用例不应发起分享页请求')))
   }
 
   const ctx: MainPluginContext = {
@@ -271,6 +275,104 @@ describe('probe', () => {
   })
 })
 
+describe('platform 直链（抖音/快手，spec §10）', () => {
+  const douyinHtml =
+    '<html><head><title>示例 - 抖音</title></head><body><script>window._ROUTER_DATA = ' +
+    '{"loaderData":{"video_(id)/page":{"videoInfoRes":{"item_list":[{"desc":"抖音标题",' +
+    '"video":{"play_addr":{"url_list":["https://v.example.com/aweme/v1/playwm/?video_id=1&ratio=720p"]}}}]}}}};' +
+    '</script></body></html>'
+  const kuaishouHtml =
+    '<html><head><title>快手标题 - 快手</title></head><body>' +
+    '<video src="https://k.example.com/upic/_b_/sd.mp4?tag=1"></video>' +
+    '<video src="https://k.example.com/upic/hd15/hd.mp4?tag=1"></video>' +
+    '</body></html>'
+
+  /** 固定正文的抓页假件 */
+  const pageFetcher =
+    (body: string, status = 200): FetchPage =>
+    () =>
+      Promise.resolve({ finalUrl: 'https://www.douyin.com/video/1', status, body })
+
+  it('probe 抖音：分享页解析标题/平台，不调用 yt-dlp', async () => {
+    const harness = createHarness([], {}, { fetchPage: pageFetcher(douyinHtml) })
+    const result = (await invokeIpc(harness, 'probe', {
+      url: 'https://www.douyin.com/video/7300000000000000001'
+    })) as Record<string, unknown>
+    expect(result).toEqual({ title: '抖音标题', platform: 'douyin' })
+    expect(harness.calls).toHaveLength(0)
+  })
+
+  it('probe 快手：短链解析出标题与平台', async () => {
+    const harness = createHarness([], {}, { fetchPage: pageFetcher(kuaishouHtml) })
+    const result = (await invokeIpc(harness, 'probe', {
+      url: 'https://v.kuaishou.com/abc123'
+    })) as Record<string, unknown>
+    expect(result).toEqual({ title: '快手标题', platform: 'kuaishou' })
+  })
+
+  it('probe 快手：作品不存在 → VD_LINK_EXPIRED', async () => {
+    const harness = createHarness([], {}, { fetchPage: pageFetcher('<html>作品不存在</html>') })
+    await expect(
+      invokeIpc(harness, 'probe', { url: 'https://v.kuaishou.com/abc123' })
+    ).rejects.toMatchObject({ code: 'VD_LINK_EXPIRED' })
+  })
+
+  it('start 抖音：去水印直链 + 画质 ratio + 定名输出 + DONE 历史', async () => {
+    const dir = mkdtempSafe()
+    const harness = createHarness([{ result: { stdout: '' } }], {}, { fetchPage: pageFetcher(douyinHtml) })
+    const { error, updates } = await runTask(
+      harness,
+      {
+        url: 'https://www.douyin.com/video/7300000000000000001',
+        preset: '1080p',
+        outputDir: dir
+      },
+      { taskId: 't-douyin' }
+    )
+    expect(error).toBeUndefined()
+    const args = harness.calls[0]?.args ?? []
+    expect(args).toContain('https://v.example.com/aweme/v1/play/?video_id=1&ratio=1080p')
+    expect(args).toContain('--add-header')
+    expect(args.join(' ')).toContain('User-Agent: Mozilla/5.0 (iPhone')
+    expect(args[args.indexOf('-o') + 1]).toBe(join(dir, '抖音标题.mp4'))
+    expect(updates.some((u) => u.kind === 'progress' && u.stage === 'resolve')).toBe(true)
+    const history = harness.settings.get('history') as HistoryEntry[]
+    expect(history[0]).toMatchObject({
+      status: 'DONE',
+      title: '抖音标题',
+      platform: 'douyin'
+    })
+  })
+
+  it('start 快手：优先高清直链；audio-mp3 落 .mp3 并提取音频', async () => {
+    const dir = mkdtempSafe()
+    const harness = createHarness([{ result: { stdout: '' } }], {}, { fetchPage: pageFetcher(kuaishouHtml) })
+    const { error } = await runTask(
+      harness,
+      { url: 'https://v.kuaishou.com/abc123', preset: 'audio-mp3', outputDir: dir },
+      { taskId: 't-ks' }
+    )
+    expect(error).toBeUndefined()
+    const args = harness.calls[0]?.args ?? []
+    expect(args).toContain('https://k.example.com/upic/hd15/hd.mp4?tag=1')
+    expect(args).toContain('--extract-audio')
+    expect(args[args.indexOf('-o') + 1]).toBe(join(dir, '快手标题.mp3'))
+  })
+
+  it('start 平台解析失败：写 FAILED 历史并透传结构化错误', async () => {
+    const dir = mkdtempSafe()
+    const harness = createHarness([], {}, { fetchPage: pageFetcher('<html>作品不存在</html>') })
+    const { error } = await runTask(
+      harness,
+      { url: 'https://v.kuaishou.com/abc123', preset: 'best', outputDir: dir },
+      { taskId: 't-fail' }
+    )
+    expect(error).toMatchObject({ code: 'VD_LINK_EXPIRED' })
+    const history = harness.settings.get('history') as HistoryEntry[]
+    expect(history[0]).toMatchObject({ status: 'FAILED' })
+  })
+})
+
 describe('mark-pause', () => {
   it('登记 taskId（后续 start abort 据此判 PAUSED）', async () => {
     const harness = createHarness([])
@@ -314,7 +416,7 @@ describe('start', () => {
     const harness = createHarness([
       {
         result: {},
-        stdoutLines: ['PROGRESS|1024|4096|512|10', 'PROGRESS|2048|4096|512|6', finalPath]
+        stdoutLines: ['PROGRESS|1024|4096|NA|512|10', 'PROGRESS|2048|4096|NA|512|6', finalPath]
       }
     ])
     mkdirSync(outputDir, { recursive: true })
@@ -350,7 +452,7 @@ describe('start', () => {
     const harness = createHarness([
       {
         result: {},
-        stderrLines: ['PROGRESS|4096|8192|1024|4'],
+        stderrLines: ['PROGRESS|4096|8192|NA|1024|4'],
         stdoutLines: [finalPath]
       }
     ])
@@ -395,10 +497,20 @@ describe('start', () => {
   })
 
   it('非零码普通失败 → VD_DOWNLOAD_FAILED', async () => {
-    const harness = createHarness([{ result: { code: 1, stderr: 'HTTP Error 403' } }])
+    const harness = createHarness([{ result: { code: 1, stderr: 'an unexpected engine error' } }])
     mkdirSync(outputDir, { recursive: true })
     const { error } = await runTask(harness, startPayload)
-    expect(error).toMatchObject({ code: 'VD_DOWNLOAD_FAILED', detail: 'HTTP Error 403' })
+    expect(error).toMatchObject({
+      code: 'VD_DOWNLOAD_FAILED',
+      detail: 'an unexpected engine error'
+    })
+  })
+
+  it('403 归因 → VD_FORBIDDEN（spec §5.1）', async () => {
+    const harness = createHarness([{ result: { code: 1, stderr: 'ERROR: HTTP Error 403' } }])
+    mkdirSync(outputDir, { recursive: true })
+    const { error } = await runTask(harness, startPayload)
+    expect(error).toMatchObject({ code: 'VD_FORBIDDEN', detail: 'ERROR: HTTP Error 403' })
   })
 
   it('非结构化异常兜底包装 → VD_DOWNLOAD_FAILED', async () => {
@@ -439,7 +551,8 @@ describe('start', () => {
       {
         runProcess: () => Promise.reject(new Error('boom')),
         now: () => 0,
-        hasSqlite: () => false
+        hasSqlite: () => false,
+        fetchPage: () => Promise.reject(new Error('本用例不应发起分享页请求'))
       }
     )
     const updates: TaskUpdate[] = []
@@ -593,7 +706,7 @@ describe('cookie 通道（spec §9）', () => {
     const harness = createHarness([
       {
         result: {},
-        stderrLines: ['PROGRESS|10|100|1024|1'],
+        stderrLines: ['PROGRESS|10|100|NA|1024|1'],
         stdoutLines: [join(outputDir, 'done.mp4')]
       }
     ])
