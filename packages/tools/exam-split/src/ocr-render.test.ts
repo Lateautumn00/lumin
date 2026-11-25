@@ -8,6 +8,7 @@ import {
   PDF_RENDER_SCALE,
   classifyPdfjsError,
   classifyReadError,
+  encodeImage,
   encodePng,
   ensureCjkFont,
   renderOcrInput,
@@ -272,6 +273,27 @@ describe('encodePng（spec §10.7 写后校验头）', () => {
     const data = new Uint8ClampedArray(4 * 4 * 4).fill(255)
     const bytes = encodePng({ data, width: 4, height: 4 })
     expect(bytes.subarray(0, 4).toString('hex')).toBe('89504e47')
+  })
+})
+
+describe('encodeImage（M69 页面切分保持原格式）', () => {
+  const image = { data: new Uint8ClampedArray(8 * 8 * 4).fill(200), width: 8, height: 8 }
+
+  it('PNG/JPEG/WebP 输出各自格式魔数', () => {
+    expect(encodeImage(image, 'png').subarray(0, 4).toString('hex')).toBe('89504e47')
+    expect(encodeImage(image, 'jpeg').subarray(0, 3).toString('hex')).toBe('ffd8ff')
+    expect(encodeImage(image, 'webp').subarray(0, 4).toString('ascii')).toBe('RIFF')
+  })
+
+  it('JPEG quality 影响体积（低质量更小）', () => {
+    const image2 = {
+      data: new Uint8ClampedArray(32 * 32 * 4).map((_, index) => (index * 37) % 256),
+      width: 32,
+      height: 32
+    }
+    expect(encodeImage(image2, 'jpeg', 20).length).toBeLessThan(
+      encodeImage(image2, 'jpeg', 95).length
+    )
   })
 })
 

@@ -1,5 +1,6 @@
 import { access, constants, open } from 'node:fs/promises'
 import ocrWorkerPath from './ocr.worker.ts?modulePath'
+import halveWorkerPath from './page-split.worker.ts?modulePath'
 import workerPath from './pdf.worker.ts?modulePath'
 import {
   classifyPrecheckError,
@@ -15,9 +16,11 @@ import type { ZodType } from 'zod'
 import { toolError } from './errors'
 import type { OcrTaskResult, OcrWorkerRequest } from './ocr-ops'
 import { ocrModelDir, verifyOcrAssets } from './ocr-assets'
+import type { HalveResult, HalveWorkerRequest } from './page-split-ops'
 import type { OpResult, WorkerRequest } from './pdf-ops'
 import {
   cropPayloadSchema,
+  halvePayloadSchema,
   ocrDetectPayloadSchema,
   ocrExportPayloadSchema,
   splitPayloadSchema
@@ -32,10 +35,13 @@ export interface ExamSplitDeps {
   workerPath: string
   /** OCR worker 绝对路径（同上口径） */
   ocrWorkerPath: string
+  /** 页面切分 worker 绝对路径（同上口径） */
+  halveWorkerPath: string
   checkReadable(path: string): Promise<void>
   checkExclusive(path: string): Promise<void>
   run(options: RunTaskOptions<WorkerRequest>): Promise<OpResult>
   runOcr(options: RunTaskOptions<OcrWorkerRequest>): Promise<OcrTaskResult>
+  runHalve(options: RunTaskOptions<HalveWorkerRequest>): Promise<HalveResult>
   /** 模型目录预检 + 定位（每次 detect 前执行；缺失/损坏 → MODEL_MISSING，spec §10.5） */
   ocrBinariesDir(): Promise<string>
 }
@@ -58,6 +64,17 @@ export function mapOcrWorkerError(err: unknown): unknown {
     const cause = err.cause
     const detail = cause instanceof Error ? cause.message : String(cause ?? err.message)
     return toolError('OCR_FAILED', tail(detail))
+  }
+  return err
+}
+
+/** 页面切分 worker 错误映射：超时 → OP_TIMEOUT；崩溃 → OP_FAILED（spec §11） */
+export function mapHalveWorkerError(err: unknown): unknown {
+  if (err instanceof TaskTimeoutError) return toolError('OP_TIMEOUT')
+  if (err instanceof TaskCrashError) {
+    const cause = err.cause
+    const detail = cause instanceof Error ? cause.message : String(cause ?? err.message)
+    return toolError('OP_FAILED', tail(detail))
   }
   return err
 }
@@ -96,7 +113,7 @@ function parseWith<T>(schema: ZodType<T>, payload: unknown): T {
 
 type TaskArgs = Pick<TaskHandlerContext<unknown>, 'signal' | 'emit'>
 
-/** 注册四个任务通道（split/crop/ocr-detect/ocr-export），可注入 deps 供测试 */
+/** 注册五个任务通道（split/crop/ocr-detect/ocr-export/halve），可注入 deps 供测试 */
 export function registerWith(ctx: MainPluginContext, deps: ExamSplitDeps): void {
   async function runWorker(request: WorkerRequest, args: TaskArgs): Promise<OpResult> {
     try {
@@ -126,6 +143,23 @@ export function registerWith(ctx: MainPluginContext, deps: ExamSplitDeps): void 
     }
   }
 
+  async function runHalveWorker(
+    request: HalveWorkerRequest,
+    args: TaskArgs
+  ): Promise<HalveResult> {
+    try {
+      return await deps.runHalve({
+        workerPath: deps.halveWorkerPath,
+        payload: request,
+        timeoutMs: OP_TIMEOUT_MS,
+        signal: args.signal,
+        onUpdate: (update) => args.emit(update)
+      })
+    } catch (err) {
+      throw mapHalveWorkerError(err)
+    }
+  }
+
   ctx.registerTask('split', async ({ payload, signal, emit }) => {
     const parsed = parseWith(splitPayloadSchema, payload)
     await precheckInputs([parsed.inputPath], deps)
@@ -151,6 +185,12 @@ export function registerWith(ctx: MainPluginContext, deps: ExamSplitDeps): void 
     await precheckInputs([parsed.inputPath], deps)
     return runOcrWorker({ op: 'export', payload: parsed }, { signal, emit })
   })
+
+  ctx.registerTask('halve', async ({ payload, signal, emit }) => {
+    const parsed = parseWith(halvePayloadSchema, payload)
+    await precheckInputs([parsed.inputPath], deps)
+    return runHalveWorker({ inputPath: parsed.inputPath }, { signal, emit })
+  })
 }
 
 /** 生产实现：fs 预检 + 真实 worker + 模型资产预检（测试可作基底再覆盖） */
@@ -158,6 +198,7 @@ export function createNodeDeps(binariesRoot: string): ExamSplitDeps {
   return {
     workerPath,
     ocrWorkerPath,
+    halveWorkerPath,
     checkReadable: (path) => access(path, constants.R_OK),
     // 读方式打开探测共享冲突（独占句柄 share=None 拒绝任何打开）；'r' 不误判只读文件
     checkExclusive: async (path) => {
@@ -166,6 +207,7 @@ export function createNodeDeps(binariesRoot: string): ExamSplitDeps {
     },
     run: (options) => runTask<WorkerRequest, OpResult>(options),
     runOcr: (options) => runTask<OcrWorkerRequest, OcrTaskResult>(options),
+    runHalve: (options) => runTask<HalveWorkerRequest, HalveResult>(options),
     ocrBinariesDir: async () => {
       const dir = ocrModelDir(binariesRoot)
       await verifyOcrAssets(dir)

@@ -173,3 +173,29 @@ export const ocrExportPayloadSchema = z
   })
 
 export type OcrExportPayload = z.infer<typeof ocrExportPayloadSchema>
+
+/* ─── M69 页面切分（A3 对半切，spec §11） ─── */
+
+/** `exam-split:halve` 入参：单文件（PDF 或图片），自动检测纸张边界与中间分割线 */
+export const halvePayloadSchema = z.object({
+  inputPath: ocrPathSchema
+})
+
+export type HalvePayload = z.infer<typeof halvePayloadSchema>
+
+/** 单页切分依据（结果卡回显：装订沟 / 几何中线、是否裁黑边） */
+export const halveDetectionSchema = z.object({
+  pageNumber: z.number().int().min(1),
+  splitRatio: z.number().min(0).max(1),
+  usedGutter: z.boolean(),
+  trimmed: z.boolean()
+})
+
+export type HalveDetection = z.infer<typeof halveDetectionSchema>
+
+/** `exam-split:halve` done 回包：产物 + 逐页检测依据 */
+export const halveResultSchema = opResultSchema.extend({
+  detections: z.array(halveDetectionSchema).min(1, '至少切分一页')
+})
+
+export type HalveResult = z.infer<typeof halveResultSchema>

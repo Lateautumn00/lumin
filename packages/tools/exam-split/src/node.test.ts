@@ -10,6 +10,7 @@ import { manifest } from './manifest'
 import {
   createNodeDeps,
   type ExamSplitDeps,
+  mapHalveWorkerError,
   mapOcrWorkerError,
   mapWorkerError,
   OP_TIMEOUT_MS,
@@ -17,12 +18,14 @@ import {
   registerWith
 } from './node'
 import type { OcrTaskResult, OcrWorkerRequest } from './ocr-ops'
+import type { HalveWorkerRequest } from './page-split-ops'
 import type { OpResult, WorkerRequest } from './pdf-ops'
 
 interface Harness {
   tasks: Map<string, TaskHandler<unknown, unknown>>
   calls: RunTaskOptions<WorkerRequest>[]
   ocrCalls: RunTaskOptions<OcrWorkerRequest>[]
+  halveCalls: RunTaskOptions<HalveWorkerRequest>[]
   updates: TaskUpdate[]
 }
 
@@ -67,11 +70,13 @@ function createHarness(overrides: Partial<ExamSplitDeps> = {}): Harness {
   const tasks = new Map<string, TaskHandler<unknown, unknown>>()
   const calls: RunTaskOptions<WorkerRequest>[] = []
   const ocrCalls: RunTaskOptions<OcrWorkerRequest>[] = []
+  const halveCalls: RunTaskOptions<HalveWorkerRequest>[] = []
   const updates: TaskUpdate[] = []
   const ctx = createCtx(root, tasks)
   const deps: ExamSplitDeps = {
     workerPath: 'fake-worker.js',
     ocrWorkerPath: 'fake-ocr-worker.js',
+    halveWorkerPath: 'fake-halve-worker.js',
     checkReadable: async () => undefined,
     checkExclusive: async () => undefined,
     run: async (options) => {
@@ -84,11 +89,19 @@ function createHarness(overrides: Partial<ExamSplitDeps> = {}): Harness {
       options.onUpdate?.({ kind: 'progress', stage: 'detect', current: 1, total: 1 })
       return { pages: [] } satisfies OcrTaskResult
     },
+    runHalve: async (options) => {
+      halveCalls.push(options)
+      options.onUpdate?.({ kind: 'progress', stage: 'detect', current: 1, total: 1 })
+      return {
+        outputPaths: ['out.pdf'],
+        detections: [{ pageNumber: 1, splitRatio: 0.5, usedGutter: true, trimmed: false }]
+      }
+    },
     ocrBinariesDir: async () => '/fake/binaries/ocr',
     ...overrides
   }
   registerWith(ctx, deps)
-  return { tasks, calls, ocrCalls, updates }
+  return { tasks, calls, ocrCalls, halveCalls, updates }
 }
 
 async function runTask(
@@ -119,11 +132,12 @@ function makeInput(root: string, name = '卷.pdf'): string {
   return path
 }
 
-describe('registerWith 四通道（spec §2 任务表 / §10.4 IPC）', () => {
-  it('注册 split/crop/ocr-detect/ocr-export 四个任务', () => {
+describe('registerWith 五通道（spec §2 任务表 / §10.4 / §11 IPC）', () => {
+  it('注册 split/crop/ocr-detect/ocr-export/halve 五个任务', () => {
     const harness = createHarness()
     expect([...harness.tasks.keys()].sort()).toEqual([
       'crop',
+      'halve',
       'ocr-detect',
       'ocr-export',
       'split'
@@ -278,6 +292,52 @@ describe('registerWith 四通道（spec §2 任务表 / §10.4 IPC）', () => {
     expect(error).toMatchObject({ code: 'INVALID_PAYLOAD' })
     expect(harness.ocrCalls).toHaveLength(0)
   })
+
+  it('halve：合法入参（图片）→ 预检 + 转发页面切分 worker，进度透传', async () => {
+    const harness = createHarness()
+    const input = join(roots[0]!, '跨页.jpg')
+    writeFileSync(input, 'jpg')
+    const { result, error } = await runTask(harness, 'halve', { inputPath: input })
+    expect(error).toBeUndefined()
+    expect(result).toMatchObject({ outputPaths: ['out.pdf'] })
+    expect(harness.halveCalls).toHaveLength(1)
+    const options = harness.halveCalls[0]!
+    expect(options.workerPath).toBe('fake-halve-worker.js')
+    expect(options.timeoutMs).toBe(OP_TIMEOUT_MS)
+    expect(options.payload).toEqual({ inputPath: input })
+    expect(harness.updates.at(-1)).toMatchObject({ kind: 'progress', stage: 'detect' })
+  })
+
+  it('halve：扩展名非白名单 → INVALID_PAYLOAD，不进 worker', async () => {
+    const harness = createHarness()
+    const { error } = await runTask(harness, 'halve', { inputPath: 'a.doc' })
+    expect(error).toMatchObject({ code: 'INVALID_PAYLOAD' })
+    expect(harness.halveCalls).toHaveLength(0)
+  })
+
+  it('ocr-detect：worker 超时 → OP_TIMEOUT（catch 归一路径）', async () => {
+    const harness = createHarness({
+      runOcr: async () => {
+        throw new TaskTimeoutError(1000)
+      }
+    })
+    const input = join(roots[0]!, '卷.pdf')
+    writeFileSync(input, 'pdf')
+    const { error } = await runTask(harness, 'ocr-detect', { inputPath: input })
+    expect(error).toMatchObject({ code: 'OP_TIMEOUT' })
+  })
+
+  it('halve：worker 崩溃 → OP_FAILED（catch 归一路径）', async () => {
+    const harness = createHarness({
+      runHalve: async () => {
+        throw new TaskCrashError('halve crashed', new Error('worker died'))
+      }
+    })
+    const input = join(roots[0]!, '卷.jpg')
+    writeFileSync(input, 'jpg')
+    const { error } = await runTask(harness, 'halve', { inputPath: input })
+    expect(error).toMatchObject({ code: 'OP_FAILED' })
+  })
 })
 
 describe('mapWorkerError（spec §4/§5）', () => {
@@ -321,6 +381,25 @@ describe('mapOcrWorkerError（spec §10.5）', () => {
   it('结构化错误原样返回（MODEL_MISSING/NO_REGIONS 等透传）', () => {
     const structured = { code: 'MODEL_MISSING', message: '识别模型缺失' }
     expect(mapOcrWorkerError(structured)).toBe(structured)
+  })
+})
+
+describe('mapHalveWorkerError（spec §11）', () => {
+  it('超时 → OP_TIMEOUT', () => {
+    expect(mapHalveWorkerError(new TaskTimeoutError(120_000))).toMatchObject({ code: 'OP_TIMEOUT' })
+  })
+
+  it('崩溃 → OP_FAILED，detail 取 cause 尾部', () => {
+    const err = mapHalveWorkerError(
+      new TaskCrashError('worker exited', new Error('z'.repeat(400) + 'halve-tail'))
+    )
+    expect(err).toMatchObject({ code: 'OP_FAILED' })
+    expect((err as { detail?: string }).detail?.endsWith('halve-tail')).toBe(true)
+  })
+
+  it('结构化错误原样返回（PAGE_NOT_SPREAD 等透传）', () => {
+    const structured = { code: 'PAGE_NOT_SPREAD', message: '不是横向双页' }
+    expect(mapHalveWorkerError(structured)).toBe(structured)
   })
 })
 
@@ -374,13 +453,14 @@ describe('createNodeDeps（生产实现）', () => {
 })
 
 describe('registerMain（生产入口）', () => {
-  it('组装生产 deps 并注册四通道', () => {
+  it('组装生产 deps 并注册五通道', () => {
     const root = mkdtempSync(join(tmpdir(), 'lumin-exam-reg-'))
     roots.push(root)
     const tasks = new Map<string, TaskHandler<unknown, unknown>>()
     registerMain(createCtx(root, tasks))
     expect([...tasks.keys()].sort()).toEqual([
       'crop',
+      'halve',
       'ocr-detect',
       'ocr-export',
       'split'

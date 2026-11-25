@@ -123,3 +123,52 @@
 
 - **引擎切换记录（R1 流程闭环）**：M3b P0 钉 onnxruntime-web（wasm）→ P4 真实卷 3.3–4.7s/页超 ≤3s → 用户拍板切 **onnxruntime-node 1.31.1**（CPU EP、NAPI binding）：依赖换钉（exam-split + desktop 双包）、`asarUnpack` 改 native 目录、`allowBuilds` 放行 postinstall、`loadOrt` 去 wasm env。同管线复测 2.6–3.8× 提速；预处理/CTC 口径不变，题区数受 det 浮点差异微调（图3 5→6、图4 7→8、图1 13→12）→ 命中率 89.5%→90.5% 转达标。
 - **binaries 根修复（P4 e2e 发现）**：pnpm `.pnpm` 目录布局使 Electron 误判 `app.isPackaged=true`（execPath 为 `.pnpm/.../electron/dist/electron.exe`），e2e 下模型路径错指向 `electron/dist/resources/binaries` → `MODEL_MISSING det: ENOENT`（6 用例红）。修复：`ToolPaths.binaries` 改为探测 `resources/binaries` 存在，回落仓库根 `binaries/`，不再依赖 `isPackaged`（CSP/updater 语义不受影响）。修复后 13/13 全绿。
+
+## 6. M69 页面切分冒烟（2026-11-25，A3 双页对半切）
+
+### 6.1 总览
+
+> 口径：纯像素检测（灰度 + Otsu + 纸张包围盒 + 中央装订沟），不加载 ONNX；图片链路假渲染注入合成位图，PDF 链路假渲染注入合成位图 + 真实 `pdf-lib` 读入/拷贝/写盘。
+> **入口修订（2026-11-25 用户反馈后）**：首版独立第三页签改为 **OCR 页签内置处理方式**——选文件后默认「切成两页」，可切到「识别切题」；切完即结束，不自动继续 OCR。
+
+| #   | 验收项（spec §11.8）          | 方式                                                   | 结果                                                                                         |
+| --- | ----------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| 1   | 检测纯函数（含真实 fixtures） | `page-split-detect.test.ts` 27 例                      | ✅ 居中/偏心沟、无沟回退、深色边裁边、极小图/全暗/面积不足、四旋转 `halfRects`、2 张真实跨页照（0.40–0.60） |
+| 2   | 图片链路                      | `page-split-ops.test.ts`（PNG/JPG/WebP）               | ✅ 左右宽度合计=原宽、高=原高；PNG/JPG/WebP 魔数正确；中文+空格文件名；冲突左右同号 `(1)`       |
+| 3   | PDF 链路                      | `page-split-ops.test.ts`（合成 A3 横向 PDF）           | ✅ 单页 → 2 页 A4 尺寸（595.64×841.89）；两页 → 4 页；竖版 → `PAGE_NOT_SPREAD`（detail 标页码） |
+| 4   | IPC 通道                      | `node.test.ts` halve 用例                              | ✅ 注册五通道；入参白名单拦截；进度透传；超时 `OP_TIMEOUT` / 崩溃 `OP_FAILED`                  |
+| 5   | 三态 + 文案                   | 代码核对（`HalvePanel.vue` + `OcrPanel.vue`）          | ✅ 处理方式默认「切成两页」；加载态阶段进度+取消、报错态结构化码+重试/重新选择                |
+| 6   | 覆盖率/门禁                   | `pnpm coverage` / `pnpm boundary` / ESLint / tsc        | ✅ 全仓 319 文件全绿；coverage 分组阈值通过；boundary 无违规；lint/typecheck 绿                |
+| 7   | R5 体积                       | `pnpm build` 产物                                      | ✅ renderer chunk raw 714,032 B / **gzip 180,100 B（175.9KB）< 200KB**；切分 worker gzip 297.9KB 单列（§6.4） |
+
+- **e2e 复跑（2026-11-25 入口修订后）**：`exam-split-smoke` **14/14 passed**（13 既有 + 新增 M69 页面切分 UI 用例：进入 OCR 页签选 2000×1400 跨页图 → 默认「切成两页」→ 产物 `_左.png`/`_右.png`，宽度合计 2000 且 PNG 魔数正确）。
+
+### 6.2 R2 八类异常（页面切分侧）
+
+| #   | 场景         | 方式 / 结果                                                                                                             |
+| --- | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| 1   | 中文/空格路径 | ✅ 单测 `试卷 扫描.jpg`（中文+空格）命名与成对输出正确；复用 OCR 侧中文目录用例                                          |
+| 2   | 文件被占用   | ✅ 复用 `precheckInputs`（`checkReadable`+`checkExclusive`，EBUSY/EPERM/EACCES → `PDF_LOCKED`），与拆分/OCR 通道同源      |
+| 3   | 加密文件     | ✅ PDF 走 `loadSource`，`is encrypted` → `PDF_ENCRYPTED`（与 OCR/拆分同源，已有加密 fixture 用例）                        |
+| 4   | 超大文件     | ⏳ 单页渲染 + 逐页释放；超大 A3 扫描图/多页 PDF 实机耗时待补测（纯像素，无模型加载）                                      |
+| 5   | 任务取消     | ✅ 走 `task-queue` AbortSignal，终态 `CANCELLED`（壳级同源，UI 有 [取消]）                                                |
+| 6   | 并发溢出     | ✅ 壳级 `maxPending=100` → `QUEUE_FULL`（与所有工具同源）                                                                |
+| 7   | 磁盘满       | ✅ 写失败 → `OUTPUT_WRITE_FAILED`（单测用不存在目录触发写失败并清理）；真实磁盘满待补测                                   |
+| 8   | 断电恢复     | ✅ 写后魔数校验 + 失败清理半成品（实现层面）；真实断电待补测                                                              |
+
+### 6.3 检测参数（spec §11.4 对应实现）
+
+- `SAMPLE_STRIDE=2`、`DARK_BORDER=140`、`MIN_BRIGHT_COVERAGE=0.2`、`MIN_PAPER_AREA_RATIO=0.45`、`MIN_PAPER_SIDE_RATIO=0.4`；
+- `GUTTER_MIN_RATIO=0.33`、`GUTTER_MAX_RATIO=0.67`、`GUTTER_VALLEY_RATIO=0.35`、`GUTTER_MIN_WIDTH_RATIO=0.008`、`GUTTER_MAX_WIDTH_RATIO=0.15`、`INK_VERTICAL_TRIM=0.02`；
+- `SPREAD_ASPECT_RATIO=1.15`（竖版拒绝阈值）。
+
+### 6.4 R5 体积记录（2026-11-25 构建实测）
+
+- 本批**零新增第三方依赖**（复用 `@napi-rs/canvas` 与 `pdf-lib`）。
+- `page-split.worker.ts` 作为独立 worker 分包（同 `pdf.worker` / `ocr.worker`），按 R5「运行时资产单列」口径不计入 renderer 工具 chunk 上限；`HalvePanel.vue` 为纯 Vue 组件，进入 exam-split renderer 工具 chunk。
+- 实测值（`pnpm build` 产物，gzip 口径）：
+  - renderer 工具 chunk `exam-split-*.js`：raw **714,032 B** / gzip **180,100 B（175.9KB）< 200KB 基线 ✅**（入口改为 OCR 页签内置处理方式后，较首版 715,664 B / 175.6KB 基本持平）
+  - 切分 worker `out/main/chunks/page-split.worker-*.js`：raw **1,116,433 B** / gzip **305,068 B（297.9KB）**——单列，含 pdfjs 渲染 + `@napi-rs/canvas`，运行时按需加载，不计入上限
+  - 对照同批 `ocr.worker-*.js` raw 1,122,858 B / gzip 308,505 B、`pdf.worker-*.js` raw 1,092,892 B / gzip 297,664 B，量级一致（三者共用渲染栈）
+
+

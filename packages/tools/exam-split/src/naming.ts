@@ -106,3 +106,30 @@ export function ocrPngDesiredPath(inputPath: string, number: number): string {
 export function ocrPdfDesiredPath(inputPath: string): string {
   return `${baseName(inputPath)}_切题.pdf`
 }
+
+/** 输入文件扩展名（含点，小写；baseName 已去扩展名，差值即扩展名） */
+function extensionOf(filePath: string): string {
+  const base = baseName(filePath)
+  return filePath.slice(base.length).toLowerCase()
+}
+
+/** 页面切分（PDF）：`{原名}_对半切.pdf`（spec §11） */
+export function halveDesiredPath(inputPath: string): string {
+  return `${baseName(inputPath)}_对半切.pdf`
+}
+
+/** 页面切分（图片）：`{原名}_左{ext}` / `{原名}_右{ext}`，保持原格式与像素分辨率（spec §11） */
+export function halveImageDesiredPaths(inputPath: string): [string, string] {
+  const base = baseName(inputPath)
+  const ext = extensionOf(inputPath)
+  return [`${base}_左${ext}`, `${base}_右${ext}`]
+}
+
+/** 在扩展名前插入冲突后缀 `(n)`（n ≤ 0 返回原路径；左右成对递增用同一 n） */
+export function withConflictSuffix(filePath: string, index: number): string {
+  if (index <= 0) return filePath
+  const dot = filePath.lastIndexOf('.')
+  return dot > 0
+    ? `${filePath.slice(0, dot)}(${index})${filePath.slice(dot)}`
+    : `${filePath}(${index})`
+}

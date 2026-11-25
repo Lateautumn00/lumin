@@ -14,8 +14,14 @@ import { PDF_RENDER_SCALE } from './preview'
 
 export { PDF_RENDER_SCALE } from './preview'
 export { ensureCjkFont } from '@lumin/node-kit/pdf'
-export { classifyPdfjsError, classifyReadError, encodePng, rotatedSize } from '@lumin/ocr-kit'
-export type { RenderOptions, RenderedPage }
+export {
+  classifyPdfjsError,
+  classifyReadError,
+  encodeImage,
+  encodePng,
+  rotatedSize
+} from '@lumin/ocr-kit'
+export type { ImageEncodeFormat, RenderOptions, RenderedPage } from '@lumin/ocr-kit'
 
 /**
  * 兼容包装：PDF 渲染倍率固定为 exam-split 既有 `PDF_RENDER_SCALE`（1.5）。

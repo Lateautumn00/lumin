@@ -184,3 +184,28 @@ export function encodePng(image: RgbaImage): Buffer {
   ctx.putImageData(new ImageData(image.data, image.width, image.height), 0, 0)
   return canvas.toBuffer('image/png')
 }
+
+/** 图片编码格式（页面切分按输入格式保持，M69） */
+export type ImageEncodeFormat = 'png' | 'jpeg' | 'webp'
+
+/**
+ * RGBA → 指定格式字节（M69 页面切分：图片产物保持原格式）。
+ * PNG 无损；JPEG/WebP 使用 quality 0–100（默认 95，兼顾清晰度与体积）。
+ */
+export function encodeImage(
+  image: RgbaImage,
+  format: ImageEncodeFormat,
+  quality = 95
+): Buffer {
+  const canvas = createCanvas(image.width, image.height)
+  const ctx = canvas.getContext('2d')
+  ctx.putImageData(new ImageData(image.data, image.width, image.height), 0, 0)
+  switch (format) {
+    case 'jpeg':
+      return canvas.toBuffer('image/jpeg', quality)
+    case 'webp':
+      return canvas.toBuffer('image/webp', quality)
+    default:
+      return canvas.toBuffer('image/png')
+  }
+}

@@ -20,6 +20,7 @@ import {
   type SubmitResult
 } from './client'
 import ErrorCard from './ErrorCard.vue'
+import HalvePanel from './HalvePanel.vue'
 import ResultCard from './ResultCard.vue'
 import {
   clonePages,
@@ -46,6 +47,8 @@ const FALLBACK_SIZE = { width: 893, height: 1263 }
 const ws = useOcrWorkspace()
 
 const lastRun = ref<'detect' | 'export' | null>(null)
+// 处理方式：默认「切成两页」（A3 横向双页 → 两页 A4），可切回「识别切题」（spec §11）
+const mode = ref<'halve' | 'ocr'>('halve')
 let unsubscribe: (() => void) | null = null
 let currentTaskId = ''
 
@@ -317,13 +320,14 @@ watch(
     <template v-if="path === ''">
       <DropZone
         accept=".pdf,.png,.jpg,.jpeg,.webp"
-        hint="选择试卷图片或 PDF 开始切题"
+        hint="选择试卷图片或 PDF（A3 横向双页会切成两页 A4）"
         :disabled="busy"
         @select="onSelect"
         @invalid="ws.invalidHint.value = $event"
       />
       <NText depth="3" class="text-xs">
-        支持 PDF / PNG / JPG / WebP；识别后可在左侧微调边界再导出。
+        支持 PDF / PNG / JPG / WebP。默认「切成两页」：自动定位纸张边界与中间分割线，把 A3
+        横向双页均匀切成两张 A4；切到「识别切题」可在左侧微调边界再导出。
       </NText>
       <NText v-if="invalidHint !== ''" type="error" class="text-sm">{{ invalidHint }}</NText>
     </template>
@@ -347,133 +351,167 @@ watch(
         <NButton size="small" quaternary :disabled="busy" @click="resetInput">更换</NButton>
       </div>
 
-      <!-- 导出字段区（spec §10.1） -->
-      <div class="flex flex-wrap items-end gap-4">
-        <label class="flex flex-col gap-1 text-xs text-[var(--lumin-color-text-secondary)]">
-          起始题号
-          <NInputNumber
-            v-model:value="startNumberInput"
-            :min="1"
-            :max="9999"
-            :precision="0"
-            :disabled="busy"
-            class="w-28"
-            aria-label="起始题号"
-          />
-        </label>
-        <label class="flex items-center gap-2 pb-1 text-sm">
-          <input
-            v-model="exportPdf"
-            type="checkbox"
-            class="h-4 w-4 accent-[var(--lumin-color-primary)]"
-            :disabled="busy"
-          />
-          同时合成 PDF
-        </label>
-      </div>
-
-      <!-- 主按钮（spec §10.3） -->
-      <div class="flex flex-wrap gap-2">
+      <!-- 处理方式切换（spec §11：默认切成两页，可切到识别切题） -->
+      <div class="flex flex-wrap gap-2" role="tablist" aria-label="处理方式">
         <NButton
-          type="primary"
-          :disabled="!canDetect"
-          :loading="running === 'detect'"
-          @click="run('detect')"
+          size="small"
+          :type="mode === 'halve' ? 'primary' : 'default'"
+          role="tab"
+          :aria-selected="mode === 'halve'"
+          :disabled="busy"
+          @click="mode = 'halve'"
         >
-          开始识别
+          切成两页
         </NButton>
-        <NButton :disabled="!canExport" :loading="running === 'export'" @click="run('export')">
-          导出{{ regionCount > 0 ? `（${regionCount} 题）` : '' }}
+        <NButton
+          size="small"
+          :type="mode === 'ocr' ? 'primary' : 'default'"
+          role="tab"
+          :aria-selected="mode === 'ocr'"
+          :disabled="busy"
+          @click="mode = 'ocr'"
+        >
+          识别切题
         </NButton>
       </div>
 
-      <!-- 加载态：阶段进度 + 取消（spec §10.6） -->
-      <TaskProgress
-        v-if="running !== null"
-        :message="progress?.message ?? ''"
-        :current="progress?.current"
-        :total="progress?.total"
-        @cancel="onCancel"
+      <!-- 切成两页：A3 横向双页 → 两页 A4（切完即结束） -->
+      <HalvePanel
+        v-if="mode === 'halve'"
+        :input-path="path"
+        :disabled="busy"
+        @reselect="resetInput"
       />
 
-      <!-- 报错态（spec §10.5/§10.6） -->
-      <ErrorCard
-        v-if="shownError !== null"
-        :error="shownError"
-        :retryable="errorIsTask && isRetryable(shownError.code)"
-        @retry="retry"
-      >
-        <template #actions>
-          <NButton
-            v-if="errorIsTask && shownError?.code === 'NO_REGIONS'"
-            size="small"
-            @click="manualAdd"
-          >
-            手动添加边界
-          </NButton>
-          <NButton
-            v-if="!errorIsTask || RESELECT_CODES.has(shownError?.code ?? '')"
-            size="small"
-            @click="resetInput"
-          >
-            重新选择
-          </NButton>
-        </template>
-      </ErrorCard>
-
-      <!-- 手动模式提示 -->
-      <NText v-if="manualMode && ws.error.value === null" depth="3" class="text-xs">
-        手动模式：点击页面插入分界线，或用 [添加题区] 补整页题区。
-      </NText>
-
-      <!-- 题目列表（题号 + 页码 + 行数，点击定位预览，spec §10.2） -->
-      <div v-if="numbered.length > 0" class="flex flex-col gap-2">
-        <div class="flex items-center justify-between gap-2">
-          <NText depth="3" class="text-xs">
-            共 {{ numbered.length }} 题 · {{ totalPages > 0 ? totalPages : pages.length }} 页
-          </NText>
-          <NText depth="3" class="text-xs">点击定位预览</NText>
+      <template v-else>
+        <!-- 导出字段区（spec §10.1） -->
+        <div class="flex flex-wrap items-end gap-4">
+          <label class="flex flex-col gap-1 text-xs text-[var(--lumin-color-text-secondary)]">
+            起始题号
+            <NInputNumber
+              v-model:value="startNumberInput"
+              :min="1"
+              :max="9999"
+              :precision="0"
+              :disabled="busy"
+              class="w-28"
+              aria-label="起始题号"
+            />
+          </label>
+          <label class="flex items-center gap-2 pb-1 text-sm">
+            <input
+              v-model="exportPdf"
+              type="checkbox"
+              class="h-4 w-4 accent-[var(--lumin-color-primary)]"
+              :disabled="busy"
+            />
+            同时合成 PDF
+          </label>
         </div>
-        <ul class="flex max-h-64 flex-col gap-1 overflow-y-auto">
-          <li v-for="item in numbered" :key="`${item.pageNumber}-${item.regionIndex}`">
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 rounded-[var(--lumin-radius-md)] border px-2 py-1 text-left text-xs"
-              :class="
-                ws.pageNumber.value === item.pageNumber &&
-                ws.activeRegion.value === item.regionIndex
-                  ? 'border-[var(--lumin-color-primary)]'
-                  : 'border-[var(--lumin-color-border)] hover:border-[var(--lumin-color-primary)]'
-              "
-              @click="locate(item)"
+
+        <!-- 主按钮（spec §10.3） -->
+        <div class="flex flex-wrap gap-2">
+          <NButton
+            type="primary"
+            :disabled="!canDetect"
+            :loading="running === 'detect'"
+            @click="run('detect')"
+          >
+            开始识别
+          </NButton>
+          <NButton :disabled="!canExport" :loading="running === 'export'" @click="run('export')">
+            导出{{ regionCount > 0 ? `（${regionCount} 题）` : '' }}
+          </NButton>
+        </div>
+
+        <!-- 加载态：阶段进度 + 取消（spec §10.6） -->
+        <TaskProgress
+          v-if="running !== null"
+          :message="progress?.message ?? ''"
+          :current="progress?.current"
+          :total="progress?.total"
+          @cancel="onCancel"
+        />
+
+        <!-- 报错态（spec §10.5/§10.6） -->
+        <ErrorCard
+          v-if="shownError !== null"
+          :error="shownError"
+          :retryable="errorIsTask && isRetryable(shownError.code)"
+          @retry="retry"
+        >
+          <template #actions>
+            <NButton
+              v-if="errorIsTask && shownError?.code === 'NO_REGIONS'"
+              size="small"
+              @click="manualAdd"
             >
-              <span class="w-16 shrink-0 font-medium">第 {{ item.number }} 题</span>
-              <span class="text-[var(--lumin-color-text-secondary)]">
-                第 {{ item.pageNumber }} 页 · {{ item.lineCount }} 行
-              </span>
-            </button>
-          </li>
-        </ul>
-      </div>
+              手动添加边界
+            </NButton>
+            <NButton
+              v-if="!errorIsTask || RESELECT_CODES.has(shownError?.code ?? '')"
+              size="small"
+              @click="resetInput"
+            >
+              重新选择
+            </NButton>
+          </template>
+        </ErrorCard>
 
-      <!-- 结果卡 -->
-      <ResultCard
-        v-if="outputPaths.length > 0"
-        :title="`导出完成（${outputPaths.length} 个文件）`"
-        :paths="outputPaths"
-        reset-label="再识别一个"
-        @open="openFolder"
-        @reset="resetForAnother"
-      />
+        <!-- 手动模式提示 -->
+        <NText v-if="manualMode && ws.error.value === null" depth="3" class="text-xs">
+          手动模式：点击页面插入分界线，或用 [添加题区] 补整页题区。
+        </NText>
 
-      <!-- 识别完成但题区被清空（仍可重置/重新识别） -->
-      <NText
-        v-else-if="pages.length > 0 && numbered.length === 0 && ws.error.value === null"
-        depth="3"
-        class="text-xs"
-      >
-        当前没有题区：用 [添加题区] 或 [重置本页] 恢复。
-      </NText>
+        <!-- 题目列表（题号 + 页码 + 行数，点击定位预览，spec §10.2） -->
+        <div v-if="numbered.length > 0" class="flex flex-col gap-2">
+          <div class="flex items-center justify-between gap-2">
+            <NText depth="3" class="text-xs">
+              共 {{ numbered.length }} 题 · {{ totalPages > 0 ? totalPages : pages.length }} 页
+            </NText>
+            <NText depth="3" class="text-xs">点击定位预览</NText>
+          </div>
+          <ul class="flex max-h-64 flex-col gap-1 overflow-y-auto">
+            <li v-for="item in numbered" :key="`${item.pageNumber}-${item.regionIndex}`">
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 rounded-[var(--lumin-radius-md)] border px-2 py-1 text-left text-xs"
+                :class="
+                  ws.pageNumber.value === item.pageNumber &&
+                  ws.activeRegion.value === item.regionIndex
+                    ? 'border-[var(--lumin-color-primary)]'
+                    : 'border-[var(--lumin-color-border)] hover:border-[var(--lumin-color-primary)]'
+                "
+                @click="locate(item)"
+              >
+                <span class="w-16 shrink-0 font-medium">第 {{ item.number }} 题</span>
+                <span class="text-[var(--lumin-color-text-secondary)]">
+                  第 {{ item.pageNumber }} 页 · {{ item.lineCount }} 行
+                </span>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <!-- 结果卡 -->
+        <ResultCard
+          v-if="outputPaths.length > 0"
+          :title="`导出完成（${outputPaths.length} 个文件）`"
+          :paths="outputPaths"
+          reset-label="再识别一个"
+          @open="openFolder"
+          @reset="resetForAnother"
+        />
+
+        <!-- 识别完成但题区被清空（仍可重置/重新识别） -->
+        <NText
+          v-else-if="pages.length > 0 && numbered.length === 0 && ws.error.value === null"
+          depth="3"
+          class="text-xs"
+        >
+          当前没有题区：用 [添加题区] 或 [重置本页] 恢复。
+        </NText>
+      </template>
     </template>
   </section>
 </template>

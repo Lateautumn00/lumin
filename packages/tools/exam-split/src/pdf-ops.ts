@@ -31,7 +31,7 @@ function messageOf(err: unknown): string {
 }
 
 /** 读入并解析源 PDF；不存在/占用/加密/损坏 → 结构化错误（spec §5） */
-async function loadSource(inputPath: string): Promise<PDFDocument> {
+export async function loadSource(inputPath: string): Promise<PDFDocument> {
   let bytes: Uint8Array
   try {
     bytes = await readFile(inputPath)
@@ -77,7 +77,7 @@ async function verifyWritten(path: string): Promise<boolean> {
 }
 
 /** 序列化 + 内存直写目标路径 + 写后校验（spec §4/§7.4）；失败尽力清理截断半成品 */
-async function writeOutput(path: string, doc: PDFDocument): Promise<void> {
+export async function writeOutput(path: string, doc: PDFDocument): Promise<void> {
   let bytes: Uint8Array
   try {
     bytes = await doc.save()

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   OCR_INPUT_RE,
   cropPayloadSchema,
+  halvePayloadSchema,
+  halveResultSchema,
   nameTemplateSchema,
   ocrDetectPayloadSchema,
   ocrDetectResultSchema,
@@ -236,6 +238,39 @@ describe('ocrExportPayloadSchema（spec §10.4）', () => {
           { ...regionPage, regions: [] },
           { ...regionPage, pageNumber: 2, regions: [] }
         ]
+      }).success
+    ).toBe(false)
+  })
+})
+
+describe('halvePayloadSchema / halveResultSchema（M69 页面切分，spec §11）', () => {
+  it('入参接受 PDF 与图片，拒绝其它扩展名', () => {
+    expect(halvePayloadSchema.safeParse({ inputPath: PDF }).success).toBe(true)
+    expect(halvePayloadSchema.safeParse({ inputPath: 'C:/卷/扫描.JPG' }).success).toBe(true)
+    expect(halvePayloadSchema.safeParse({ inputPath: 'C:/卷/扫描.webp' }).success).toBe(true)
+    expect(halvePayloadSchema.safeParse({ inputPath: 'C:/卷/扫描.docx' }).success).toBe(false)
+    expect(halvePayloadSchema.safeParse({}).success).toBe(false)
+  })
+
+  it('回包要求产物与逐页检测依据；比例越界/空数组拒绝', () => {
+    const detection = { pageNumber: 1, splitRatio: 0.5, usedGutter: true, trimmed: false }
+    expect(
+      halveResultSchema.safeParse({ outputPaths: ['C:/卷/卷_对半切.pdf'], detections: [detection] })
+        .success
+    ).toBe(true)
+    expect(
+      halveResultSchema.safeParse({ outputPaths: ['C:/卷/卷_对半切.pdf'], detections: [] }).success
+    ).toBe(false)
+    expect(
+      halveResultSchema.safeParse({
+        outputPaths: ['C:/卷/卷_对半切.pdf'],
+        detections: [{ ...detection, splitRatio: 1.2 }]
+      }).success
+    ).toBe(false)
+    expect(
+      halveResultSchema.safeParse({
+        outputPaths: ['C:/卷/卷_对半切.pdf'],
+        detections: [{ ...detection, pageNumber: 0 }]
       }).success
     ).toBe(false)
   })

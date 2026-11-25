@@ -554,6 +554,9 @@ test.describe('exam-split（OCR 切题 · M3b）冒烟', () => {
       const panel = page.locator('section[aria-label="OCR 切题"]')
       await panel.locator('input[type="file"]').setInputFiles(input)
 
+      // M69 入口修订：OCR 页签默认「切成两页」，切回「识别切题」走原识别流程
+      await panel.getByRole('tab', { name: '识别切题' }).click()
+
       // 预览出图（renderer 直读 File，不经 IPC）
       await expect(page.locator('img[alt="当前页预览"]')).toBeVisible({ timeout: 20_000 })
       await expect(panel.getByRole('button', { name: '开始识别' })).toBeEnabled()
@@ -584,6 +587,37 @@ test.describe('exam-split（OCR 切题 · M3b）冒烟', () => {
       const pdf = path.join(workDir, '样卷 图片_切题.pdf')
       expect(fs.existsSync(pdf)).toBe(true)
       expect(pdfHead(pdf)).toBe('%PDF-')
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('M69 页面切分：A3 横向双页 → 左右两张 A4 图片（默认「切成两页」，spec §11）', async () => {
+    test.setTimeout(120_000)
+    const { app, page } = await launch()
+    const workDir = makeWorkDir('lumin halve page')
+    try {
+      const input = path.join(workDir, '跨页 试卷.png')
+      await makeSpreadImage(input)
+
+      await clickSidebarTool(page, '试卷切割')
+      await page.getByRole('tab', { name: 'OCR 切题' }).click()
+      const panel = page.locator('section[aria-label="OCR 切题"]')
+      await panel.locator('input[type="file"]').setInputFiles(input)
+
+      // 默认处理方式即「切成两页」，无需切页签或调参
+      await panel.getByRole('button', { name: '切成两页' }).click()
+      await expect(panel.getByText(/切分完成/)).toBeVisible({ timeout: 60_000 })
+
+      const left = path.join(workDir, '跨页 试卷_左.png')
+      const right = path.join(workDir, '跨页 试卷_右.png')
+      expect(fs.existsSync(left)).toBe(true)
+      expect(fs.existsSync(right)).toBe(true)
+      expect(pngHead(left)).toBe('\x89PNG')
+      expect(pngHead(right)).toBe('\x89PNG')
+      // 左右宽度合计 = 原图宽（无裁切损失）
+      expect(pngWidth(left) + pngWidth(right)).toBe(2000)
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true })
       await app.close()
@@ -716,6 +750,9 @@ test.describe('exam-split（OCR 切题 · M3b）冒烟', () => {
       const panel = page.locator('section[aria-label="OCR 切题"]')
       await panel.locator('input[type="file"]').setInputFiles(sideways)
       await expect(page.locator('img[alt="当前页预览"]')).toBeVisible({ timeout: 20_000 })
+
+      // M69 入口修订：OCR 页签默认「切成两页」，切回「识别切题」
+      await panel.getByRole('tab', { name: '识别切题' }).click()
 
       // 侧拍（顺时针 90°）→ [左转] 270° 复原
       await page.getByRole('button', { name: '向左旋转 90°' }).click()

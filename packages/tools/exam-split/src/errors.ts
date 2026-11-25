@@ -16,7 +16,8 @@ export const EXAM_SPLIT_ERROR_CODES = [
   'OCR_INPUT_INVALID',
   'MODEL_MISSING',
   'NO_REGIONS',
-  'OCR_FAILED'
+  'OCR_FAILED',
+  'PAGE_NOT_SPREAD'
 ] as const
 
 export type ExamSplitErrorCode = (typeof EXAM_SPLIT_ERROR_CODES)[number]
@@ -36,7 +37,8 @@ const MESSAGES: Record<ExamSplitErrorCode, string> = {
   OCR_INPUT_INVALID: '图片无法读取，请换一张清晰的图片',
   MODEL_MISSING: '识别模型缺失，请在设置中下载后重试',
   NO_REGIONS: '未识别到题目区域，请检查图片清晰度',
-  OCR_FAILED: '识别失败，请重试或查看详情'
+  OCR_FAILED: '识别失败，请重试或查看详情',
+  PAGE_NOT_SPREAD: '当前页面不是横向双页排版，无法对半切分'
 }
 
 /** 可重试错误码（renderer 据此显示 [重试]；spec §5） */

@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   cropDesiredPath,
   formatDate,
+  halveDesiredPath,
+  halveImageDesiredPaths,
   ocrPdfDesiredPath,
   ocrPngDesiredPath,
   renderName,
-  splitDesiredPaths
+  splitDesiredPaths,
+  withConflictSuffix
 } from './naming'
 
 const INPUT = 'C:/试卷/2026 期末卷.pdf'
@@ -65,5 +68,24 @@ describe('naming（spec §7.2 命名模板）', () => {
     expect(splitDesiredPaths('C:\\试卷\\卷.pdf', [[1]], '{name}-{label}')).toEqual([
       'C:\\试卷\\卷-1.pdf'
     ])
+  })
+
+  it('页面切分：PDF 单文件 {原名}_对半切.pdf（spec §11）', () => {
+    expect(halveDesiredPath(INPUT)).toBe('C:/试卷/2026 期末卷_对半切.pdf')
+    expect(halveDesiredPath('C:/试卷/无扩展名')).toBe('C:/试卷/无扩展名_对半切.pdf')
+  })
+
+  it('页面切分：图片左右两张，保持原扩展名（大小写归一）', () => {
+    expect(halveImageDesiredPaths(IMAGE)).toEqual(['C:/试卷/扫描件_左.jpg', 'C:/试卷/扫描件_右.jpg'])
+    expect(halveImageDesiredPaths('C:/试卷/扫描.png')).toEqual([
+      'C:/试卷/扫描_左.png',
+      'C:/试卷/扫描_右.png'
+    ])
+  })
+
+  it('冲突后缀：插在扩展名前，n≤0 原样返回（左右成对递增同号）', () => {
+    expect(withConflictSuffix('C:/试卷/扫描_左.jpg', 0)).toBe('C:/试卷/扫描_左.jpg')
+    expect(withConflictSuffix('C:/试卷/扫描_左.jpg', 2)).toBe('C:/试卷/扫描_左(2).jpg')
+    expect(withConflictSuffix('C:/试卷/无扩展名', 1)).toBe('C:/试卷/无扩展名(1)')
   })
 })
