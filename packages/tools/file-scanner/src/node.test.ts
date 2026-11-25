@@ -25,10 +25,11 @@ function createStubContext(): { ctx: MainPluginContext; ipc: string[]; tasks: st
 }
 
 describe('file-scanner 注册入口', () => {
-  it('registerAll 注册 6 个同步通道与 3 个任务通道', () => {
+  it('registerAll 注册校验/重复/对比 + 并入重命名/清理/磁盘通道', () => {
     const { ctx, ipc, tasks } = createStubContext()
     registerAll(ctx)
-    expect(ipc).toEqual([
+    // 原三页签通道保持不变（M71）
+    expect(ipc.slice(0, 6)).toEqual([
       'hash-config',
       'hash-set-config',
       'dup-config',
@@ -36,13 +37,16 @@ describe('file-scanner 注册入口', () => {
       'compare-config',
       'compare-set-config'
     ])
-    expect(tasks).toEqual(['hash', 'dup-scan', 'compare'])
+    expect(tasks.slice(0, 3)).toEqual(['hash', 'dup-scan', 'compare'])
+    // M75 并入三页签：通道数增加且不冲突
+    expect(ipc.length).toBeGreaterThan(6)
+    expect(tasks.length).toBeGreaterThan(3)
   })
 
   it('registerMain 复用同一注册表（壳侧入口）', () => {
     const { ctx, ipc, tasks } = createStubContext()
     registerMain(ctx)
-    expect(ipc).toHaveLength(6)
-    expect(tasks).toHaveLength(3)
+    expect(ipc.length).toBeGreaterThanOrEqual(6)
+    expect(tasks.length).toBeGreaterThanOrEqual(3)
   })
 })

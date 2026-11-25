@@ -58,18 +58,6 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/image-toolbox/src/renderer/$1')
   },
   {
-    find: /^@lumin\/tool-pdf-images\/manifest$/,
-    replacement: r('../../packages/tools/pdf-images/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-pdf-images\/node$/,
-    replacement: r('../../packages/tools/pdf-images/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-pdf-images\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/pdf-images/src/renderer/$1')
-  },
-  {
     find: /^@lumin\/tool-pdf-toolkit\/manifest$/,
     replacement: r('../../packages/tools/pdf-toolkit/src/manifest.ts')
   },
@@ -130,18 +118,6 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/color-toolbox/src/renderer/$1')
   },
   {
-    find: /^@lumin\/tool-file-renamer\/manifest$/,
-    replacement: r('../../packages/tools/file-renamer/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-file-renamer\/node$/,
-    replacement: r('../../packages/tools/file-renamer/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-file-renamer\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/file-renamer/src/renderer/$1')
-  },
-  {
     find: /^@lumin\/tool-file-scanner\/manifest$/,
     replacement: r('../../packages/tools/file-scanner/src/manifest.ts')
   },
@@ -152,18 +128,6 @@ const workspaceAlias = [
   {
     find: /^@lumin\/tool-file-scanner\/renderer\/(.+)$/,
     replacement: r('../../packages/tools/file-scanner/src/renderer/$1')
-  },
-  {
-    find: /^@lumin\/tool-disk-analyzer\/manifest$/,
-    replacement: r('../../packages/tools/disk-analyzer/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-disk-analyzer\/node$/,
-    replacement: r('../../packages/tools/disk-analyzer/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-disk-analyzer\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/disk-analyzer/src/renderer/$1')
   },
   {
     find: /^@lumin\/tool-zip-tool\/manifest$/,
@@ -180,6 +144,10 @@ const workspaceAlias = [
   {
     find: /^@lumin\/tool-text-toolbox\/manifest$/,
     replacement: r('../../packages/tools/text-toolbox/src/manifest.ts')
+  },
+  {
+    find: /^@lumin\/tool-text-toolbox\/node$/,
+    replacement: r('../../packages/tools/text-toolbox/src/node.ts')
   },
   {
     find: /^@lumin\/tool-text-toolbox\/renderer\/(.+)$/,
@@ -210,18 +178,6 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/file-preview/src/renderer/$1')
   },
   {
-    find: /^@lumin\/tool-text-editor\/manifest$/,
-    replacement: r('../../packages/tools/text-editor/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-text-editor\/node$/,
-    replacement: r('../../packages/tools/text-editor/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-text-editor\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/text-editor/src/renderer/$1')
-  },
-  {
     find: /^@lumin\/tool-life-calculator\/manifest$/,
     replacement: r('../../packages/tools/life-calculator/src/manifest.ts')
   },
@@ -244,34 +200,6 @@ const workspaceAlias = [
   {
     find: /^@lumin\/tool-calendar\/renderer\/(.+)$/,
     replacement: r('../../packages/tools/calendar/src/renderer/$1')
-  },
-  {
-    find: /^@lumin\/tool-clipboard-history\/manifest$/,
-    replacement: r('../../packages/tools/clipboard-history/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-clipboard-history\/node$/,
-    replacement: r('../../packages/tools/clipboard-history/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-clipboard-history\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/clipboard-history/src/renderer/$1')
-  },
-  {
-    find: /^@lumin\/tool-password-generator\/manifest$/,
-    replacement: r('../../packages/tools/password-generator/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-password-generator\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/password-generator/src/renderer/$1')
-  },
-  {
-    find: /^@lumin\/tool-text-diff\/manifest$/,
-    replacement: r('../../packages/tools/text-diff/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-text-diff\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/text-diff/src/renderer/$1')
   },
   {
     find: /^@lumin\/tool-media-convert\/manifest$/,

@@ -218,4 +218,24 @@ test.describe('misc-toolbox（实用工具）冒烟', () => {
       await app.close()
     }
   })
+
+  test('M78 并入页签标签可见（系统信息 / 密码生成 / 剪贴板）', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '实用工具')
+      for (const [name, label] of [
+        ['sysinfo', '系统信息'],
+        ['password', '密码生成'],
+        ['clipboard', '剪贴板']
+      ] as const) {
+        const tab = page.locator(`.n-tabs-tab[data-name="${name}"]`)
+        await tab.scrollIntoViewIfNeeded()
+        await expect(tab).toHaveText(label)
+        expect(await tab.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(0)
+      }
+    } finally {
+      await app.close()
+    }
+  })
 })

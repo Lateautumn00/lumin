@@ -1,8 +1,9 @@
 /**
  * @file node.ts
  * @author cuilanchao
- * @date 2026-11-19
- * @description 主进程通道注册：info 同步（页数/元数据）+ 十一个 worker 三段式任务。
+ * @date 2026-11-25
+ * @description 主进程通道注册：info 同步（页数/元数据）+ 十二个 worker 三段式任务；
+ *              M76 并入的「PDF↔图片」页签经上下文适配器加 `images-` 前缀注册。
  *              deps 可注入（vitest 传假 worker 路径与假 inspector）。
  */
 import { access, constants, open } from 'node:fs/promises'
@@ -16,7 +17,7 @@ import {
   TaskTimeoutError,
   type RunTaskOptions
 } from '@lumin/node-kit'
-import type { MainPluginContext, RegisterMain } from '@lumin/plugin-api'
+import type { IpcHandler, MainPluginContext, RegisterMain, TaskHandler } from '@lumin/plugin-api'
 import {
   errnoCode,
   isStructuredError,
@@ -26,6 +27,7 @@ import {
 } from '@lumin/shared'
 import type { ZodType } from 'zod'
 import { toolError } from './errors'
+import { registerMain as registerImagesMain } from './images/node'
 import { inspectPdf, type OpResult, type WorkerRequest } from './pdf-ops'
 import {
   compressPayloadSchema,
@@ -237,4 +239,30 @@ export function createNodeDeps(): PdfToolkitDeps {
 
 export const registerMain: RegisterMain = (ctx) => {
   registerWith(ctx, createNodeDeps())
+  // M76 并入页签：通道 images-*，settings 键 images.*
+  registerImagesMain(namespacedContext(ctx, 'images'))
+  ctx.log.info('pdf-toolkit registered')
+}
+
+/** 并入页签前缀（通道 `{prefix}-{action}`，settings 键 `{prefix}.{key}`） */
+type MergedPrefix = 'images'
+
+/**
+ * 子功能上下文适配（M73 同口径）：通道加 `{prefix}-`、settings 键加 `{prefix}.` 前缀，
+ * 子模块仍按自身裸 action / 裸键编写，合并后互不冲突且单测零改动
+ * @param ctx 宿主主进程上下文
+ * @param prefix 页签前缀（images）
+ */
+function namespacedContext(ctx: MainPluginContext, prefix: MergedPrefix): MainPluginContext {
+  return {
+    ...ctx,
+    registerIpc: <P, R>(action: string, handler: IpcHandler<P, R>) =>
+      ctx.registerIpc(`${prefix}-${action}`, handler),
+    registerTask: <P, R>(action: string, handler: TaskHandler<P, R>) =>
+      ctx.registerTask(`${prefix}-${action}`, handler),
+    settings: {
+      get: <T>(key: string, defaultValue: T) => ctx.settings.get(`${prefix}.${key}`, defaultValue),
+      set: <T>(key: string, value: T) => ctx.settings.set(`${prefix}.${key}`, value)
+    }
+  }
 }

@@ -224,4 +224,23 @@ test.describe('text-toolbox（文本工具箱）冒烟', () => {
       await app.close()
     }
   })
+
+  test('M77 并入页签标签可见（编辑 / 对比）', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '文本工具箱')
+      for (const [name, label] of [
+        ['editor', '编辑'],
+        ['diff', '对比']
+      ] as const) {
+        const tab = page.locator(`.n-tabs-tab[data-name="${name}"]`)
+        await tab.scrollIntoViewIfNeeded()
+        await expect(tab).toHaveText(label)
+        expect(await tab.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(0)
+      }
+    } finally {
+      await app.close()
+    }
+  })
 })

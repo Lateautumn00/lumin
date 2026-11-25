@@ -254,18 +254,12 @@ importers:
       '@lumin/tool-calendar':
         specifier: workspace:*
         version: link:../../packages/tools/calendar
-      '@lumin/tool-clipboard-history':
-        specifier: workspace:*
-        version: link:../../packages/tools/clipboard-history
       '@lumin/tool-color-toolbox':
         specifier: workspace:*
         version: link:../../packages/tools/color-toolbox
       '@lumin/tool-dev-toolbox':
         specifier: workspace:*
         version: link:../../packages/tools/dev-toolbox
-      '@lumin/tool-disk-analyzer':
-        specifier: workspace:*
-        version: link:../../packages/tools/disk-analyzer
       '@lumin/tool-docx2pdf':
         specifier: workspace:*
         version: link:../../packages/tools/docx2pdf
@@ -278,15 +272,9 @@ importers:
       '@lumin/tool-file-preview':
         specifier: workspace:*
         version: link:../../packages/tools/file-preview
-      '@lumin/tool-file-renamer':
-        specifier: workspace:*
-        version: link:../../packages/tools/file-renamer
       '@lumin/tool-file-scanner':
         specifier: workspace:*
         version: link:../../packages/tools/file-scanner
-      '@lumin/tool-fs-cleaner':
-        specifier: workspace:*
-        version: link:../../packages/tools/fs-cleaner
       '@lumin/tool-image-toolbox':
         specifier: workspace:*
         version: link:../../packages/tools/image-toolbox
@@ -308,12 +296,6 @@ importers:
       '@lumin/tool-ocr-text':
         specifier: workspace:*
         version: link:../../packages/tools/ocr-text
-      '@lumin/tool-password-generator':
-        specifier: workspace:*
-        version: link:../../packages/tools/password-generator
-      '@lumin/tool-pdf-images':
-        specifier: workspace:*
-        version: link:../../packages/tools/pdf-images
       '@lumin/tool-pdf-toolkit':
         specifier: workspace:*
         version: link:../../packages/tools/pdf-toolkit
@@ -323,15 +305,6 @@ importers:
       '@lumin/tool-qr-code':
         specifier: workspace:*
         version: link:../../packages/tools/qr-code
-      '@lumin/tool-system-info':
-        specifier: workspace:*
-        version: link:../../packages/tools/system-info
-      '@lumin/tool-text-diff':
-        specifier: workspace:*
-        version: link:../../packages/tools/text-diff
-      '@lumin/tool-text-editor':
-        specifier: workspace:*
-        version: link:../../packages/tools/text-editor
       '@lumin/tool-text-toolbox':
         specifier: workspace:*
         version: link:../../packages/tools/text-toolbox
@@ -485,34 +458,6 @@ importers:
         specifier: 3.5.45
         version: 3.5.45(typescript@6.0.3)
 
-  packages/tools/clipboard-history:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      electron:
-        specifier: 45.3.1
-        version: 45.3.1(supports-color@7.2.0)
-
   packages/tools/color-toolbox:
     dependencies:
       '@lucide/vue':
@@ -542,33 +487,6 @@ importers:
         version: 45.3.1(supports-color@7.2.0)
 
   packages/tools/dev-toolbox:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-
-  packages/tools/disk-analyzer:
     dependencies:
       '@lucide/vue':
         specifier: 1.72.0
@@ -714,58 +632,7 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
-  packages/tools/file-renamer:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-
   packages/tools/file-scanner:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-
-  packages/tools/fs-cleaner:
     dependencies:
       '@lucide/vue':
         specifier: 1.72.0
@@ -994,25 +861,7 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
-  packages/tools/password-generator:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-
-  packages/tools/pdf-images:
+  packages/tools/pdf-toolkit:
     dependencies:
       '@lucide/vue':
         specifier: 1.72.0
@@ -1045,36 +894,6 @@ importers:
       '@napi-rs/canvas':
         specifier: 1.1.1
         version: 1.1.1
-
-  packages/tools/pdf-toolkit:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      pdf-lib:
-        specifier: 1.17.1
-        version: 1.17.1
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
 
   packages/tools/print-tool:
     dependencies:
@@ -1147,53 +966,7 @@ importers:
         specifier: 1.5.6
         version: 1.5.6
 
-  packages/tools/system-info:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-
-  packages/tools/text-diff:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      electron:
-        specifier: 45.3.1
-        version: 45.3.1(supports-color@7.2.0)
-
-  packages/tools/text-editor:
+  packages/tools/text-toolbox:
     dependencies:
       '@lucide/vue':
         specifier: 1.72.0
@@ -1216,6 +989,9 @@ importers:
       naive-ui:
         specifier: 2.45.3
         version: 2.45.3(vue@3.5.45(typescript@6.0.3))
+      pinyin-pro:
+        specifier: 3.29.5
+        version: 3.29.5
       vue:
         specifier: 3.5.45
         version: 3.5.45(typescript@6.0.3)
@@ -1225,27 +1001,10 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
-
-  packages/tools/text-toolbox:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      pinyin-pro:
-        specifier: 3.29.5
-        version: 3.29.5
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
+    devDependencies:
+      electron:
+        specifier: 45.3.1
+        version: 45.3.1(supports-color@7.2.0)
 
   packages/tools/time-toolbox:
     dependencies:

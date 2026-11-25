@@ -39,13 +39,20 @@ interface Harness {
 function makeCtx(): { ctx: MainPluginContext; harness: Harness } {
   const ipc = new Map<string, IpcHandler>()
   const tasks = new Map<string, TaskHandler>()
+  // M76 并入 images 页签后 registerMain 会在注册期读取 paths（默认输出目录/ffmpeg 路径）并持有 settings
   const ctx = {
     registerIpc: (action: string, handler: IpcHandler) => {
       ipc.set(action, handler)
     },
     registerTask: (action: string, handler: TaskHandler) => {
       tasks.set(action, handler)
-    }
+    },
+    settings: {
+      get: async <T>(_key: string, defaultValue: T): Promise<T> => defaultValue,
+      set: async (): Promise<void> => undefined
+    },
+    log: { info: (): void => undefined, warn: (): void => undefined, error: (): void => undefined },
+    paths: { temp: 'C:/tmp', userData: 'C:/userData', binaries: 'C:/binaries' }
   } as unknown as MainPluginContext
   return { ctx, harness: { ipc, tasks } }
 }
@@ -463,11 +470,14 @@ describe('pdf-toolkit node:错误分类与默认依赖', () => {
     expect(typeof deps.checkExclusive).toBe('function')
   })
 
-  it('registerMain 注册 info + 十二个任务通道', () => {
+  it('registerMain 注册 info + 十二个任务通道，并追加 images-* 并入页签通道', () => {
     const { ctx, harness } = makeCtx()
     registerMain(ctx)
-    expect([...harness.ipc.keys()]).toEqual(['info'])
-    expect([...harness.tasks.keys()]).toEqual([
+    expect([...harness.ipc.keys()].slice(0, 1)).toEqual(['info'])
+    expect([...harness.ipc.keys()]).toContain('images-pdf-info')
+    expect([...harness.ipc.keys()]).toContain('images-config')
+    expect([...harness.ipc.keys()]).toContain('images-set-output-dir')
+    expect([...harness.tasks.keys()].slice(0, 12)).toEqual([
       'merge',
       'split',
       'delete',
@@ -481,5 +491,7 @@ describe('pdf-toolkit node:错误分类与默认依赖', () => {
       'compress',
       'export-html'
     ])
+    expect([...harness.tasks.keys()]).toContain('images-pdf-to-images')
+    expect([...harness.tasks.keys()]).toContain('images-images-to-pdf')
   })
 })

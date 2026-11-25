@@ -184,6 +184,10 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 - 图片剩余三件套合并决策（2026-11-25，plan Q72/M72）：`image-watermark` / `image-dewatermark` / `image-stitch` **整包并入 `image-toolbox`** 为「水印 / 去水印 / 拼接」三 Tab，删除三包与侧边栏入口、薄壳页、e2e（图片入口 4 → 1）；通道统一 `image-toolbox:*`（10 个，按页签加前缀），错误码保留 `IW_*`/`IDW_*`/`IS_*`；设置键 `watermarkOutputDir` / `dewatermarkOutputDir` / `stitchOutputDir`；**零新增依赖/二进制**；修改须重走 R8
 - 视频下载/播放器合并决策（2026-11-25，plan Q73/M73）：`video-download` / `video-player` **整包并入 `media-convert`**（id 不变，显示名「媒体工具箱」，`version 0.3.0`）为「下载 / 播放」两页签，删除两包与侧边栏入口、薄壳页、e2e（媒体入口 3 → 1）；宿主五通道不变，子功能经上下文适配器加前缀 `media-convert:download-*` / `media-convert:player-*`；settings 迁至 `tools.media-convert.download.*`（旧键不迁移）；下载页签**懒挂载**防免责弹窗误弹；错误码保留 `VD_*`/`VP_*`；**零新增依赖/二进制**；修改须重走 R8
 - 思维导图交互升级决策（2026-11-25，plan Q74/M74）：`mindmap` **v0.2.0** 新增导图/大纲双视图（库内置 `Outliner`，同一文档共享撤销栈）、节点操作条与备注/链接、`Ctrl+F` 搜索定位、从文本大纲生成/追加、工具栏 tooltip/快捷键帮助/边框字号控件重做/多选批量样式；解冻 spec §0.3「纯文本/Markdown 大纲生成」，**OCR/AI 生成仍冻结**；**零新增依赖/二进制**；修改须重走 R8
+- 文件残余三件套合并决策（2026-11-25，plan Q75/M75）：`file-renamer` / `fs-cleaner` / `disk-analyzer` **整包并入 `file-scanner`** 为「批量重命名 / 文件清理 / 磁盘分析」三页签（六页签单入口，文件入口 4 → 1），删除三包与侧边栏入口、薄壳页、e2e；通道统一 `file-scanner:rename-* / clean-* / disk-*`（上下文适配器加前缀），settings 迁至 `tools.file-scanner.rename|clean|disk.*`，错误码保留 `FR_*`/`FC_*`/`DA_*`；**零新增依赖/二进制**；修改须重走 R8
+- PDF 图片互转合并决策（2026-11-25，plan Q76/M76）：`pdf-images` **整包并入 `pdf-toolkit`** 为第 13 页签「PDF↔图片」（PDF 入口 2 → 1），删除独立包与侧边栏入口、薄壳页、e2e；通道统一 `pdf-toolkit:images-*`，错误码保留 `PI_*`；**零新增依赖/二进制**；修改须重走 R8
+- 文本残余两件套合并决策（2026-11-25，plan Q77/M77）：`text-editor` / `text-diff` **整包并入 `text-toolbox`** 为「编辑 / 对比」两页签（文本入口 3 → 1），`text-toolbox` 新增主进程入口；通道统一 `text-toolbox:editor-* / diff-*`，错误码保留 `TE_*`/`TD_*`；**零新增依赖/二进制**；修改须重走 R8
+- 杂项与系统合并决策（2026-11-25，plan Q78/M78）：`system-info` / `password-generator` / `clipboard-history` **整包并入 `misc-toolbox`** 为「系统信息 / 密码生成 / 剪贴板」三页签（杂项入口 4 → 1，`qr-code` 归属图片明确不动）；通道统一 `misc-toolbox:sysinfo-* / clipboard-*`（密码生成纯 renderer 无通道），错误码保留 `SI_*`/`CH_*`；**零新增依赖/二进制**；修改须重走 R8
 
 ---
 

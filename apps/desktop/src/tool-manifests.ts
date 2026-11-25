@@ -1,17 +1,13 @@
 import type { ToolManifest } from '@lumin/plugin-api'
 import { manifest as calculatorManifest } from '@lumin/tool-calculator/manifest'
 import { manifest as calendarManifest } from '@lumin/tool-calendar/manifest'
-import { manifest as clipboardHistoryManifest } from '@lumin/tool-clipboard-history/manifest'
 import { manifest as colorToolboxManifest } from '@lumin/tool-color-toolbox/manifest'
 import { manifest as devToolboxManifest } from '@lumin/tool-dev-toolbox/manifest'
-import { manifest as diskAnalyzerManifest } from '@lumin/tool-disk-analyzer/manifest'
 import { manifest as docx2pdfManifest } from '@lumin/tool-docx2pdf/manifest'
 import { manifest as exampleManifest } from '@lumin/tool-example/manifest'
 import { manifest as examSplitManifest } from '@lumin/tool-exam-split/manifest'
 import { manifest as filePreviewManifest } from '@lumin/tool-file-preview/manifest'
-import { manifest as fileRenamerManifest } from '@lumin/tool-file-renamer/manifest'
 import { manifest as fileScannerManifest } from '@lumin/tool-file-scanner/manifest'
-import { manifest as fsCleanerManifest } from '@lumin/tool-fs-cleaner/manifest'
 import { manifest as imageToolboxManifest } from '@lumin/tool-image-toolbox/manifest'
 import { manifest as lifeCalculatorManifest } from '@lumin/tool-life-calculator/manifest'
 import { manifest as markdownToolManifest } from '@lumin/tool-markdown-tool/manifest'
@@ -19,14 +15,9 @@ import { manifest as mediaConvertManifest } from '@lumin/tool-media-convert/mani
 import { manifest as mindmapManifest } from '@lumin/tool-mindmap/manifest'
 import { manifest as miscToolboxManifest } from '@lumin/tool-misc-toolbox/manifest'
 import { manifest as ocrTextManifest } from '@lumin/tool-ocr-text/manifest'
-import { manifest as passwordGeneratorManifest } from '@lumin/tool-password-generator/manifest'
-import { manifest as pdfImagesManifest } from '@lumin/tool-pdf-images/manifest'
 import { manifest as pdfToolkitManifest } from '@lumin/tool-pdf-toolkit/manifest'
 import { manifest as printManifest } from '@lumin/tool-print/manifest'
 import { manifest as qrCodeManifest } from '@lumin/tool-qr-code/manifest'
-import { manifest as systemInfoManifest } from '@lumin/tool-system-info/manifest'
-import { manifest as textDiffManifest } from '@lumin/tool-text-diff/manifest'
-import { manifest as textEditorManifest } from '@lumin/tool-text-editor/manifest'
 import { manifest as textToolboxManifest } from '@lumin/tool-text-toolbox/manifest'
 import { manifest as timeToolboxManifest } from '@lumin/tool-time-toolbox/manifest'
 import { manifest as unitConverterManifest } from '@lumin/tool-unit-converter/manifest'
@@ -36,34 +27,25 @@ import { manifest as zipToolManifest } from '@lumin/tool-zip-tool/manifest'
 export const toolManifests: readonly ToolManifest[] = [
   calculatorManifest,
   calendarManifest,
-  clipboardHistoryManifest,
   unitConverterManifest,
   lifeCalculatorManifest,
   docx2pdfManifest,
   examSplitManifest,
   imageToolboxManifest,
-  pdfImagesManifest,
   pdfToolkitManifest,
   printManifest,
-  fileRenamerManifest,
   textToolboxManifest,
-  textEditorManifest,
   mindmapManifest,
   markdownToolManifest,
-  textDiffManifest,
   fileScannerManifest,
   mediaConvertManifest,
   qrCodeManifest,
   ocrTextManifest,
-  diskAnalyzerManifest,
-  fsCleanerManifest,
   zipToolManifest,
   colorToolboxManifest,
   timeToolboxManifest,
-  passwordGeneratorManifest,
   devToolboxManifest,
   miscToolboxManifest,
-  systemInfoManifest,
   exampleManifest,
   filePreviewManifest
 ]

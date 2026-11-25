@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * 实用工具（misc-toolbox）：子网 / IP 计算器 + 屏幕标尺 + 秒表 / 倒计时 / 番茄钟 + 中文信息三卡片。
+ * 实用工具（misc-toolbox）：子网 / IP 计算器 + 屏幕标尺 + 秒表 / 倒计时 / 番茄钟 + 中文信息三卡片
+ * + M78 并入的系统信息 / 密码生成 / 剪贴板历史三页签。
  * 三态：空态（IP 引导 + 预设、标尺 DPI 引导、秒表 00:00.00）/ 加载态（截屏按钮 loading、计时豁免）/ 报错态（MT_* + 中文文案）。
  * 计时基于 performance.now 差值，setInterval 仅刷新显示；卸载时清理 interval / AudioContext / 标题标记。
  */
@@ -23,6 +24,9 @@ import type { StructuredError } from '@lumin/shared'
 
 import ScreenRulerPanel from './ScreenRulerPanel.vue'
 import ChineseInfoPanel from './ChineseInfoPanel.vue'
+import SysInfoTab from '../sysinfo/renderer/ToolView.vue'
+import PasswordTab from '../password/renderer/ToolView.vue'
+import ClipboardTab from '../clipboard/renderer/ToolView.vue'
 import { errorMessage } from '../errors'
 import { isIpv6Info, parseAndCompute, type SubnetInfo, type SubnetInfo6 } from '../ip'
 import {
@@ -440,6 +444,15 @@ onUnmounted(() => {
       <NTabPane name="chinese">
         <template #tab>中文信息</template>
       </NTabPane>
+      <NTabPane name="sysinfo">
+        <template #tab>系统信息</template>
+      </NTabPane>
+      <NTabPane name="password">
+        <template #tab>密码生成</template>
+      </NTabPane>
+      <NTabPane name="clipboard">
+        <template #tab>剪贴板</template>
+      </NTabPane>
     </NTabs>
 
     <!-- 页签一：子网 / IP -->
@@ -646,5 +659,10 @@ onUnmounted(() => {
     <div v-if="activeTab === 'chinese'">
       <ChineseInfoPanel />
     </div>
+
+    <!-- M78 并入页签：系统信息 / 密码生成 / 剪贴板历史（各自完整三态） -->
+    <SysInfoTab v-if="activeTab === 'sysinfo'" />
+    <PasswordTab v-if="activeTab === 'password'" />
+    <ClipboardTab v-if="activeTab === 'clipboard'" />
   </div>
 </template>

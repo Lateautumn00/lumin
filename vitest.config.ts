@@ -124,12 +124,6 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
-        'packages/tools/file-renamer/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
         'packages/tools/text-toolbox/src/**/*.ts': {
           lines: 80,
           functions: 80,
@@ -137,18 +131,6 @@ export default defineConfig({
           branches: 80
         },
         'packages/tools/file-scanner/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
-        'packages/tools/disk-analyzer/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
-        'packages/tools/fs-cleaner/src/**/*.ts': {
           lines: 80,
           functions: 80,
           statements: 80,
@@ -178,7 +160,8 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
-        'packages/tools/pdf-toolkit/src/**/*.ts': {
+        // M76 并入的 src/images/**（原 pdf-images worker/编排）沿用全仓 60% 口径，宿主自身代码仍 80%
+        'packages/tools/pdf-toolkit/src/{*.ts,renderer/**/*.ts}': {
           lines: 80,
           functions: 80,
           statements: 80,
@@ -214,18 +197,6 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
-        'packages/tools/password-generator/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
-        'packages/tools/text-diff/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
         'packages/tools/life-calculator/src/**/*.ts': {
           lines: 80,
           functions: 80,
@@ -244,25 +215,7 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
-        'packages/tools/text-editor/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
         'packages/tools/mindmap/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
-        'packages/tools/system-info/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
-        'packages/tools/clipboard-history/src/**/*.ts': {
           lines: 80,
           functions: 80,
           statements: 80,

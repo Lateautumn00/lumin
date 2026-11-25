@@ -591,7 +591,8 @@ test.describe('file-scanner（文件扫描）冒烟', () => {
       const outcome = await page.evaluate(
         (args: string[]) =>
           new Promise<{ terminals: string[]; wasted: number[] }>((resolve, reject) => {
-            const events: { taskId: string; kind: string; result?: ScanResult; code?: string }[] = []
+            const events: { taskId: string; kind: string; result?: ScanResult; code?: string }[] =
+              []
             const taskIds: string[] = []
             const off = window.lumin.onTaskEvent((event) => {
               events.push(event as unknown as (typeof events)[number])
@@ -684,6 +685,26 @@ test.describe('file-scanner（文件扫描）冒烟', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true })
       await second.app.close()
+    }
+  })
+
+  test('M75 并入页签标签可见（批量重命名 / 文件清理 / 磁盘分析）', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    try {
+      await clickSidebarTool(page, '文件扫描')
+      for (const [name, label] of [
+        ['rename', '批量重命名'],
+        ['clean', '文件清理'],
+        ['disk', '磁盘分析']
+      ] as const) {
+        const tab = page.locator(`.n-tabs-tab[data-name="${name}"]`)
+        await tab.scrollIntoViewIfNeeded()
+        await expect(tab).toHaveText(label)
+        expect(await tab.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(0)
+      }
+    } finally {
+      await app.close()
     }
   })
 })

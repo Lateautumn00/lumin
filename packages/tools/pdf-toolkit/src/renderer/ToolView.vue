@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// PDF 工具集主视图（合并/拆分/删页/旋转/重排/元数据/水印/页码）
-// 作者：cuilanchao · 修改时间：2026-11-19
+// PDF 工具集主视图（合并/拆分/删页/旋转/重排/元数据/水印/页码/提取/压缩/PDF→HTML/PDF↔图片）
+// 作者：cuilanchao · 修改时间：2026-11-25
 // 三态强制（空态引导 / 加载可取消 / 结构化错误 + 重试）、tokens、@lucide/vue（AGENTS §5）
 import { computed, onUnmounted, reactive, ref } from 'vue'
 import { NButton, NEmpty, NInput, NSpace, NTabPane, NTabs, NText } from 'naive-ui'
@@ -38,6 +38,7 @@ import {
   watermark
 } from './client'
 import { rasterizeWatermarkText } from './watermark-text'
+import ImagesTab from '../images/renderer/ToolView.vue'
 
 /** Tab 标识 */
 type TabId =
@@ -53,9 +54,10 @@ type TabId =
   | 'extract-images'
   | 'compress'
   | 'export-html'
+  | 'images'
 
-/** 任务种类（重试入口据此复放上一次提交） */
-type Action = TabId
+/** 任务种类（重试入口据此复放上一次提交；images 页签自管子任务，无统一提交按钮） */
+type Action = Exclude<TabId, 'images'>
 
 /** DropZone accept 串（与 schema 白名单一致） */
 const PDF_ACCEPT = '.pdf'
@@ -503,7 +505,15 @@ onUnmounted(detach)
       <NTabPane name="export-html">
         <template #tab>PDF→HTML</template>
       </NTabPane>
+      <NTabPane name="images">
+        <template #tab>PDF↔图片</template>
+      </NTabPane>
     </NTabs>
+
+    <!-- PDF↔图片页签（M76 并入 pdf-images）自带完整三态，独立渲染 -->
+    <ImagesTab v-if="activeTab === 'images'" />
+
+    <template v-if="activeTab !== 'images'">
 
     <p v-if="invalidHint !== ''" class="text-xs text-[var(--lumin-color-warning, #f0a020)]">
       {{ invalidHint }}
@@ -1003,8 +1013,8 @@ onUnmounted(detach)
     </template>
 
     <NSpace>
-      <NButton type="primary" :disabled="!canSubmit" @click="run(activeTab)">
-        {{ BUTTON_TEXT[activeTab] }}
+      <NButton type="primary" :disabled="!canSubmit" @click="run(activeTab as Action)">
+        {{ BUTTON_TEXT[activeTab as Action] }}
       </NButton>
     </NSpace>
 
@@ -1060,5 +1070,6 @@ onUnmounted(detach)
         <NText depth="3" class="block break-all text-xs">{{ errorDetail }}</NText>
       </details>
     </div>
+    </template>
   </div>
 </template>

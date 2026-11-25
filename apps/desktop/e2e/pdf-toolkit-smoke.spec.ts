@@ -134,11 +134,12 @@ function freshDir(name: string): string {
   return dir
 }
 
-/** 用 pdf-images 生成 N 页 PDF（返回产物绝对路径） */
+/** 用并入的 PDF↔图片页签生成 N 页 PDF（返回产物绝对路径） */
 async function makePdf(page: Page, dir: string, name: string, pages = 1): Promise<string> {
   const png = path.join(dir, `${name}.png`)
   writePng(png, 300, 200, '#22aa55')
-  const outcome = await runTask(page, 'pdf-images:images-to-pdf', {
+  // M76 合并后 pdf-images 通道加 `images-` 前缀，宿主内为 pdf-toolkit:images-images-to-pdf
+  const outcome = await runTask(page, 'pdf-toolkit:images-images-to-pdf', {
     inputPaths: Array.from({ length: pages }, () => png),
     pageSize: 'auto',
     marginMm: 0,
@@ -728,6 +729,21 @@ test.describe('pdf-toolkit（PDF 工具集）冒烟', () => {
       await expect(page.getByPlaceholder('留空 = 全部页（如 1-3,5）')).toBeVisible()
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('M76 并入页签标签可见（PDF↔图片）', async () => {
+    const { app, page } = await launch()
+    try {
+      await clickSidebarTool(page, 'PDF 工具集')
+      const tab = page.locator('.n-tabs-tab[data-name="images"]')
+      await tab.scrollIntoViewIfNeeded()
+      await expect(tab).toHaveText('PDF↔图片')
+      expect(await tab.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(0)
+      await tab.click()
+      await expect(page.getByText('PDF 转图片', { exact: true }).first()).toBeVisible()
+    } finally {
       await app.close()
     }
   })

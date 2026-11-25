@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// 文本工具箱主视图（M8，M36 增 Hex/Unicode 与文本处理，M60 增 URL 编码 / SQL 格式化）
-// 作者：cuilanchao · 修改时间：2026-11-23
-// 纯 renderer 多 Tab（JSON / 编解码 / 正则 / 文本处理 / 摩尔斯 / CSV-JSON / 拼音 / URL 编码 / SQL 格式化），零 IPC；大文本先渲染 busy 再分帧计算（R4 加载态）
+// 文本工具箱主视图（M8，M36 增 Hex/Unicode 与文本处理，M60 增 URL 编码 / SQL 格式化，M77 并入编辑 / 对比）
+// 作者：cuilanchao · 修改时间：2026-11-25
+// 多 Tab（JSON / 编解码 / 正则 / 文本处理 / 摩尔斯 / CSV-JSON / 拼音 / URL 编码 / SQL 格式化 / 编辑 / 对比），
+// 前九个纯 renderer 零 IPC；编辑 / 对比页签为 M77 并入的独立三态视图（走 text-toolbox:editor-* / diff-* 通道）
 import { computed, ref, watch } from 'vue'
 import {
   NButton,
@@ -36,6 +37,8 @@ import { countText } from '../stats'
 import { csvToJson, jsonToCsv, type CsvDelimiter } from '../csv'
 import { convertPinyin, type PinyinStyle } from '../pinyin'
 import { formatSql, minifySql } from '../sql'
+import EditorTab from '../editor/renderer/ToolView.vue'
+import DiffTab from '../diff/renderer/ToolView.vue'
 
 /** 超过该字节数先渲染「处理中」再分帧计算，避免输入后界面卡住无反馈 */
 const HEAVY_BYTES = 200 * 1024
@@ -666,6 +669,12 @@ function messageOf(code: string): string {
       <NTabPane name="sql">
         <template #tab>SQL 格式化</template>
       </NTabPane>
+      <NTabPane name="editor">
+        <template #tab>编辑</template>
+      </NTabPane>
+      <NTabPane name="diff">
+        <template #tab>对比</template>
+      </NTabPane>
     </NTabs>
 
     <!-- JSON -->
@@ -1198,6 +1207,10 @@ function messageOf(code: string): string {
         输入 SQL 语句后可美化或压缩。
       </NText>
     </div>
+
+    <!-- M77 并入页签：编辑 / 对比（自带完整三态与离开拦截，独立渲染） -->
+    <EditorTab v-if="activeTab === 'editor'" />
+    <DiffTab v-if="activeTab === 'diff'" />
 
     <!-- 加载态（大文本分帧） -->
     <NText v-if="busy" depth="3" class="text-sm">处理中…</NText>

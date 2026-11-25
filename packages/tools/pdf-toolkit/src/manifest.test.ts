@@ -7,7 +7,7 @@ describe('pdf-toolkit manifest', () => {
     expect(manifest.name).toBe('PDF 工具集')
     expect(manifest.icon).toBe('files')
     expect(manifest.order).toBe(75)
-    expect(manifest.version).toBe('0.1.0')
+    expect(manifest.version).toBe('0.2.0')
     expect(manifest.description).toContain('PDF')
   })
 })
