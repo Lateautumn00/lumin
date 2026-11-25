@@ -179,6 +179,8 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 - 壳级 UX 决策（2026-11-23，plan Q60）：**无原生菜单栏**（`Menu.setApplicationMenu(null)`，dev 经 `before-input-event` 保留 F12/Ctrl+Shift+I/F5/Ctrl+R）；**启动默认工具 = 日历**（`tool-manifests.ts` 的 `DEFAULT_TOOL_ID`）；修改须重走 R8
 - 文件打印决策（2026-11-25，plan Q69/M68）：新增独立工具 `@lumin/tool-print`（id `print`，Office/PDF/图片三类输入）；**统一系统打印对话框 `silent:false`**，不做应用内预览与静默打印；PDF 走 Electron PDFium 视图（隐藏窗口 `plugins:true`）+ `node-kit/pdf` 栅格兜底；Office 经 `soffice` 转 PDF 后打印（串行锁）；**零新增依赖/二进制**；修改须重走 R8
 - 页面切分决策（2026-11-25，plan Q70/M69）：`exam-split` 的 **OCR 页签内置「切成两页」处理方式**（默认选中，与「识别切题」互斥切换，不新增第三个页签），A3 横向双页 → 两页 A4；**纯像素检测**（Otsu + 纸张包围盒 + 中央装订沟，无沟回退 0.5），**竖版 → `PAGE_NOT_SPREAD`** 不静默硬切；PDF 两次独立 `copyPages` + `setMediaBox/CropBox` 出单文件 2N 页，图片同格式左右成对输出；切完即结束不自动 OCR；**零新增依赖/二进制**；修改须重走 R8
+- 图片三件套合并决策（2026-11-25，plan Q71/M70）：`image-rotate` / `image-crop` **整包并入 `image-toolbox`** 为「旋转」「裁剪」两 Tab，删除两包与侧边栏入口、薄壳页、e2e；`process` union 与 `historyModeSchema` 增 `rotate`/`crop`，错误码统一 `IT_*`，产物扩展名沿用 `compressOutputExt`（gif/webp→webp，动图取首帧）；**零新增依赖/二进制**；修改须重走 R8
+- 文件扫描套件合并决策（2026-11-25，plan Q72/M71）：`file-hasher` / `duplicate-finder` / `folder-compare` **整包并入 `file-scanner`** 为「文件校验 / 重复文件 / 目录对比」三页签，删除三包与侧边栏入口、薄壳页、e2e（3 入口 → 1）；通道统一 `file-scanner:*`（`hash-*` / `dup-*` / `compare-*` 共 9 个），错误码保留 `FH_*`/`DF_*`/`FC_*`；**零新增依赖/二进制**；修改须重走 R8
 
 ---
 

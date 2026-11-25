@@ -56,6 +56,12 @@ import {
   planGifCanvas
 } from './gif'
 import { buildOutputName, compressOutputExt, uniqueName, type SizeTag } from './naming'
+import {
+  buildFilterArgs as buildRotateFilterArgs,
+  buildRotateEncodeArgs,
+  buildRotateOutputName
+} from './rotate'
+import { buildCropEncodeArgs, buildCropFilterArgs, buildCropOutputName } from './crop'
 
 /** 可注入依赖（单测传假件；docx2pdf/video-download node.ts 同口径） */
 export interface ImageToolboxDeps {
@@ -506,6 +512,56 @@ async function processOne(
   const stat = statSync(file)
   if (stat.size > MAX_FILE_BYTES) throw toolError('IT_FILE_UNSUPPORTED')
 
+  // 动图输入（gif/webp）：webp 输出保留动画，其余格式取首帧（spec §2.2）
+  const animated = inputExt === 'gif' || inputExt === 'webp'
+
+  // 旋转/裁剪（M70 §4.48）：静态变换，输出扩展名沿用压缩「保持原格式」映射（spec §2.6/§2.7）
+  if (payload.mode === 'rotate' || payload.mode === 'crop') {
+    const ext = compressOutputExt(inputExt)
+    const candidate =
+      payload.mode === 'rotate'
+        ? buildRotateOutputName({
+            inputName: basename(file),
+            rotation: payload.options.rotation,
+            flip: payload.options.flip,
+            ext
+          })
+        : buildCropOutputName({ inputName: basename(file), options: payload.options, ext })
+    const name = uniqueName(env.existing, candidate)
+    env.existing.add(name.toLowerCase())
+    const output = join(env.outputDir, name)
+    const filterArgs =
+      payload.mode === 'rotate'
+        ? buildRotateFilterArgs(payload.options)
+        : buildCropFilterArgs(payload.options)
+    // 动图输入取首帧静态化，避免 webp 输出意外保留多帧
+    const staticArgs = animated ? ['-frames:v', '1'] : []
+    const encodeArgs =
+      payload.mode === 'rotate' ? buildRotateEncodeArgs(ext) : buildCropEncodeArgs(ext)
+    const result = await env.deps.runProcess({
+      command: env.ffmpegPath,
+      args: [
+        '-y',
+        '-v',
+        'error',
+        '-i',
+        file,
+        ...filterArgs,
+        ...staticArgs,
+        ...encodeArgs,
+        output
+      ],
+      signal: env.signal,
+      maxOutputChars: 256 * 1024
+    })
+    if (result.aborted) throw toolError('IT_CANCELLED')
+    if (result.code !== 0) {
+      throw toolError(classifyFfmpegFailure(result.stderr, output), diagnose(result))
+    }
+    const afterStat = statSync(output)
+    return { input: file, output, beforeBytes: stat.size, afterBytes: afterStat.size }
+  }
+
   // 输出扩展名与质量（按模式分发，spec §2）
   let ext: ReturnType<typeof compressOutputExt>
   let quality: number
@@ -548,8 +604,7 @@ async function processOne(
     scaleArgs = buildScaleArgs(target)
   }
 
-  // 动图输入（gif/webp）：webp 输出保留动画，其余格式取首帧（spec §2.2）
-  const animated = inputExt === 'gif' || inputExt === 'webp'
+  // 调整效果（M40 §2.4）
   const effect =
     payload.mode === 'effect'
       ? { kind: payload.options.effect, threshold: payload.options.threshold }

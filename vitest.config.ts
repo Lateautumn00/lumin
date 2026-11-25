@@ -130,18 +130,6 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
-        'packages/tools/image-crop/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
-        'packages/tools/image-rotate/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
         'packages/tools/file-renamer/src/**/*.ts': {
           lines: 80,
           functions: 80,
@@ -154,25 +142,13 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
-        'packages/tools/file-hasher/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
-        'packages/tools/duplicate-finder/src/**/*.ts': {
+        'packages/tools/file-scanner/src/**/*.ts': {
           lines: 80,
           functions: 80,
           statements: 80,
           branches: 80
         },
         'packages/tools/disk-analyzer/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
-        'packages/tools/folder-compare/src/**/*.ts': {
           lines: 80,
           functions: 80,
           statements: 80,

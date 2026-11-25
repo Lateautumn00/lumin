@@ -46,18 +46,6 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/exam-split/src/renderer/$1')
   },
   {
-    find: /^@lumin\/tool-image-crop\/manifest$/,
-    replacement: r('../../packages/tools/image-crop/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-image-crop\/node$/,
-    replacement: r('../../packages/tools/image-crop/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-image-crop\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/image-crop/src/renderer/$1')
-  },
-  {
     find: /^@lumin\/tool-image-toolbox\/manifest$/,
     replacement: r('../../packages/tools/image-toolbox/src/manifest.ts')
   },
@@ -68,18 +56,6 @@ const workspaceAlias = [
   {
     find: /^@lumin\/tool-image-toolbox\/renderer\/(.+)$/,
     replacement: r('../../packages/tools/image-toolbox/src/renderer/$1')
-  },
-  {
-    find: /^@lumin\/tool-image-rotate\/manifest$/,
-    replacement: r('../../packages/tools/image-rotate/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-image-rotate\/node$/,
-    replacement: r('../../packages/tools/image-rotate/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-image-rotate\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/image-rotate/src/renderer/$1')
   },
   {
     find: /^@lumin\/tool-image-stitch\/manifest$/,
@@ -202,28 +178,16 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/file-renamer/src/renderer/$1')
   },
   {
-    find: /^@lumin\/tool-file-hasher\/manifest$/,
-    replacement: r('../../packages/tools/file-hasher/src/manifest.ts')
+    find: /^@lumin\/tool-file-scanner\/manifest$/,
+    replacement: r('../../packages/tools/file-scanner/src/manifest.ts')
   },
   {
-    find: /^@lumin\/tool-file-hasher\/node$/,
-    replacement: r('../../packages/tools/file-hasher/src/node.ts')
+    find: /^@lumin\/tool-file-scanner\/node$/,
+    replacement: r('../../packages/tools/file-scanner/src/node.ts')
   },
   {
-    find: /^@lumin\/tool-file-hasher\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/file-hasher/src/renderer/$1')
-  },
-  {
-    find: /^@lumin\/tool-duplicate-finder\/manifest$/,
-    replacement: r('../../packages/tools/duplicate-finder/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-duplicate-finder\/node$/,
-    replacement: r('../../packages/tools/duplicate-finder/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-duplicate-finder\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/duplicate-finder/src/renderer/$1')
+    find: /^@lumin\/tool-file-scanner\/renderer\/(.+)$/,
+    replacement: r('../../packages/tools/file-scanner/src/renderer/$1')
   },
   {
     find: /^@lumin\/tool-disk-analyzer\/manifest$/,
@@ -236,18 +200,6 @@ const workspaceAlias = [
   {
     find: /^@lumin\/tool-disk-analyzer\/renderer\/(.+)$/,
     replacement: r('../../packages/tools/disk-analyzer/src/renderer/$1')
-  },
-  {
-    find: /^@lumin\/tool-folder-compare\/manifest$/,
-    replacement: r('../../packages/tools/folder-compare/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-folder-compare\/node$/,
-    replacement: r('../../packages/tools/folder-compare/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-folder-compare\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/folder-compare/src/renderer/$1')
   },
   {
     find: /^@lumin\/tool-zip-tool\/manifest$/,

@@ -4,18 +4,14 @@ import { registerMain as colorToolboxRegisterMain } from '@lumin/tool-color-tool
 import { registerMain as devToolboxRegisterMain } from '@lumin/tool-dev-toolbox/node'
 import { registerMain as diskAnalyzerRegisterMain } from '@lumin/tool-disk-analyzer/node'
 import { registerMain as docx2pdfRegisterMain } from '@lumin/tool-docx2pdf/node'
-import { registerMain as duplicateFinderRegisterMain } from '@lumin/tool-duplicate-finder/node'
 import { registerMain as exampleRegisterMain } from '@lumin/tool-example/node'
 import { registerMain as examSplitRegisterMain } from '@lumin/tool-exam-split/node'
-import { registerMain as fileHasherRegisterMain } from '@lumin/tool-file-hasher/node'
 import { registerMain as filePreviewRegisterMain } from '@lumin/tool-file-preview/node'
 import { registerMain as fileRenamerRegisterMain } from '@lumin/tool-file-renamer/node'
-import { registerMain as folderCompareRegisterMain } from '@lumin/tool-folder-compare/node'
+import { registerMain as fileScannerRegisterMain } from '@lumin/tool-file-scanner/node'
 import { registerMain as fsCleanerRegisterMain } from '@lumin/tool-fs-cleaner/node'
-import { registerMain as imageCropRegisterMain } from '@lumin/tool-image-crop/node'
 import { registerMain as imageDewatermarkRegisterMain } from '@lumin/tool-image-dewatermark/node'
 import { registerMain as imageToolboxRegisterMain } from '@lumin/tool-image-toolbox/node'
-import { registerMain as imageRotateRegisterMain } from '@lumin/tool-image-rotate/node'
 import { registerMain as imageStitchRegisterMain } from '@lumin/tool-image-stitch/node'
 import { registerMain as imageWatermarkRegisterMain } from '@lumin/tool-image-watermark/node'
 import { registerMain as markdownToolRegisterMain } from '@lumin/tool-markdown-tool/node'
@@ -40,18 +36,14 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'dev-toolbox': devToolboxRegisterMain,
   'disk-analyzer': diskAnalyzerRegisterMain,
   docx2pdf: docx2pdfRegisterMain,
-  'duplicate-finder': duplicateFinderRegisterMain,
   example: exampleRegisterMain,
   'exam-split': examSplitRegisterMain,
-  'file-hasher': fileHasherRegisterMain,
   'file-preview': filePreviewRegisterMain,
   'file-renamer': fileRenamerRegisterMain,
-  'folder-compare': folderCompareRegisterMain,
+  'file-scanner': fileScannerRegisterMain,
   'fs-cleaner': fsCleanerRegisterMain,
   'image-toolbox': imageToolboxRegisterMain,
-  'image-crop': imageCropRegisterMain,
   'image-dewatermark': imageDewatermarkRegisterMain,
-  'image-rotate': imageRotateRegisterMain,
   'image-stitch': imageStitchRegisterMain,
   'image-watermark': imageWatermarkRegisterMain,
   'markdown-tool': markdownToolRegisterMain,

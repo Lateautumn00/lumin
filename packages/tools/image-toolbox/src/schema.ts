@@ -143,6 +143,66 @@ export type CompressOptions = z.infer<typeof compressOptionsSchema>
 export type ConvertOptions = z.infer<typeof convertOptionsSchema>
 export type ResizeOptions = z.infer<typeof resizeOptionsSchema>
 
+// —— 旋转 options（M70 §4.48 合并 image-rotate，spec §2.6） ——
+
+/** 旋转角度（顺时针；none = 不旋转） */
+export const rotationSchema = z.enum(['none', '90', '180', '270'])
+export type Rotation = z.infer<typeof rotationSchema>
+
+/** 翻转方向（none = 不翻转） */
+export const flipSchema = z.enum(['none', 'horizontal', 'vertical'])
+export type Flip = z.infer<typeof flipSchema>
+
+/** 旋转参数：旋转与翻转可组合，至少选一项（refine 兜底） */
+export const rotateOptionsSchema = z
+  .object({ rotation: rotationSchema, flip: flipSchema })
+  .refine((value) => value.rotation !== 'none' || value.flip !== 'none', {
+    message: '请选择旋转角度或翻转方式'
+  })
+export type RotateOptions = z.infer<typeof rotateOptionsSchema>
+
+// —— 裁剪 options（M70 §4.48 合并 image-crop，spec §2.7） ——
+
+/** 裁剪方式：比例 / 自由区域 */
+export const cropModeSchema = z.enum(['ratio', 'free'])
+export type CropMode = z.infer<typeof cropModeSchema>
+
+/** 九宫格锚点（比例模式下裁剪窗口在图片中的位置） */
+export const anchorSchema = z.enum([
+  'top-left',
+  'top',
+  'top-right',
+  'left',
+  'center',
+  'right',
+  'bottom-left',
+  'bottom',
+  'bottom-right'
+])
+export type CropAnchor = z.infer<typeof anchorSchema>
+
+/**
+ * 裁剪参数：扁平对象，按 mode 取用对应字段（默认值便于部分提交）
+ * - ratio：ratioW/ratioH（1–100）+ anchor
+ * - free：x/y（0–99）+ width/height（1–100），百分比且必须落在图片内
+ */
+export const cropOptionsSchema = z
+  .object({
+    mode: cropModeSchema.default('ratio'),
+    ratioW: z.number().int().min(1).max(100).default(1),
+    ratioH: z.number().int().min(1).max(100).default(1),
+    anchor: anchorSchema.default('center'),
+    x: z.number().int().min(0).max(99).default(0),
+    y: z.number().int().min(0).max(99).default(0),
+    width: z.number().int().min(1).max(100).default(100),
+    height: z.number().int().min(1).max(100).default(100)
+  })
+  .refine(
+    (value) => value.mode !== 'free' || (value.x + value.width <= 100 && value.y + value.height <= 100),
+    { message: '裁剪区域超出图片范围' }
+  )
+export type CropOptions = z.infer<typeof cropOptionsSchema>
+
 // —— 调整 options（M40，spec §2.4；M55 §4.55 增调色） ——
 
 export const EFFECT_KINDS = ['grayscale', 'invert', 'binary'] as const
@@ -220,6 +280,18 @@ export const processPayloadSchema = z.discriminatedUnion('mode', [
     files: filesSchema,
     outputDir: z.string().min(1),
     options: effectOptionsSchema
+  }),
+  z.object({
+    mode: z.literal('rotate'),
+    files: filesSchema,
+    outputDir: z.string().min(1),
+    options: rotateOptionsSchema
+  }),
+  z.object({
+    mode: z.literal('crop'),
+    files: filesSchema,
+    outputDir: z.string().min(1),
+    options: cropOptionsSchema
   })
 ])
 
@@ -276,7 +348,15 @@ export type ProcessResult = z.infer<typeof processResultSchema>
 export const HISTORY_LIMIT = 20
 
 /** 处理模式（历史记录用；与 Tab 一一对应） */
-export const historyModeSchema = z.enum(['compress', 'convert', 'resize', 'effect', 'gif'])
+export const historyModeSchema = z.enum([
+  'compress',
+  'convert',
+  'resize',
+  'rotate',
+  'crop',
+  'effect',
+  'gif'
+])
 export type HistoryMode = z.infer<typeof historyModeSchema>
 
 /** 处理历史条目（M63：时间戳 + 模式 + 成功/失败 + 输出目录 + 首个产物） */

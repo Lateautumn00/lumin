@@ -724,13 +724,154 @@ describe('process effect（M40 调整）', () => {
   })
 })
 
-describe('make-gif（M40）', () => {
+describe('process rotate/crop（M70 §4.48 合并）', () => {
+  it('旋转 90° + 水平翻转：-vf 顺序、命名模板、体积统计', async () => {
+    const harness = createHarness({ outputBytes: 300 })
+    const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
+    roots.push(outDir)
+    const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(inDir)
+    const img = makeInput(inDir, 'photo.jpg', 1000)
+    const { result, error } = await runTask(harness, {
+      mode: 'rotate',
+      files: [img],
+      outputDir: outDir,
+      options: { rotation: '90', flip: 'horizontal' }
+    })
+    expect(error).toBeUndefined()
+    const r = result as {
+      outputs: { output: string; beforeBytes: number; afterBytes: number }[]
+      failures: unknown[]
+    }
+    expect(r.failures).toHaveLength(0)
+    expect(firstOf(r.outputs)).toMatchObject({ beforeBytes: 1000, afterBytes: 300 })
+    expect(firstOf(r.outputs).output).toBe(join(outDir, 'photo_旋转90_水平翻转.jpg'))
+    const call = findEncodeCall(harness)
+    expect(call?.args).toContain('-vf')
+    expect(call?.args?.[call.args.indexOf('-vf') + 1]).toBe('hflip,transpose=1')
+    // 静态图片不追加取首帧参数
+    expect(call?.args).not.toContain('-frames:v')
+  })
+
+  it('旋转 gif 输入 → webp 输出并取首帧（-frames:v 1）', async () => {
+    const harness = createHarness()
+    const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
+    roots.push(outDir)
+    const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(inDir)
+    const gif = makeInput(inDir, 'anim.gif')
+    const { result } = await runTask(harness, {
+      mode: 'rotate',
+      files: [gif],
+      outputDir: outDir,
+      options: { rotation: '180', flip: 'none' }
+    })
+    const r = result as { outputs: { output: string }[] }
+    expect(firstOf(r.outputs).output).toBe(join(outDir, 'anim_旋转180.webp'))
+    const call = findEncodeCall(harness)
+    expect(call?.args).toContain('-frames:v')
+    expect(call?.args?.[call.args.indexOf('-vf') + 1]).toBe('transpose=1,transpose=1')
+  })
+
+  it('裁剪比例：裁剪滤镜 + 命名 {主名}_裁剪{W}x{H}', async () => {
+    const harness = createHarness()
+    const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
+    roots.push(outDir)
+    const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(inDir)
+    const img = makeInput(inDir, 'photo.jpg')
+    const { result, error } = await runTask(harness, {
+      mode: 'crop',
+      files: [img],
+      outputDir: outDir,
+      options: {
+        mode: 'ratio',
+        ratioW: 16,
+        ratioH: 9,
+        anchor: 'center',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100
+      }
+    })
+    expect(error).toBeUndefined()
+    const r = result as { outputs: { output: string }[]; failures: unknown[] }
+    expect(r.failures).toHaveLength(0)
+    expect(firstOf(r.outputs).output).toBe(join(outDir, 'photo_裁剪16x9.jpg'))
+    const call = findEncodeCall(harness)
+    expect(call?.args?.[call.args.indexOf('-vf') + 1]).toBe(
+      'crop=w=min(iw\\,ih*16/9):h=min(ih\\,iw*9/16):x=(iw-ow)*0.5:y=(ih-oh)*0.5'
+    )
+  })
+
+  it('裁剪自由区域：命名 _裁剪自由 + 百分比滤镜', async () => {
+    const harness = createHarness()
+    const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
+    roots.push(outDir)
+    const inDir = mkdtempSync(join(tmpdir(), 'lumin-it-in-'))
+    roots.push(inDir)
+    const img = makeInput(inDir, 'photo.png')
+    const { result } = await runTask(harness, {
+      mode: 'crop',
+      files: [img],
+      outputDir: outDir,
+      options: {
+        mode: 'free',
+        ratioW: 1,
+        ratioH: 1,
+        anchor: 'center',
+        x: 10,
+        y: 20,
+        width: 30,
+        height: 40
+      }
+    })
+    const r = result as { outputs: { output: string }[] }
+    expect(firstOf(r.outputs).output).toBe(join(outDir, 'photo_裁剪自由.png'))
+    const call = findEncodeCall(harness)
+    expect(call?.args?.[call.args.indexOf('-vf') + 1]).toBe(
+      'crop=w=iw*30/100:h=ih*40/100:x=iw*10/100:y=ih*20/100'
+    )
+  })
+
+  it('旋转未选任何操作 / 自由裁剪越界 → INVALID_PAYLOAD（批次级）', async () => {
+    const harness = createHarness()
+    const outDir = mkdtempSync(join(tmpdir(), 'lumin-it-out-'))
+    roots.push(outDir)
+    const rotateBad = await runTask(harness, {
+      mode: 'rotate',
+      files: ['C:\\a.jpg'],
+      outputDir: outDir,
+      options: { rotation: 'none', flip: 'none' }
+    })
+    expect(rotateBad.error).toMatchObject({ code: 'INVALID_PAYLOAD' })
+    const cropBad = await runTask(harness, {
+      mode: 'crop',
+      files: ['C:\\a.jpg'],
+      outputDir: outDir,
+      options: {
+        mode: 'free',
+        ratioW: 1,
+        ratioH: 1,
+        anchor: 'center',
+        x: 90,
+        y: 0,
+        width: 20,
+        height: 20
+      }
+    })
+    expect(cropBad.error).toMatchObject({ code: 'INVALID_PAYLOAD' })
+  })
+})
+
   const gifPayload = (files: string[], outputDir: string) => ({
     files,
     outputDir,
     options: { durationMs: 500, loop: 0, width: 0 }
   })
 
+describe('make-gif（M40）', () => {
   it('三帧 → 画布规划/帧率/循环/filter_complex + 结果体积', async () => {
     const harness = createHarness({
       outputBytes: 2048,

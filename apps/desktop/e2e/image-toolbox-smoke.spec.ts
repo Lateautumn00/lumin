@@ -69,6 +69,12 @@ function makeImage(args: string[]): Promise<void> {
   })
 }
 
+/** PNG IHDR 宽高（偏移 16/20 大端；旋转/裁剪断言尺寸用） */
+function pngSize(file: string): { width: number; height: number } {
+  const buf = fs.readFileSync(file)
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) }
+}
+
 /** 读取图片指定像素 RGB（ffmpeg rawvideo，免额外解码依赖） */
 function readRgb(file: string, x = 0, y = 0): Promise<number[]> {
   return new Promise((resolve, reject) => {
@@ -600,6 +606,8 @@ test('页签标签可见（naive-ui 自闭合 pane 渲染回归）', async () =>
       ['compress', '压缩'],
       ['convert', '转换'],
       ['resize', '缩放'],
+      ['rotate', '旋转'],
+      ['crop', '裁剪'],
       ['effect', '调整'],
       ['gif', 'GIF']
     ] as const) {
@@ -611,4 +619,204 @@ test('页签标签可见（naive-ui 自闭合 pane 渲染回归）', async () =>
   } finally {
     await app.close()
   }
+})
+
+test.describe('image-toolbox 旋转/裁剪（M70 §4.48 合并 image-rotate/image-crop）', () => {
+  test.beforeAll(async () => {
+    test.skip(!fs.existsSync(ffmpeg), '缺少 ffmpeg（先跑 node scripts/fetch-binaries.mjs）')
+  })
+
+  test('R2.1 中文+空格路径旋转 90°：320x240 → 240x320', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const inDir = path.join(os.tmpdir(), 'lumin-it-e2e-rot')
+    const outDir = path.join(inDir, 'out')
+    fs.rmSync(inDir, { recursive: true, force: true })
+    fs.mkdirSync(inDir, { recursive: true })
+    try {
+      const input = path.join(inDir, '旋转 样例.png')
+      await makeImage(['-f', 'lavfi', '-i', 'color=c=red:s=320x240', '-frames:v', '1', input])
+      const result = (await runTask(page, 'image-toolbox:process', {
+        mode: 'rotate',
+        files: [input],
+        outputDir: outDir,
+        options: { rotation: '90', flip: 'none' }
+      })) as { outputs: { output: string }[]; failures: unknown[] }
+      expect(result.failures).toHaveLength(0)
+      const output = firstOf(result.outputs).output
+      expect(output).toBe(path.join(outDir, '旋转 样例_旋转90.png'))
+      expect(pngSize(output)).toEqual({ width: 240, height: 320 })
+    } finally {
+      fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('水平翻转保持尺寸 + 重复执行冲突命名 (1)', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const inDir = path.join(os.tmpdir(), 'lumin-it-e2e-rot-flip')
+    const outDir = path.join(inDir, 'out')
+    fs.rmSync(inDir, { recursive: true, force: true })
+    fs.mkdirSync(inDir, { recursive: true })
+    try {
+      const input = path.join(inDir, '横向 样例.png')
+      await makeImage(['-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=1:duration=1', input])
+      const payload = {
+        mode: 'rotate',
+        files: [input],
+        outputDir: outDir,
+        options: { rotation: 'none', flip: 'horizontal' }
+      }
+      const first = (await runTask(page, 'image-toolbox:process', payload)) as {
+        outputs: { output: string }[]
+      }
+      const firstOutput = firstOf(first.outputs).output
+      expect(firstOutput).toBe(path.join(outDir, '横向 样例_水平翻转.png'))
+      expect(pngSize(firstOutput)).toEqual({ width: 320, height: 240 })
+
+      const second = (await runTask(page, 'image-toolbox:process', payload)) as {
+        outputs: { output: string }[]
+      }
+      expect(firstOf(second.outputs).output).toBe(
+        path.join(outDir, '横向 样例_水平翻转 (1).png')
+      )
+    } finally {
+      fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('比例裁剪 1:1 居中 → 300x300；16:9 左下 → 400x225', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const inDir = path.join(os.tmpdir(), 'lumin-it-e2e-crop-ratio')
+    const outDir = path.join(inDir, 'out')
+    fs.rmSync(inDir, { recursive: true, force: true })
+    fs.mkdirSync(inDir, { recursive: true })
+    try {
+      const square = path.join(inDir, '正方形 样例.png')
+      await makeImage(['-f', 'lavfi', '-i', 'color=c=red:s=400x300', '-frames:v', '1', square])
+      const squareResult = (await runTask(page, 'image-toolbox:process', {
+        mode: 'crop',
+        files: [square],
+        outputDir: outDir,
+        options: {
+          mode: 'ratio',
+          ratioW: 1,
+          ratioH: 1,
+          anchor: 'center',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100
+        }
+      })) as { outputs: { output: string }[] }
+      const squareOut = firstOf(squareResult.outputs).output
+      expect(squareOut).toBe(path.join(outDir, '正方形 样例_裁剪1x1.png'))
+      expect(pngSize(squareOut)).toEqual({ width: 300, height: 300 })
+
+      const wide = path.join(inDir, '宽幅 样例.png')
+      await makeImage(['-f', 'lavfi', '-i', 'color=c=blue:s=400x300', '-frames:v', '1', wide])
+      const wideResult = (await runTask(page, 'image-toolbox:process', {
+        mode: 'crop',
+        files: [wide],
+        outputDir: outDir,
+        options: {
+          mode: 'ratio',
+          ratioW: 16,
+          ratioH: 9,
+          anchor: 'bottom-left',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100
+        }
+      })) as { outputs: { output: string }[] }
+      const wideOut = firstOf(wideResult.outputs).output
+      expect(wideOut).toBe(path.join(outDir, '宽幅 样例_裁剪16x9.png'))
+      expect(pngSize(wideOut)).toEqual({ width: 400, height: 225 })
+    } finally {
+      fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('自由区域 25/25/50/50：400x300 → 200x150', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const inDir = path.join(os.tmpdir(), 'lumin-it-e2e-crop-free')
+    const outDir = path.join(inDir, 'out')
+    fs.rmSync(inDir, { recursive: true, force: true })
+    fs.mkdirSync(inDir, { recursive: true })
+    try {
+      const input = path.join(inDir, '自由 样例.png')
+      await makeImage(['-f', 'lavfi', '-i', 'color=c=green:s=400x300', '-frames:v', '1', input])
+      const result = (await runTask(page, 'image-toolbox:process', {
+        mode: 'crop',
+        files: [input],
+        outputDir: outDir,
+        options: {
+          mode: 'free',
+          ratioW: 1,
+          ratioH: 1,
+          anchor: 'center',
+          x: 25,
+          y: 25,
+          width: 50,
+          height: 50
+        }
+      })) as { outputs: { output: string }[] }
+      const output = firstOf(result.outputs).output
+      expect(output).toBe(path.join(outDir, '自由 样例_裁剪自由.png'))
+      expect(pngSize(output)).toEqual({ width: 200, height: 150 })
+    } finally {
+      fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('R2.3 损坏 + 不支持扩展名混合批次：好图照常产出，失败码 IT_*', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const inDir = path.join(os.tmpdir(), 'lumin-it-e2e-crop-mixed')
+    const outDir = path.join(inDir, 'out')
+    fs.rmSync(inDir, { recursive: true, force: true })
+    fs.mkdirSync(inDir, { recursive: true })
+    try {
+      const good = path.join(inDir, '好图.png')
+      const corrupt = path.join(inDir, '损坏 图.jpg')
+      const unsupported = path.join(inDir, '说明.txt')
+      await makeImage(['-f', 'lavfi', '-i', 'color=c=yellow:s=400x300', '-frames:v', '1', good])
+      fs.writeFileSync(corrupt, Buffer.from('not an image at all'))
+      fs.writeFileSync(unsupported, Buffer.from('text'))
+
+      const result = (await runTask(page, 'image-toolbox:process', {
+        mode: 'crop',
+        files: [good, corrupt, unsupported],
+        outputDir: outDir,
+        options: {
+          mode: 'ratio',
+          ratioW: 1,
+          ratioH: 1,
+          anchor: 'top-left',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100
+        }
+      })) as { outputs: { output: string }[]; failures: { code: string }[] }
+      expect(result.outputs).toHaveLength(1)
+      const output = firstOf(result.outputs).output
+      expect(output).toBe(path.join(outDir, '好图_裁剪1x1.png'))
+      expect(pngSize(output)).toEqual({ width: 300, height: 300 })
+      expect(result.failures.map((f) => f.code).sort()).toEqual([
+        'IT_FILE_CORRUPT',
+        'IT_FILE_UNSUPPORTED'
+      ])
+    } finally {
+      fs.rmSync(inDir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
 })

@@ -116,3 +116,29 @@
 
 - 新增 `folder.ts` / `history.ts` 与 UI（按钮 + 折叠面板），无新增依赖；`pnpm build` 实测 `out/renderer/assets/image-toolbox-JKju8iGS.js` **70,248 B raw / 15,381 B gzip**（M40 基线 55,320 / 12,541，增量约 2.8KB gzip；远低于 200KB，R5 达标）。
 - 零新增运行时资产。
+
+## 10. M70 增量（2026-11-25）：合并 image-rotate / image-crop
+
+### 10.1 功能与验收
+
+- 新增「旋转」「裁剪」两个 Tab（`TabId` 增 rotate/crop），原 M33 `image-rotate`、M35 `image-crop` 两包整包并入并删除；侧边栏入口由 3 个减为 1 个（图片工具箱）。
+- 旋转：角度 none/90/180/270 + 翻转 none/horizontal/vertical，至少选一项，先翻转后旋转；命名 `{主名}_旋转{角度}[_水平翻转|_垂直翻转].{ext}`。
+- 裁剪：比例（1:1/4:3/3:4/16:9/9:16/自定义）+ 九宫格锚点；自由百分比区域（左+宽、上+高 ≤ 100）；命名 `{主名}_裁剪{W}x{H}` / `{主名}_裁剪自由`。
+- 产物扩展名沿用 `compressOutputExt`（gif/webp→webp、avif→avif），动图输入 `-frames:v 1` 取首帧；错误码统一 `IT_*`。
+- 单测：`rotate.test.ts` / `crop.test.ts` + `node.test.ts` 新增 5 例；e2e 并入 `image-toolbox-smoke.spec.ts`（旋转尺寸、翻转冲突命名、比例/自由裁剪尺寸、损坏+不支持混合批次）。`pnpm test` 3485 例全绿，`pnpm coverage` 全仓 Statements 94.72% / Branches 87.81%。
+
+### 10.2 R2 八类映射（增量）
+
+1. 中文/空格路径：e2e「旋转/裁剪」用 `旋转 样例.png`、`宽幅 样例.png` 实测产物正常（`image-toolbox-smoke.spec.ts`）。
+2. 文件被占用：build 阶段 `statSync` + ffmpeg 打开失败 → `IT_FILE_UNSUPPORTED` / `IT_FILE_CORRUPT`，单张失败不中断批次。
+3. 加密/损坏文件：混合批次 e2e 断言损坏 jpg → `IT_FILE_CORRUPT`。
+4. 超大文件：沿用 `MAX_FILE_BYTES`（200MB）预检 → `IT_FILE_UNSUPPORTED`。
+5. 任务取消：沿用 `AbortSignal` 杀树 → `IT_CANCELLED`，已完成产物保留。
+6. 并发溢出：沿用壳任务队列 `QUEUE_FULL`。
+7. 磁盘满：ffmpeg 写入失败 → `IT_OUTPUT_WRITE_FAILED`。
+8. 断电恢复：产物先写临时名后落盘语义沿用；原图不修改，重跑即覆盖/去重 `(1)`（e2e 已验证冲突命名）。
+
+### 10.3 R5 体积记录（增量）
+
+- 无新增依赖/二进制；`pnpm build` 实测 `out/renderer/assets/image-toolbox-DNH2nNyb.js` **87,400 B raw**（gzip 约 20KB 量级），较 M63 基线增量来自旋转/裁剪参数面板与纯函数，远低于 200KB gzip，R5 达标。
+- 零新增运行时资产。

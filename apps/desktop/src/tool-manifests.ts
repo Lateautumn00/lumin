@@ -6,18 +6,14 @@ import { manifest as colorToolboxManifest } from '@lumin/tool-color-toolbox/mani
 import { manifest as devToolboxManifest } from '@lumin/tool-dev-toolbox/manifest'
 import { manifest as diskAnalyzerManifest } from '@lumin/tool-disk-analyzer/manifest'
 import { manifest as docx2pdfManifest } from '@lumin/tool-docx2pdf/manifest'
-import { manifest as duplicateFinderManifest } from '@lumin/tool-duplicate-finder/manifest'
 import { manifest as exampleManifest } from '@lumin/tool-example/manifest'
 import { manifest as examSplitManifest } from '@lumin/tool-exam-split/manifest'
-import { manifest as fileHasherManifest } from '@lumin/tool-file-hasher/manifest'
 import { manifest as filePreviewManifest } from '@lumin/tool-file-preview/manifest'
 import { manifest as fileRenamerManifest } from '@lumin/tool-file-renamer/manifest'
-import { manifest as folderCompareManifest } from '@lumin/tool-folder-compare/manifest'
+import { manifest as fileScannerManifest } from '@lumin/tool-file-scanner/manifest'
 import { manifest as fsCleanerManifest } from '@lumin/tool-fs-cleaner/manifest'
-import { manifest as imageCropManifest } from '@lumin/tool-image-crop/manifest'
 import { manifest as imageDewatermarkManifest } from '@lumin/tool-image-dewatermark/manifest'
 import { manifest as imageToolboxManifest } from '@lumin/tool-image-toolbox/manifest'
-import { manifest as imageRotateManifest } from '@lumin/tool-image-rotate/manifest'
 import { manifest as imageStitchManifest } from '@lumin/tool-image-stitch/manifest'
 import { manifest as imageWatermarkManifest } from '@lumin/tool-image-watermark/manifest'
 import { manifest as lifeCalculatorManifest } from '@lumin/tool-life-calculator/manifest'
@@ -51,8 +47,6 @@ export const toolManifests: readonly ToolManifest[] = [
   docx2pdfManifest,
   examSplitManifest,
   imageToolboxManifest,
-  imageRotateManifest,
-  imageCropManifest,
   imageStitchManifest,
   imageWatermarkManifest,
   imageDewatermarkManifest,
@@ -67,13 +61,11 @@ export const toolManifests: readonly ToolManifest[] = [
   textDiffManifest,
   videoDownloadManifest,
   videoPlayerManifest,
-  fileHasherManifest,
+  fileScannerManifest,
   mediaConvertManifest,
   qrCodeManifest,
   ocrTextManifest,
-  duplicateFinderManifest,
   diskAnalyzerManifest,
-  folderCompareManifest,
   fsCleanerManifest,
   zipToolManifest,
   colorToolboxManifest,

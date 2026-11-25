@@ -3,7 +3,7 @@
  * @author cuilanchao
  * @date 2026-11-24
  * @description 两段哈希原子操作：前缀 SHA-256 与全量 SHA-256（流式读取，按块回调字节数）。
- *              供 duplicate-finder 与 folder-compare 等工具共用，避免重复实现。
+ *              供 file-scanner 的重复文件 / 目录对比页签共用，避免重复实现。
  */
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'

@@ -269,39 +269,27 @@ importers:
       '@lumin/tool-docx2pdf':
         specifier: workspace:*
         version: link:../../packages/tools/docx2pdf
-      '@lumin/tool-duplicate-finder':
-        specifier: workspace:*
-        version: link:../../packages/tools/duplicate-finder
       '@lumin/tool-exam-split':
         specifier: workspace:*
         version: link:../../packages/tools/exam-split
       '@lumin/tool-example':
         specifier: workspace:*
         version: link:../../packages/tools/example
-      '@lumin/tool-file-hasher':
-        specifier: workspace:*
-        version: link:../../packages/tools/file-hasher
       '@lumin/tool-file-preview':
         specifier: workspace:*
         version: link:../../packages/tools/file-preview
       '@lumin/tool-file-renamer':
         specifier: workspace:*
         version: link:../../packages/tools/file-renamer
-      '@lumin/tool-folder-compare':
+      '@lumin/tool-file-scanner':
         specifier: workspace:*
-        version: link:../../packages/tools/folder-compare
+        version: link:../../packages/tools/file-scanner
       '@lumin/tool-fs-cleaner':
         specifier: workspace:*
         version: link:../../packages/tools/fs-cleaner
-      '@lumin/tool-image-crop':
-        specifier: workspace:*
-        version: link:../../packages/tools/image-crop
       '@lumin/tool-image-dewatermark':
         specifier: workspace:*
         version: link:../../packages/tools/image-dewatermark
-      '@lumin/tool-image-rotate':
-        specifier: workspace:*
-        version: link:../../packages/tools/image-rotate
       '@lumin/tool-image-stitch':
         specifier: workspace:*
         version: link:../../packages/tools/image-stitch
@@ -653,33 +641,6 @@ importers:
         specifier: 6.5.438
         version: 6.5.438
 
-  packages/tools/duplicate-finder:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-
   packages/tools/exam-split:
     dependencies:
       '@lucide/vue':
@@ -741,33 +702,6 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
-  packages/tools/file-hasher:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-
   packages/tools/file-preview:
     dependencies:
       '@lucide/vue':
@@ -819,7 +753,7 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
-  packages/tools/folder-compare:
+  packages/tools/file-scanner:
     dependencies:
       '@lucide/vue':
         specifier: 1.72.0
@@ -847,33 +781,6 @@ importers:
         version: 4.6.7
 
   packages/tools/fs-cleaner:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-
-  packages/tools/image-crop:
     dependencies:
       '@lucide/vue':
         specifier: 1.72.0
@@ -930,33 +837,6 @@ importers:
       '@napi-rs/canvas':
         specifier: 1.1.1
         version: 1.1.1
-
-  packages/tools/image-rotate:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
 
   packages/tools/image-stitch:
     dependencies:

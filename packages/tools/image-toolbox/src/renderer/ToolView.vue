@@ -20,6 +20,7 @@ import { ArrowDownAZ, ChevronDown, ChevronUp, FolderOpen, FolderPlus, History, I
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
 import TaskProgress from '@lumin/ui/TaskProgress.vue'
+import PathLink from '@lumin/ui/PathLink.vue'
 import {
   appendHistory,
   clearHistory,
@@ -34,16 +35,21 @@ import {
 import { planGifCanvas } from '../gif'
 import { MAX_BATCH_FILES, extensionOf } from '../schema'
 import type {
+  CropAnchor,
+  CropMode,
+  CropOptions,
+  Flip,
   HistoryEntry,
   HistoryMode,
   MakeGifResult,
   OutputItem,
   ProbeItem,
+  Rotation,
   TargetFormat
 } from '../schema'
 
-/** Tab 标识（spec §2；M40 增补 effect/gif） */
-type TabId = 'compress' | 'convert' | 'resize' | 'effect' | 'gif'
+/** Tab 标识（spec §2；M40 增补 effect/gif；M70 §4.48 合并 rotate/crop） */
+type TabId = 'compress' | 'convert' | 'resize' | 'rotate' | 'crop' | 'effect' | 'gif'
 
 /** 支持的输出目标格式选项（转换/缩放共用；avif 标注慢，bmp/tiff 无损） */
 const FORMAT_OPTIONS = [
@@ -70,6 +76,46 @@ const LOSSLESS_FORMATS = new Set<string>(['png', 'bmp', 'tiff'])
 /** DropZone accept 串（与 schema 白名单一致） */
 const ACCEPT = '.jpg,.jpeg,.png,.webp,.avif,.gif,.bmp,.tiff'
 
+/** 旋转选项（顺时针；M70 §4.48，spec §2.6） */
+const ROTATION_OPTIONS: { label: string; value: Rotation }[] = [
+  { label: '不旋转', value: 'none' },
+  { label: '顺时针 90°', value: '90' },
+  { label: '180°', value: '180' },
+  { label: '顺时针 270°', value: '270' }
+]
+
+/** 翻转选项（M70 §4.48，spec §2.6） */
+const FLIP_OPTIONS: { label: string; value: Flip }[] = [
+  { label: '不翻转', value: 'none' },
+  { label: '水平翻转', value: 'horizontal' },
+  { label: '垂直翻转', value: 'vertical' }
+]
+
+/** 裁剪比例预设（w:h；custom 走自定义输入；M70 §4.48，spec §2.7） */
+const RATIO_PRESETS = [
+  { key: '1:1', label: '1:1', w: 1, h: 1 },
+  { key: '4:3', label: '4:3', w: 4, h: 3 },
+  { key: '3:4', label: '3:4', w: 3, h: 4 },
+  { key: '16:9', label: '16:9', w: 16, h: 9 },
+  { key: '9:16', label: '9:16', w: 9, h: 16 },
+  { key: 'custom', label: '自定义', w: 1, h: 1 }
+] as const
+
+type RatioKey = (typeof RATIO_PRESETS)[number]['key']
+
+/** 九宫格锚点（比例模式：裁剪窗口在图片中的位置，spec §2.7） */
+const ANCHOR_OPTIONS: { label: string; value: CropAnchor }[] = [
+  { label: '左上', value: 'top-left' },
+  { label: '上', value: 'top' },
+  { label: '右上', value: 'top-right' },
+  { label: '左', value: 'left' },
+  { label: '中', value: 'center' },
+  { label: '右', value: 'right' },
+  { label: '左下', value: 'bottom-left' },
+  { label: '下', value: 'bottom' },
+  { label: '右下', value: 'bottom-right' }
+]
+
 // —— Tab 与参数（spec §2 默认值） ——
 const tab = ref<TabId>('compress')
 const compressQuality = ref(75)
@@ -85,6 +131,19 @@ const resizeFitHeight = ref(1080)
 const noUpscale = ref(true)
 const resizeFormat = ref<TargetFormat>('jpg')
 const resizeQuality = ref(75)
+// 旋转（M70 §4.48，spec §2.6）
+const rotation = ref<Rotation>('none')
+const flip = ref<Flip>('none')
+// 裁剪（M70 §4.48，spec §2.7）
+const cropMode = ref<CropMode>('ratio')
+const ratioKey = ref<RatioKey>('1:1')
+const customW = ref<number | null>(1)
+const customH = ref<number | null>(1)
+const cropAnchor = ref<CropAnchor>('center')
+const freeX = ref<number | null>(0)
+const freeY = ref<number | null>(0)
+const freeW = ref<number | null>(100)
+const freeH = ref<number | null>(100)
 // 调整（M40，spec §2.4）
 const effectKind = ref<'grayscale' | 'invert' | 'binary'>('grayscale')
 const effectThreshold = ref(128)
@@ -147,6 +206,8 @@ const MODE_LABEL: Record<HistoryMode, string> = {
   compress: '压缩',
   convert: '格式转换',
   resize: '缩放',
+  rotate: '旋转',
+  crop: '裁剪',
   effect: '效果',
   gif: 'GIF 合成'
 }
@@ -187,6 +248,39 @@ const effectIsLossless = computed(
     rows.value.length > 0 &&
     rows.value.every((row) => LOSSLESS_FORMATS.has(extensionOf(row.file) ?? ''))
 )
+
+/** 旋转/翻转至少选一项（M70 §4.48，spec §2.6 禁用规则） */
+const hasRotateOperation = computed(
+  () => rotation.value !== 'none' || flip.value !== 'none'
+)
+
+/** 裁剪比例参数（自定义时取输入值，空值回退 1） */
+const ratioBox = computed(() => {
+  const preset = RATIO_PRESETS.find((item) => item.key === ratioKey.value)
+  if (preset !== undefined && preset.key !== 'custom') return { w: preset.w, h: preset.h }
+  return { w: Math.max(1, customW.value ?? 1), h: Math.max(1, customH.value ?? 1) }
+})
+
+/** 自由裁剪区域（百分比；空值回退默认） */
+const freeBox = computed(() => ({
+  x: freeX.value ?? 0,
+  y: freeY.value ?? 0,
+  width: Math.max(1, freeW.value ?? 100),
+  height: Math.max(1, freeH.value ?? 100)
+}))
+
+/** 自由区域必须落在图片内（spec §2.7 禁用规则） */
+const freeValid = computed(
+  () => freeBox.value.x + freeBox.value.width <= 100 && freeBox.value.y + freeBox.value.height <= 100
+)
+
+/** 开始按钮禁用：旋转需选操作、自由裁剪需区域合法（M70 §4.48） */
+const startDisabled = computed(() => {
+  if (phase.value !== 'idle' || rows.value.length === 0) return true
+  if (tab.value === 'rotate') return !hasRotateOperation.value
+  if (tab.value === 'crop') return cropMode.value === 'free' && !freeValid.value
+  return false
+})
 
 /** GIF 自动高度（全部帧按目标宽等比缩放后的最大高；尺寸未就绪时 null） */
 const gifCanvas = computed(() => {
@@ -418,6 +512,22 @@ function buildPayload() {
       options: { format: convertFormat.value, quality: convertQuality.value }
     }
   }
+  if (tab.value === 'rotate') {
+    return {
+      mode: 'rotate' as const,
+      files,
+      outputDir: dir,
+      options: { rotation: rotation.value, flip: flip.value }
+    }
+  }
+  if (tab.value === 'crop') {
+    return {
+      mode: 'crop' as const,
+      files,
+      outputDir: dir,
+      options: buildCropOptions()
+    }
+  }
   if (tab.value === 'effect') {
     return {
       mode: 'effect' as const,
@@ -440,6 +550,32 @@ function buildPayload() {
     files,
     outputDir: dir,
     options: buildResizeOptions()
+  }
+}
+
+/** 裁剪参数（未使用字段填默认值，schema 允许；M70 §4.48，spec §2.7） */
+function buildCropOptions(): CropOptions {
+  if (cropMode.value === 'ratio') {
+    return {
+      mode: 'ratio',
+      ratioW: ratioBox.value.w,
+      ratioH: ratioBox.value.h,
+      anchor: cropAnchor.value,
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100
+    }
+  }
+  return {
+    mode: 'free',
+    ratioW: 1,
+    ratioH: 1,
+    anchor: 'center',
+    x: freeBox.value.x,
+    y: freeBox.value.y,
+    width: freeBox.value.width,
+    height: freeBox.value.height
   }
 }
 
@@ -574,6 +710,12 @@ onUnmounted(detach)
       </NTabPane>
       <NTabPane name="resize">
         <template #tab>缩放</template>
+      </NTabPane>
+      <NTabPane name="rotate">
+        <template #tab>旋转</template>
+      </NTabPane>
+      <NTabPane name="crop">
+        <template #tab>裁剪</template>
       </NTabPane>
       <NTabPane name="effect">
         <template #tab>调整</template>
@@ -837,6 +979,148 @@ onUnmounted(detach)
           <span class="w-10 text-right text-sm">{{ resizeQuality }}</span>
         </div>
       </template>
+      <template v-else-if="tab === 'rotate'">
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">旋转</NText>
+          <select
+            v-model="rotation"
+            :disabled="phase === 'running'"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+          >
+            <option v-for="opt in ROTATION_OPTIONS" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+        </div>
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">翻转</NText>
+          <select
+            v-model="flip"
+            :disabled="phase === 'running'"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+          >
+            <option v-for="opt in FLIP_OPTIONS" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+        </div>
+        <NText depth="3" class="text-xs">先翻转后旋转；旋转与翻转至少选一项</NText>
+      </template>
+      <template v-else-if="tab === 'crop'">
+        <div class="flex items-center gap-3">
+          <NText depth="2" class="w-20 text-sm">裁剪方式</NText>
+          <select
+            v-model="cropMode"
+            :disabled="phase === 'running'"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+          >
+            <option value="ratio">比例裁剪</option>
+            <option value="free">自由裁剪</option>
+          </select>
+        </div>
+        <template v-if="cropMode === 'ratio'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">比例</NText>
+            <select
+              v-model="ratioKey"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option v-for="opt in RATIO_PRESETS" :key="opt.key" :value="opt.key">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+          <div v-if="ratioKey === 'custom'" class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">自定义比</NText>
+            <NInputNumber
+              v-model:value="customW"
+              :min="1"
+              :max="100"
+              :precision="0"
+              :disabled="phase === 'running'"
+              class="w-24"
+            />
+            <NText depth="3" class="text-sm">:</NText>
+            <NInputNumber
+              v-model:value="customH"
+              :min="1"
+              :max="100"
+              :precision="0"
+              :disabled="phase === 'running'"
+              class="w-24"
+            />
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">裁剪位置</NText>
+            <select
+              v-model="cropAnchor"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option v-for="opt in ANCHOR_OPTIONS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+          <NText depth="3" class="text-xs">按所选比例取原图内最大矩形，位置由九宫格决定</NText>
+        </template>
+        <template v-else>
+          <div class="flex flex-wrap items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">裁剪区域</NText>
+            <NInputNumber
+              v-model:value="freeX"
+              :min="0"
+              :max="99"
+              :precision="0"
+              :disabled="phase === 'running'"
+              class="w-24"
+            >
+              <template #prefix>左</template>
+              <template #suffix>%</template>
+            </NInputNumber>
+            <NInputNumber
+              v-model:value="freeY"
+              :min="0"
+              :max="99"
+              :precision="0"
+              :disabled="phase === 'running'"
+              class="w-24"
+            >
+              <template #prefix>上</template>
+              <template #suffix>%</template>
+            </NInputNumber>
+            <NInputNumber
+              v-model:value="freeW"
+              :min="1"
+              :max="100"
+              :precision="0"
+              :disabled="phase === 'running'"
+              class="w-24"
+            >
+              <template #prefix>宽</template>
+              <template #suffix>%</template>
+            </NInputNumber>
+            <NInputNumber
+              v-model:value="freeH"
+              :min="1"
+              :max="100"
+              :precision="0"
+              :disabled="phase === 'running'"
+              class="w-24"
+            >
+              <template #prefix>高</template>
+              <template #suffix>%</template>
+            </NInputNumber>
+          </div>
+          <NText v-if="!freeValid" type="warning" class="text-xs">
+            裁剪区域超出图片范围
+          </NText>
+          <NText v-else depth="3" class="text-xs">
+            按图片尺寸的百分比取区域（左+宽、上+高 ≤ 100）
+          </NText>
+        </template>
+      </template>
       <template v-else-if="tab === 'effect'">
         <div class="flex items-center gap-3">
           <NText depth="2" class="w-20 text-sm">效果</NText>
@@ -950,7 +1234,7 @@ onUnmounted(detach)
           <span class="w-10 text-right text-sm">{{ effectQuality }}</span>
         </div>
       </template>
-      <template v-else>
+      <template v-else-if="tab === 'gif'">
         <div class="flex items-center gap-3">
           <NText depth="2" class="w-20 text-sm">帧时长</NText>
           <NInputNumber
@@ -1031,7 +1315,7 @@ onUnmounted(detach)
       <NButton
         v-else
         type="primary"
-        :disabled="phase !== 'idle' || rows.length === 0"
+        :disabled="startDisabled"
         @click="runProcess"
       >
         开始处理
@@ -1071,7 +1355,13 @@ onUnmounted(detach)
         class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
       >
         <div class="min-w-0 flex-1">
-          <div class="truncate text-sm">{{ item.output.replace(/^.*[\\/]/, '') }}</div>
+          <div class="truncate text-sm">
+            <PathLink
+              :path="item.output"
+              :label="item.output.replace(/^.*[\\/]/, '')"
+              :reveal="false"
+            />
+          </div>
           <div class="text-xs text-[var(--lumin-color-text-secondary)]">
             {{ formatBytes(item.beforeBytes) }} → {{ formatBytes(item.afterBytes) }}
             <span v-if="ratioText(item) !== ''">{{ ratioText(item) }}</span>
@@ -1108,7 +1398,7 @@ onUnmounted(detach)
           <FolderOpen class="mr-1 h-3.5 w-3.5" />打开所在文件夹
         </NButton>
       </div>
-      <NText depth="3" class="break-all text-xs">{{ gifResult.outputPath }}</NText>
+      <PathLink :path="gifResult.outputPath" :reveal="false" />
     </div>
 
     <!-- 处理历史（M63，P1-6）：最近 20 条，可定位首个产物 / 清空 -->
@@ -1136,8 +1426,8 @@ onUnmounted(detach)
               {{ formatHistoryTime(entry.at) }} · {{ MODE_LABEL[entry.mode] }} · 成功
               {{ entry.success }}<template v-if="entry.failed > 0"> · 失败 {{ entry.failed }}</template>
             </div>
-            <div class="truncate text-xs text-[var(--lumin-color-text-secondary)]">
-              {{ entry.outputDir }}
+            <div class="truncate text-xs">
+              <PathLink :path="entry.outputDir" :reveal="false" />
             </div>
           </div>
           <NButton

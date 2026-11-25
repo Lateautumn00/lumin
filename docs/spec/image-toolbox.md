@@ -256,3 +256,35 @@ export const collectFolderResultSchema = z.object({
 5. 单测：`folder.test.ts` / `history.test.ts` / schema / node / client；本包 ≥80%。
 6. e2e：文件夹收集 + 空目录错误 + 历史 20 条 + UI 面板/按钮/清空。
 7. chunk <200KB gzip；零新增依赖；`pnpm gate` 全绿。
+
+## M70 追加节（2026-11-25 R8 登记：plan Q71 / §4.48）
+
+> 状态：已实施（2026-11-25）。原独立工具 `image-rotate`（M33）与 `image-crop`（M35）**整包合并**为本工具「旋转」「裁剪」两个 Tab，删除两个工具包与侧边栏入口（用户可感知的入口精简），**零新增依赖/二进制**，引擎仍为 `binaries/download/ffmpeg.exe`。
+> 模式标识：`processPayloadSchema` 增加 `mode: 'rotate' | 'crop'`；`historyModeSchema` 同步增加 `rotate` / `crop`。
+
+### 旋转 Tab（原 `image-rotate`）
+
+- 参数：旋转角度（不旋转 / 顺时针 90° / 180° / 顺时针 270°）+ 翻转（不翻转 / 水平翻转 / 垂直翻转），**两者至少选一项**（schema refine 兜底）；顺序固定「先翻转后旋转」。
+- 滤镜：`hflip` / `vflip`；90° `transpose=1`、180° `transpose=1,transpose=1`、270° `transpose=2`。
+- 命名：`{主名}_旋转{角度}[_水平翻转|_垂直翻转].{ext}`；仅翻转时无旋转段。
+- 产物扩展名：沿用压缩「保持原格式」映射 `compressOutputExt`（`jpeg→jpg`；`gif/webp→webp`；`avif→avif`；其余保持）；动图输入（gif/webp）追加 `-frames:v 1` 取首帧静态化。
+- 纯函数：`src/rotate.ts`（`buildFilterChain` / `buildFilterArgs` / `buildRotateOutputName` / `buildRotateEncodeArgs`）。
+
+### 裁剪 Tab（原 `image-crop`）
+
+- 参数：比例裁剪（1:1 / 4:3 / 3:4 / 16:9 / 9:16 / 自定义，1–100）+ 九宫格锚点（决定裁剪窗口位置）；自由裁剪（左/上/宽/高百分比，`左+宽 ≤ 100` 且 `上+高 ≤ 100`）。
+- 滤镜：比例取原图内最大同比例矩形（`min(iw\,ih*W/H)`，逗号转义），`x/y` 按锚点 `(iw-ow)*ax`；自由按百分比取区域。
+- 命名：比例 `{主名}_裁剪{W}x{H}.{ext}`；自由 `{主名}_裁剪自由.{ext}`；产物扩展名同 `compressOutputExt`（gif/webp 输入 → webp，取首帧）。
+- 纯函数：`src/crop.ts`（`ANCHOR_FACTORS` / `anchorFactors` / `buildCropFilter` / `buildCropFilterArgs` / `cropTag` / `buildCropOutputName` / `buildCropEncodeArgs`）。
+
+### 错误码
+
+沿用本工具 `IT_` 前缀（原 `IR_*` / `IC_*` 全部归并）：扩展名不支持 `IT_FILE_UNSUPPORTED`、损坏 `IT_FILE_CORRUPT`、磁盘/写入 `IT_OUTPUT_WRITE_FAILED`、引擎缺失 `IT_ENGINE_MISSING`、取消 `IT_CANCELLED`、入参非法 `INVALID_PAYLOAD`。
+
+### 验收
+
+1. 旋转：`rotate.test.ts` 覆盖滤镜链顺序、`-vf`、命名、至少选一项；`node.test.ts` 覆盖 90°+翻转、gif→webp 取首帧、命名与体积。
+2. 裁剪：`crop.test.ts` 覆盖锚点、比例/自由滤镜、标签、越界拒绝；`node.test.ts` 覆盖比例/自由命名与滤镜串。
+3. e2e：并入 `image-toolbox-smoke.spec.ts`（旋转尺寸变化、翻转冲突命名、比例/自由裁剪尺寸、损坏+不支持混合批次）；页签标签清单含「旋转」「裁剪」。
+4. 注册点清理：`tool-manifests.ts` / `tool-mains.ts` / `electron.vite.config.ts` / `apps/desktop/package.json` / `vitest.config.ts` 移除两包；删除薄壳页与两个 e2e 文件。
+5. chunk 增量 <200KB gzip；`pnpm gate` 全绿。
