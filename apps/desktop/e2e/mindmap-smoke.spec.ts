@@ -286,6 +286,57 @@ test.describe('mindmap（思维导图）冒烟', () => {
     }
   })
 
+  test('UI：大纲视图、从文本生成、搜索定位与节点操作条', async () => {
+    test.setTimeout(120_000)
+    const { app, page } = await launch()
+    const workDir = freshDir('lumin-mm-e2e-outline')
+    try {
+      await clearDrafts(app)
+      await clickSidebarTool(page, '思维导图')
+      await page.getByTestId('mindmap-topic-input').locator('input').fill('产品规划')
+      await page.getByTestId('mindmap-create').click()
+      await expect(page.locator('.me-tpc').first()).toBeVisible()
+
+      // 从文本生成（Markdown 大纲追加到根主题）
+      await page.getByTestId('mindmap-from-text').click()
+      await expect(page.getByTestId('mindmap-text-modal')).toBeVisible()
+      await page
+        .getByTestId('mindmap-text-input')
+        .locator('textarea')
+        .fill('# 竞品分析\n- Xmind\n- 幕布')
+      await page.getByTestId('mindmap-text-confirm').click()
+      await expect(page.locator('.me-tpc').filter({ hasText: '幕布' }).first()).toBeVisible()
+
+      // 选中节点后浮出节点操作条
+      await page.locator('.me-tpc').filter({ hasText: '竞品分析' }).first().click()
+      await expect(page.getByTestId('mindmap-node-bar')).toBeVisible()
+
+      // 搜索定位命中并跳转（跳转后结果面板收起）
+      await page.getByTestId('mindmap-search').locator('input').fill('幕布')
+      await expect(page.getByTestId('mindmap-search-hit').first()).toBeVisible()
+      await page.getByTestId('mindmap-search-hit').first().click()
+      await expect(page.getByTestId('mindmap-search-hit')).toHaveCount(0)
+
+      // 大纲视图与画布同一文档
+      await page.getByTestId('mindmap-view-outline').click()
+      await expect(page.getByTestId('mindmap-outline')).toBeVisible()
+      await expect(page.getByTestId('mindmap-outline')).toContainText('幕布')
+      await page.getByTestId('mindmap-view-map').click()
+      await expect(page.locator('.me-tpc').filter({ hasText: '幕布' }).first()).toBeVisible()
+
+      // 保存一次清掉脏标记，避免离开页面被 beforeunload 拦截
+      await stubSavePath(app, path.join(workDir, '大纲 导出.json'))
+      await page.getByTestId('mindmap-save').click()
+      await expect(page.getByText('未保存', { exact: true })).toHaveCount(0)
+    } finally {
+      await clickSidebarTool(page, '计算器')
+      await expect(page.getByTestId('mindmap-stage')).toHaveCount(0)
+      fs.rmSync(workDir, { recursive: true, force: true })
+      await clearDrafts(app)
+      await app.close()
+    }
+  })
+
   test('IPC：错误码、mtime 冲突/force 与草稿三通道', async () => {
     const { app, page } = await launch()
     const workDir = freshDir('lumin-mm-e2e-ipc')

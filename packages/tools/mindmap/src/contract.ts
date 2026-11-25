@@ -362,6 +362,55 @@ export function directionLabel(code: MindmapDirection): string {
   return labels[code]
 }
 
+/** 搜索结果命中项 */
+export interface NodeSearchHit {
+  id: string
+  topic: string
+  /** 根 → 命中节点的主题路径（` / ` 分隔） */
+  path: string
+  /** 命中来自备注（主题未命中时为 true） */
+  matchedNote: boolean
+}
+
+/** 搜索结果默认上限 */
+export const MAX_SEARCH_HITS = 50
+
+/**
+ * 按关键词搜索节点（主题与备注，忽略大小写）
+ * @param input 文档来源
+ * @param keyword 关键词（trim 后为空直接返回空数组）
+ * @param limit 命中上限（默认 50）
+ */
+export function searchNodes(input: unknown, keyword: string, limit = MAX_SEARCH_HITS): NodeSearchHit[] {
+  const word = keyword.trim().toLowerCase()
+  if (word === '' || limit <= 0) return []
+  const root = rootOf(input)
+  if (root === null) return []
+  const hits: NodeSearchHit[] = []
+  const walk = (node: Record<string, unknown>, parents: string[]): void => {
+    if (hits.length >= limit) return
+    const topic = typeof node.topic === 'string' ? node.topic : ''
+    const note = typeof node.note === 'string' ? node.note : ''
+    const matchedNote = note.toLowerCase().includes(word)
+    const matchedTopic = topic.toLowerCase().includes(word)
+    if ((matchedTopic || matchedNote) && typeof node.id === 'string') {
+      hits.push({
+        id: node.id,
+        topic: topic === '' ? '未命名' : topic,
+        path: [...parents, topic].filter((part) => part !== '').join(' / '),
+        matchedNote: matchedNote && !matchedTopic
+      })
+    }
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        if (isRecord(child)) walk(child, [...parents, topic])
+      }
+    }
+  }
+  walk(root, [])
+  return hits
+}
+
 /**
  * 生成根节点最小文档（等价 MindElixir.new，但脱离库可测）
  * @param topic 中心主题

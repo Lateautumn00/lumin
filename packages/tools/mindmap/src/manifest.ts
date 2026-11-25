@@ -10,9 +10,9 @@ import { defineManifest } from '@lumin/plugin-api'
 export const manifest = defineManifest({
   id: 'mindmap',
   name: '思维导图',
-  description: '新建与编辑树形思维导图，支持导入导出与本地文件',
+  description: '新建与编辑树形思维导图，支持导图/大纲双视图、文本生成、搜索与导入导出',
   icon: 'network',
   category: 'text',
   order: 58,
-  version: '0.1.0'
+  version: '0.2.0'
 })

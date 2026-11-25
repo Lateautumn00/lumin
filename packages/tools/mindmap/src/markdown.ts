@@ -57,6 +57,19 @@ function makeNode(topic: string, link: string | undefined, newId: () => string):
  * @param newId id 生成器（测试可注入）
  */
 export function importMarkdown(text: string, newId: () => string = defaultNewId): SanitizeResult {
+  const { data, warnings } = importMarkdownWithEntries(text, newId)
+  return { data, warnings }
+}
+
+/**
+ * 解析 Markdown 大纲为文档，并给出可直接追加的顶层节点
+ * @param text Markdown 文本
+ * @param newId id 生成器（测试可注入）
+ */
+function importMarkdownWithEntries(
+  text: string,
+  newId: () => string = defaultNewId
+): OutlineImportResult {
   const lines = text.replace(/\r\n?/g, '\n').split('\n')
   const entries: OutlineEntry[] = []
   const notes: string[][] = []
@@ -109,6 +122,23 @@ export function importMarkdown(text: string, newId: () => string = defaultNewId)
     if (linesOfNote.length > 0) entry.node.note = linesOfNote.join('\n')
   })
 
+  return finalizeEntries(entries, warnings, newId)
+}
+
+/** 纯文本行（缩进 2 空格 / 1 Tab 为一级） */
+const PLAIN_LINE_RE = /^([ \t]*)(\S.*)$/
+
+/** 大纲导入结果（entries 为可直接追加到现有导图的顶层节点） */
+export interface OutlineImportResult extends SanitizeResult {
+  entries: MindmapNode[]
+}
+
+/**
+ * 按 rank 组装树（跳级按父级 +1 修正）
+ * @param entries 已解析条目（顺序即文档顺序）
+ * @param warnings 告警收集
+ */
+function assembleTree(entries: OutlineEntry[], warnings: Set<string>): MindmapNode[] {
   const stack: OutlineEntry[] = []
   const roots: MindmapNode[] = []
   for (const entry of entries) {
@@ -123,15 +153,62 @@ export function importMarkdown(text: string, newId: () => string = defaultNewId)
     else currentParent.node.children?.push(entry.node)
     stack.push(entry)
   }
+  return roots
+}
 
-  const root =
+/**
+ * 组装 → 限额 → 清洗，并给出追加用顶层节点
+ * @param entries 已解析条目
+ * @param warnings 告警收集
+ * @param newId id 生成器
+ */
+function finalizeEntries(
+  entries: OutlineEntry[],
+  warnings: Set<string>,
+  newId: () => string
+): OutlineImportResult {
+  if (entries.length === 0) throw toolError('MM_IMPORT_INVALID')
+  const roots = assembleTree(entries, warnings)
+  const rootNode =
     roots.length === 1
       ? (roots[0] as MindmapNode)
       : makeVirtualRoot(roots, newId, warnings, '检测到多个顶层节点，已归入「导入导图」')
+  assertLimits({ nodeData: rootNode })
+  const sanitized = sanitizeDocument({ nodeData: rootNode, direction: 2 }, newId)
+  const cleanRoot = sanitized.data.nodeData
+  return {
+    data: sanitized.data,
+    warnings: [...warnings, ...sanitized.warnings],
+    entries: roots.length === 1 ? [cleanRoot] : (cleanRoot.children ?? [])
+  }
+}
 
-  assertLimits({ nodeData: root })
-  const sanitized = sanitizeDocument({ nodeData: root, direction: 2 }, newId)
-  return { data: sanitized.data, warnings: [...warnings, ...sanitized.warnings] }
+/**
+ * 通用大纲导入：优先按 Markdown 解析，无标题/列表标记时回退为纯文本缩进大纲
+ * @param text 大纲文本（也用于「从文本生成」与画布内追加）
+ * @param newId id 生成器
+ */
+export function importOutlineText(
+  text: string,
+  newId: () => string = defaultNewId
+): OutlineImportResult {
+  try {
+    return importMarkdownWithEntries(text, newId)
+  } catch (err) {
+    if ((err as { code?: string }).code !== 'MM_IMPORT_INVALID') throw err
+  }
+  const warnings = new Set<string>()
+  const entries: OutlineEntry[] = []
+  for (const line of text.replace(/\r\n?/g, '\n').split('\n')) {
+    const matched = PLAIN_LINE_RE.exec(line)
+    if (matched === null) continue
+    const indent = (matched[1] ?? '').replace(/\t/g, '  ').length
+    entries.push({
+      rank: Math.floor(indent / 2),
+      node: makeNode((matched[2] ?? '').trim(), undefined, newId)
+    })
+  }
+  return finalizeEntries(entries, warnings, newId)
 }
 
 /** 构造虚拟根（多顶层节点/多根 OPML 复用） */

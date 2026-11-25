@@ -17,6 +17,7 @@ import {
   isRecord,
   normalizeDirection,
   sanitizeDocument,
+  searchNodes,
   serializeDocument,
   treeDepth
 } from './contract'
@@ -310,5 +311,39 @@ describe('contract', () => {
     expect(() => serializeDocument('x')).toThrowError(
       expect.objectContaining({ code: 'MM_INVALID_DOCUMENT' })
     )
+  })
+
+  describe('searchNodes', () => {
+    const doc = {
+      nodeData: {
+        id: 'root',
+        topic: '产品规划',
+        children: [
+          { id: 'a', topic: '竞品分析', note: '关注 Xmind 的大纲模式' },
+          { id: 'b', topic: '排期', children: [{ id: 'c', topic: '第一版 竞品' }] }
+        ]
+      }
+    }
+
+    it('命中主题并给出根到节点的路径', () => {
+      expect(searchNodes(doc, '竞品')).toEqual([
+        { id: 'a', topic: '竞品分析', path: '产品规划 / 竞品分析', matchedNote: false },
+        { id: 'c', topic: '第一版 竞品', path: '产品规划 / 排期 / 第一版 竞品', matchedNote: false }
+      ])
+    })
+
+    it('备注命中标记 matchedNote', () => {
+      expect(searchNodes(doc, 'xmind')).toEqual([
+        { id: 'a', topic: '竞品分析', path: '产品规划 / 竞品分析', matchedNote: true }
+      ])
+    })
+
+    it('空关键词/非法输入/超限边界', () => {
+      expect(searchNodes(doc, '   ')).toEqual([])
+      expect(searchNodes(null, '竞品')).toEqual([])
+      expect(searchNodes('x', '竞品')).toEqual([])
+      expect(searchNodes(doc, '竞品', 1)).toHaveLength(1)
+      expect(searchNodes(doc, '竞品', 0)).toEqual([])
+    })
   })
 })

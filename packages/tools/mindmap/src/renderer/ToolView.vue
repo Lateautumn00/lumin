@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * @file 思维导图工具页（单页三态 + 工具栏 + 画布 + 状态栏 + 样式抽屉）
+ * @file 思维导图工具页（单页三态 + 工具栏 + 画布/大纲双视图 + 状态栏 + 样式抽屉）
  * @author cuilanchao
- * @date 2026-11-24
- * @description 空态引导 / 加载态可取消 / 报错态结构化码；编辑交给 mind-elixir 适配层，
- *              本地文件与草稿走 8 条 IPC 通道；明暗主题只经 tokens 桥接。
+ * @date 2026-11-25
+ * @description 空态引导 / 加载态可取消 / 报错态结构化码；导图与大纲同一文档双向同步，
+ *              节点操作条 + 搜索定位 + 从文本生成降低录入成本；本地文件与草稿走 8 条 IPC 通道。
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
@@ -15,29 +15,39 @@ import {
   NDrawerContent,
   NIcon,
   NInput,
-  NInputNumber,
   NModal,
   NSelect,
   NSpin,
   NSwitch
 } from 'naive-ui'
 import {
+  ArrowDown,
+  ArrowUp,
   ChevronsDownUp,
   ChevronsUpDown,
+  CornerUpLeft,
   Download,
   FileDown,
   FilePlus,
+  FileText,
   FolderOpen,
   ImageDown,
+  Keyboard,
+  ListPlus,
+  ListTree,
   Maximize,
+  MessageSquare,
   Moon,
   Network,
   Palette,
+  Plus,
   Redo2,
   RotateCcw,
   Save,
   SaveAll,
+  Search,
   Sun,
+  Trash,
   Undo2,
   ZoomIn,
   ZoomOut
@@ -53,12 +63,14 @@ import {
   directionLabel,
   normalizeDirection,
   sanitizeDocument,
+  searchNodes,
   serializeDocument,
   type MindmapDirection,
-  type MindmapDocument
+  type MindmapDocument,
+  type NodeSearchHit
 } from '../contract'
 import { errorMessage, isRetryable, toolError } from '../errors'
-import { exportMarkdown, importMarkdown } from '../markdown'
+import { exportMarkdown, importMarkdown, importOutlineText } from '../markdown'
 import { exportOpml, importOpml } from '../opml'
 import {
   buildTheme,
@@ -91,16 +103,20 @@ import {
 import {
   createMindElixir,
   type MindElixirHandle,
-  type NodeStyleSnapshot
+  type NodeStyleSnapshot,
+  type OutlinerHandle
 } from './mind-elixir-adapter'
 
 type Phase = 'empty' | 'ready'
 type ErrorAction = 'open' | 'import' | 'save' | 'export' | 'draft' | null
-type PendingAction = 'new' | 'open' | 'import-markdown' | 'import-opml'
+type PendingAction = 'new' | 'open' | 'import-markdown' | 'import-opml' | 'text-replace'
 type ImportKind = 'markdown' | 'opml'
 type ExportKind = 'json' | 'markdown' | 'opml'
 type ImageFormat = 'png' | 'svg'
 type ImageBackground = 'theme' | 'white' | 'transparent'
+type ViewMode = 'map' | 'outline'
+type NodeAction = 'child' | 'sibling' | 'parent' | 'up' | 'down' | 'remove'
+type BorderWidth = '0' | '1' | '2'
 
 const phase = ref<Phase>('empty')
 const booting = ref(false)
@@ -140,13 +156,30 @@ const drawerVisible = ref(false)
 const selectedNode = ref<NodeStyleSnapshot | null>(null)
 const styleBackground = ref('')
 const styleColor = ref('')
-const styleBorder = ref('')
+const styleBorderWidth = ref<BorderWidth>('0')
+const styleBorderColor = ref('#4f46e5')
 const styleFontSize = ref<number | null>(null)
 const styleBold = ref(false)
 const styleBranchColor = ref('')
 
+const viewMode = ref<ViewMode>('map')
+const outlineHost = ref<HTMLDivElement | null>(null)
+const selectionCount = ref(0)
+const searchWrap = ref<HTMLDivElement | null>(null)
+const searchKeyword = ref('')
+const searchResults = ref<NodeSearchHit[]>([])
+const helpVisible = ref(false)
+const noteVisible = ref(false)
+const noteDraft = ref('')
+const linkDraft = ref('')
+const textVisible = ref(false)
+const textDraft = ref('')
+const textMode = ref<'append' | 'replace'>('append')
+
 let handle: MindElixirHandle | null = null
+let outliner: OutlinerHandle | null = null
 let retryOp: (() => Promise<void>) | null = null
+let pendingText = ''
 let draftTimer: ReturnType<typeof setTimeout> | undefined
 let draftDeadline = 0
 let suppressDirty = false
@@ -174,6 +207,48 @@ const imageBackgroundOptions = [
   { label: '主题背景', value: 'theme' },
   { label: '白色', value: 'white' },
   { label: '透明', value: 'transparent' }
+]
+const borderWidthOptions = [
+  { label: '无边框', value: '0' },
+  { label: '细（1px）', value: '1' },
+  { label: '粗（2px）', value: '2' }
+]
+const fontSizeOptions = [
+  { label: '默认', value: 0 },
+  ...[14, 16, 18, 20, 24, 28, 32].map((size) => ({ label: `${String(size)} px`, value: size }))
+]
+const textModeOptions = [
+  { label: '追加到选中节点', value: 'append' },
+  { label: '替换当前导图', value: 'replace' }
+]
+const shortcutGroups: { title: string; items: { keys: string; desc: string }[] }[] = [
+  {
+    title: '节点编辑',
+    items: [
+      { keys: 'Tab', desc: '新增子节点' },
+      { keys: 'Enter', desc: '新增同级节点' },
+      { keys: 'F2 / 双击', desc: '编辑节点文字' },
+      { keys: 'Delete', desc: '删除选中节点' },
+      { keys: '方向键', desc: '在节点间移动' }
+    ]
+  },
+  {
+    title: '视图与查找',
+    items: [
+      { keys: 'Ctrl + F', desc: '搜索主题与备注' },
+      { keys: 'Ctrl + O', desc: '打开导图文件' },
+      { keys: 'Ctrl + 0', desc: '适应窗口' },
+      { keys: 'Ctrl + /', desc: '打开 / 关闭本帮助' }
+    ]
+  },
+  {
+    title: '文件',
+    items: [
+      { keys: 'Ctrl + S', desc: '保存' },
+      { keys: 'Ctrl + Shift + S', desc: '另存为' },
+      { keys: 'Ctrl + N', desc: '新建导图' }
+    ]
+  }
 ]
 
 /** 当前明暗模式（仅读 html[data-theme]，不做组件内主题分支） */
@@ -268,9 +343,203 @@ function handleDirection(value: number): void {
   direction.value = normalizeDirection(value)
 }
 
-/** 选择变化：抽屉打开时同步样式面板 */
+/** 选择变化：同步节点操作条与样式面板 */
 function handleSelect(): void {
+  selectionCount.value = handle?.getSelectionCount() ?? 0
   if (drawerVisible.value) syncSelection()
+}
+
+/** 主题色（默认边框色取自 tokens，避免硬编码色值） */
+function defaultBorderColor(): string {
+  const primary = readTokens().primary.trim()
+  return primary === '' ? '#4f46e5' : primary
+}
+
+/** 销毁大纲视图 */
+function destroyOutliner(): void {
+  outliner?.destroy()
+  outliner = null
+}
+
+/** 创建大纲视图（同一文档、共享撤销栈） */
+async function createOutliner(): Promise<void> {
+  destroyOutliner()
+  const host = outlineHost.value
+  if (host === null || handle === null) return
+  host.innerHTML = ''
+  try {
+    outliner = await handle.mountOutliner(host)
+  } catch (err) {
+    viewMode.value = 'map'
+    fail(err, null)
+  }
+}
+
+/** 切换导图 / 大纲视图 */
+async function switchViewStage(mode: ViewMode): Promise<void> {
+  if (mode === viewMode.value) return
+  viewMode.value = mode
+  if (mode === 'outline') {
+    await nextTick()
+    await createOutliner()
+    return
+  }
+  destroyOutliner()
+  await nextTick()
+  refreshStats()
+  handleSelect()
+}
+
+/** 节点操作（操作条入口） */
+async function nodeAction(action: NodeAction): Promise<void> {
+  if (handle === null) return
+  try {
+    if (action === 'child') await handle.addChild()
+    else if (action === 'sibling') await handle.addSibling()
+    else if (action === 'parent') await handle.insertParent()
+    else if (action === 'up') await handle.moveUp()
+    else if (action === 'down') await handle.moveDown()
+    else await handle.removeSelected()
+    refreshStats()
+    handleSelect()
+  } catch (err) {
+    fail(err, null)
+  }
+}
+
+/** 打开备注 / 链接编辑 */
+function openNoteModal(): void {
+  const node = handle?.getSelectedNode() ?? null
+  if (node === null) {
+    warn('请先在画布中选择一个节点')
+    return
+  }
+  noteDraft.value = node.note
+  linkDraft.value = node.hyperLink
+  noteVisible.value = true
+}
+
+/** 保存备注 / 链接 */
+async function saveNoteMeta(): Promise<void> {
+  if (handle === null) return
+  const link = linkDraft.value.trim()
+  if (link !== '' && !/^(https?:\/\/|mailto:)/iu.test(link)) {
+    warn('链接需以 http://、https:// 或 mailto: 开头')
+    return
+  }
+  const applied = await handle.setNodeMeta({ note: noteDraft.value.trim(), hyperLink: link })
+  if (!applied) return
+  dirty.value = true
+  refreshStats()
+  scheduleDraft()
+  syncSelection()
+  noteVisible.value = false
+}
+
+/** 聚焦搜索框 */
+function focusSearch(): void {
+  searchWrap.value?.querySelector('input')?.focus()
+}
+
+/** 执行搜索（主题与备注） */
+function runSearch(): void {
+  searchResults.value = handle === null ? [] : searchNodes(handle.getData(), searchKeyword.value)
+}
+
+/** 跳转到命中节点 */
+async function jumpToHit(hit: NodeSearchHit): Promise<void> {
+  try {
+    if (viewMode.value === 'outline') await switchViewStage('map')
+    await nextTick()
+    handle?.focusById(hit.id)
+    searchResults.value = []
+    handleSelect()
+  } catch (err) {
+    searchResults.value = []
+    fail(err, null)
+  }
+}
+
+/** 回车跳转首条命中 */
+function jumpToFirstHit(): void {
+  const first = searchResults.value[0]
+  if (first !== undefined) void jumpToHit(first)
+}
+
+/** 打开「从文本生成」弹窗（空态默认替换，画布内默认追加） */
+function openTextModal(): void {
+  textDraft.value = ''
+  textMode.value = handle === null ? 'replace' : 'append'
+  textVisible.value = true
+}
+
+/** 用文本大纲替换当前导图 */
+async function replaceWithText(text: string): Promise<void> {
+  try {
+    const imported = importOutlineText(text)
+    direction.value = normalizeDirection(imported.data.direction)
+    await mountDocument(imported.data)
+    currentPath.value = ''
+    currentName.value = ''
+    currentMtimeMs.value = null
+    dirty.value = true
+    notice.value = imported.warnings
+    draftPaused.value = false
+    resetDraft()
+    scheduleDraft()
+    textVisible.value = false
+  } catch (err) {
+    fail(err, 'import')
+  }
+}
+
+/** 把文本大纲追加到选中节点（未选中则追加到根） */
+async function appendText(text: string): Promise<void> {
+  if (handle === null) {
+    warn('请先新建或打开一张导图')
+    return
+  }
+  try {
+    const imported = importOutlineText(text)
+    if (countNodes(handle.getData()) + countNodes(imported.data) > MAX_NODES) {
+      throw toolError('MM_NODE_LIMIT', 'nodes')
+    }
+    const target = handle.getSelectedNode()?.id
+    const count = await handle.appendNodes(imported.entries, target)
+    if (count === 0) {
+      warn('未能追加节点，请先在画布中选择一个节点')
+      return
+    }
+    dirty.value = true
+    refreshStats()
+    scheduleDraft()
+    notice.value =
+      imported.warnings.length === 0 ? [`已追加 ${String(count)} 个顶层节点`] : imported.warnings
+    textVisible.value = false
+  } catch (err) {
+    fail(err, 'import')
+  }
+}
+
+/** 确认「从文本生成」 */
+function applyTextOutline(): void {
+  const text = textDraft.value
+  if (text.trim() === '') {
+    warn('请先粘贴或输入大纲文本')
+    return
+  }
+  if (textMode.value === 'replace') {
+    if (dirty.value) {
+      pendingText = text
+      pendingAction.value = 'text-replace'
+      textVisible.value = false
+      confirmVisible.value = true
+      return
+    }
+    void replaceWithText(text)
+    return
+  }
+  void appendText(text)
 }
 
 /** 草稿调度（800ms 防抖、4000ms 最长等待） */
@@ -319,6 +588,7 @@ async function mountDocument(data: MindmapDocument): Promise<void> {
   const host = canvasHost.value
   if (host === null) throw toolError('MM_INVALID_DOCUMENT', '画布未就绪')
   const hadDocument = instanceReady.value
+  destroyOutliner()
   phase.value = 'ready'
   booting.value = true
   await nextTick()
@@ -338,7 +608,12 @@ async function mountDocument(data: MindmapDocument): Promise<void> {
     })
     instanceReady.value = true
     phase.value = 'ready'
+    selectionCount.value = 0
     markClean()
+    if (viewMode.value === 'outline') {
+      await nextTick()
+      await createOutliner()
+    }
   } catch (err) {
     if (!hadDocument) phase.value = 'empty'
     throw err
@@ -380,6 +655,7 @@ async function executeAction(action: PendingAction): Promise<void> {
   confirmVisible.value = false
   if (action === 'new') await createNew()
   else if (action === 'open') await requestOpen()
+  else if (action === 'text-replace') await replaceWithText(pendingText)
   else chooseImportFile(action === 'import-opml' ? 'opml' : 'markdown')
 }
 
@@ -770,7 +1046,8 @@ function syncSelection(): void {
   if (node === null) {
     styleBackground.value = ''
     styleColor.value = ''
-    styleBorder.value = ''
+    styleBorderWidth.value = '0'
+    styleBorderColor.value = defaultBorderColor()
     styleFontSize.value = null
     styleBold.value = false
     styleBranchColor.value = ''
@@ -779,9 +1056,11 @@ function syncSelection(): void {
   const style = node.style
   styleBackground.value = style.background ?? ''
   styleColor.value = style.color ?? ''
-  styleBorder.value = style.border ?? ''
+  const border = /^([12])px solid (#[0-9a-fA-F]{6})$/u.exec(style.border ?? '')
+  styleBorderWidth.value = border === null ? '0' : ((border[1] ?? '1') as BorderWidth)
+  styleBorderColor.value = border?.[2] ?? defaultBorderColor()
   const size = Number(style.fontSize)
-  styleFontSize.value = Number.isFinite(size) ? size : null
+  styleFontSize.value = Number.isFinite(size) && size > 0 ? size : null
   const weight = style.fontWeight ?? ''
   styleBold.value = weight === '700' || weight === 'bold'
   styleBranchColor.value = node.branchColor
@@ -826,23 +1105,29 @@ function onColorChange(value: string | null): void {
   void writeStyle({ color: value ?? undefined })
 }
 
-/** 边框（仅 1px solid #RRGGBB） */
-function onBorderChange(value: string): void {
-  const text = value.trim()
-  if (text === '') {
-    void writeStyle({ border: undefined })
-    return
-  }
-  if (!/^1px solid #[0-9a-fA-F]{6}$/u.test(text)) {
-    warn('边框格式应为 1px solid #RRGGBB')
-    return
-  }
-  void writeStyle({ border: text })
+/** 当前边框值（无边框返回 undefined） */
+function borderValue(): string | undefined {
+  if (styleBorderWidth.value === '0') return undefined
+  return `${styleBorderWidth.value}px solid ${styleBorderColor.value}`
+}
+
+/** 边框粗细 */
+function onBorderWidthChange(value: string | number): void {
+  styleBorderWidth.value = String(value) as BorderWidth
+  void writeStyle({ border: borderValue() })
+}
+
+/** 边框颜色（无边框时仅记住颜色，不写入样式） */
+function onBorderColorChange(value: string | null): void {
+  styleBorderColor.value = value ?? defaultBorderColor()
+  if (styleBorderWidth.value !== '0') void writeStyle({ border: borderValue() })
 }
 
 /** 字号 */
 function onFontSizeChange(value: number | null): void {
-  void writeStyle({ fontSize: value === null ? undefined : String(value) })
+  void writeStyle({
+    fontSize: value === null || value === 0 ? undefined : String(value)
+  })
 }
 
 /** 加粗 */
@@ -895,11 +1180,19 @@ async function discardDraft(): Promise<void> {
   await clearDraft().catch(() => undefined)
 }
 
-/** 键盘快捷键（捕获阶段，Ctrl+S 等） */
+/** 键盘快捷键（捕获阶段，Ctrl+S / Ctrl+F 等） */
 function onKeydown(event: KeyboardEvent): void {
   if (phase.value !== 'ready' || handle === null) return
-  if (!event.ctrlKey && !event.metaKey) return
   const key = event.key.toLowerCase()
+  const inOutline = outlineHost.value?.contains(event.target as Node) === true
+  if (!event.ctrlKey && !event.metaKey) {
+    if (key === '?' || (event.shiftKey && key === '/')) {
+      event.preventDefault()
+      helpVisible.value = true
+    }
+    return
+  }
+  if (inOutline && (key === 'z' || key === 'y')) return
   if (key === 's') {
     event.preventDefault()
     if (event.shiftKey) void saveAs()
@@ -910,6 +1203,12 @@ function onKeydown(event: KeyboardEvent): void {
   } else if (key === 'n') {
     event.preventDefault()
     requestAction('new')
+  } else if (key === 'f') {
+    event.preventDefault()
+    focusSearch()
+  } else if (key === '/') {
+    event.preventDefault()
+    helpVisible.value = !helpVisible.value
   } else if (key === '0') {
     event.preventDefault()
     fitCanvas()
@@ -947,7 +1246,10 @@ async function probeDraft(): Promise<void> {
   }
 }
 
-watch(themeMode, applyThemeToCanvas)
+watch(themeMode, () => {
+  applyThemeToCanvas()
+  if (viewMode.value === 'outline') void createOutliner()
+})
 
 onMounted(() => {
   themeMode.value = readThemeMode()
@@ -970,6 +1272,7 @@ onBeforeUnmount(() => {
   themeObserver?.disconnect()
   themeObserver = null
   void flushDraft()
+  destroyOutliner()
   handle?.destroy()
   handle = null
   instanceReady.value = false
@@ -993,7 +1296,7 @@ onBeforeUnmount(() => {
     </header>
 
     <div
-      class="flex flex-wrap items-center gap-1 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-2"
+      class="relative z-20 flex flex-wrap items-center gap-1 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-2"
       data-testid="mindmap-toolbar"
     >
       <NButton
@@ -1035,6 +1338,31 @@ onBeforeUnmount(() => {
       >
         <template #icon><NIcon :component="SaveAll" /></template>
         另存为
+      </NButton>
+
+      <span class="mx-1 h-5 w-px bg-[var(--lumin-color-border)]" />
+
+      <NButton
+        size="small"
+        :secondary="viewMode !== 'map'"
+        :type="viewMode === 'map' ? 'primary' : 'default'"
+        :disabled="toolbarDisabled"
+        data-testid="mindmap-view-map"
+        @click="switchViewStage('map')"
+      >
+        <template #icon><NIcon :component="Network" /></template>
+        导图
+      </NButton>
+      <NButton
+        size="small"
+        :secondary="viewMode !== 'outline'"
+        :type="viewMode === 'outline' ? 'primary' : 'default'"
+        :disabled="toolbarDisabled"
+        data-testid="mindmap-view-outline"
+        @click="switchViewStage('outline')"
+      >
+        <template #icon><NIcon :component="ListTree" /></template>
+        大纲
       </NButton>
 
       <span class="mx-1 h-5 w-px bg-[var(--lumin-color-border)]" />
@@ -1187,6 +1515,65 @@ onBeforeUnmount(() => {
       >
         <template #icon><NIcon :component="ChevronsDownUp" /></template>
       </NButton>
+
+      <span class="mx-1 h-5 w-px bg-[var(--lumin-color-border)]" />
+
+      <div ref="searchWrap" class="relative flex items-center">
+        <NInput
+          v-model:value="searchKeyword"
+          size="small"
+          clearable
+          placeholder="搜索节点（Ctrl+F）"
+          style="width: 176px"
+          data-testid="mindmap-search"
+          @input="runSearch"
+          @keydown.enter.prevent="jumpToFirstHit"
+          @keydown.esc="searchResults = []"
+        >
+          <template #prefix><NIcon :component="Search" /></template>
+        </NInput>
+        <div
+          v-if="searchResults.length > 0"
+          class="absolute left-0 top-full z-30 mt-1 max-h-64 w-72 overflow-auto rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)] p-1 shadow-lg"
+          data-testid="mindmap-search-results"
+        >
+          <button
+            v-for="hit in searchResults"
+            :key="hit.id"
+            type="button"
+            class="block w-full rounded px-2 py-1 text-left text-xs hover:bg-[var(--lumin-color-primary-soft)]"
+            data-testid="mindmap-search-hit"
+            @click="jumpToHit(hit)"
+          >
+            <span class="block truncate font-medium text-[var(--lumin-color-text)]">
+              {{ hit.topic }}
+            </span>
+            <span class="block truncate text-[var(--lumin-color-text-secondary)]">
+              {{ hit.matchedNote ? '备注命中 · ' : '' }}{{ hit.path }}
+            </span>
+          </button>
+        </div>
+      </div>
+      <NButton
+        size="small"
+        quaternary
+        title="粘贴文本生成导图"
+        :disabled="toolbarDisabled"
+        data-testid="mindmap-from-text"
+        @click="openTextModal"
+      >
+        <template #icon><NIcon :component="FileText" /></template>
+        从文本
+      </NButton>
+      <NButton
+        size="small"
+        quaternary
+        title="快捷键帮助（Ctrl+/）"
+        data-testid="mindmap-help"
+        @click="helpVisible = true"
+      >
+        <template #icon><NIcon :component="Keyboard" /></template>
+      </NButton>
       <NButton
         size="small"
         quaternary
@@ -1234,7 +1621,87 @@ onBeforeUnmount(() => {
       class="relative min-h-0 flex-1 overflow-hidden rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-bg)]"
       data-testid="mindmap-stage"
     >
-      <div ref="canvasHost" v-show="phase === 'ready'" class="h-full w-full" />
+      <div v-show="phase === 'ready' && viewMode === 'map'" ref="canvasHost" class="h-full w-full" />
+      <div
+        v-show="phase === 'ready' && viewMode === 'outline'"
+        ref="outlineHost"
+        class="h-full w-full overflow-auto"
+        :class="{ dark: themeMode === 'dark' }"
+        data-testid="mindmap-outline"
+      />
+
+      <div
+        v-if="phase === 'ready' && instanceReady && viewMode === 'map' && selectionCount > 0"
+        class="absolute left-3 top-3 z-20 flex items-center gap-0.5 rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] bg-[var(--lumin-color-surface)]/95 p-1 shadow-sm"
+        data-testid="mindmap-node-bar"
+      >
+        <NButton
+          quaternary
+          size="tiny"
+          title="新增子节点（Tab）"
+          data-testid="mindmap-node-child"
+          @click="nodeAction('child')"
+        >
+          <template #icon><NIcon :component="Plus" /></template>
+        </NButton>
+        <NButton
+          quaternary
+          size="tiny"
+          title="新增同级节点（Enter）"
+          data-testid="mindmap-node-sibling"
+          @click="nodeAction('sibling')"
+        >
+          <template #icon><NIcon :component="ListPlus" /></template>
+        </NButton>
+        <NButton
+          quaternary
+          size="tiny"
+          title="插入父级节点"
+          data-testid="mindmap-node-parent"
+          @click="nodeAction('parent')"
+        >
+          <template #icon><NIcon :component="CornerUpLeft" /></template>
+        </NButton>
+        <NButton
+          quaternary
+          size="tiny"
+          title="上移"
+          data-testid="mindmap-node-up"
+          @click="nodeAction('up')"
+        >
+          <template #icon><NIcon :component="ArrowUp" /></template>
+        </NButton>
+        <NButton
+          quaternary
+          size="tiny"
+          title="下移"
+          data-testid="mindmap-node-down"
+          @click="nodeAction('down')"
+        >
+          <template #icon><NIcon :component="ArrowDown" /></template>
+        </NButton>
+        <NButton
+          quaternary
+          size="tiny"
+          title="备注 / 链接"
+          data-testid="mindmap-node-note"
+          @click="openNoteModal"
+        >
+          <template #icon><NIcon :component="MessageSquare" /></template>
+        </NButton>
+        <NButton
+          quaternary
+          size="tiny"
+          title="删除节点（Delete）"
+          data-testid="mindmap-node-remove"
+          @click="nodeAction('remove')"
+        >
+          <template #icon><NIcon :component="Trash" /></template>
+        </NButton>
+        <span v-if="selectionCount > 1" class="px-1 text-xs text-[var(--lumin-color-text-secondary)]">
+          已选 {{ selectionCount }}
+        </span>
+      </div>
 
       <div
         v-if="phase === 'empty'"
@@ -1272,6 +1739,10 @@ onBeforeUnmount(() => {
             <NButton secondary @click="requestAction('import-markdown')">
               <template #icon><NIcon :component="FileDown" /></template>
               导入 Markdown
+            </NButton>
+            <NButton secondary data-testid="mindmap-text-empty" @click="openTextModal">
+              <template #icon><NIcon :component="FileText" /></template>
+              粘贴文本生成
             </NButton>
             <NButton secondary @click="requestAction('import-opml')">
               <template #icon><NIcon :component="FileDown" /></template>
@@ -1363,23 +1834,40 @@ onBeforeUnmount(() => {
               @update:value="onColorChange"
             />
           </div>
-          <div class="space-y-1">
-            <span class="text-sm">边框</span>
-            <NInput
-              :value="styleBorder"
-              size="small"
-              placeholder="1px solid #RRGGBB"
-              @change="onBorderChange"
-            />
+          <div class="space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-sm">边框</span>
+              <NSelect
+                :value="styleBorderWidth"
+                :options="borderWidthOptions"
+                size="small"
+                style="width: 120px"
+                data-testid="mindmap-style-border-width"
+                @update:value="onBorderWidthChange"
+              />
+            </div>
+            <div
+              v-if="styleBorderWidth !== '0'"
+              class="flex items-center justify-between gap-2"
+            >
+              <span class="text-xs text-[var(--lumin-color-text-secondary)]">边框颜色</span>
+              <NColorPicker
+                :value="styleBorderColor"
+                :modes="['hex', 'rgb']"
+                :show-alpha="false"
+                size="small"
+                @update:value="onBorderColorChange"
+              />
+            </div>
           </div>
           <div class="flex items-center justify-between gap-2">
             <span class="text-sm">字号</span>
-            <NInputNumber
-              :value="styleFontSize"
-              :min="12"
-              :max="32"
+            <NSelect
+              :value="styleFontSize ?? 0"
+              :options="fontSizeOptions"
               size="small"
               style="width: 120px"
+              data-testid="mindmap-style-font-size"
               @update:value="onFontSizeChange"
             />
           </div>
@@ -1488,6 +1976,110 @@ onBeforeUnmount(() => {
           </NButton>
         </div>
       </template>
+    </NModal>
+
+    <NModal
+      v-model:show="textVisible"
+      preset="card"
+      title="从文本生成导图"
+      style="width: 560px"
+      data-testid="mindmap-text-modal"
+    >
+      <div class="space-y-3">
+        <p class="text-xs text-[var(--lumin-color-text-secondary)]">
+          支持 Markdown 标题与列表，也支持纯文本缩进大纲（每 2 个空格或 1 个 Tab 为一级）。
+        </p>
+        <NInput
+          v-model:value="textDraft"
+          type="textarea"
+          :autosize="{ minRows: 8, maxRows: 16 }"
+          placeholder="# 产品规划&#10;## 需求&#10;- 用户调研&#10;- 竞品分析&#10;## 排期&#10;- 第一版"
+          data-testid="mindmap-text-input"
+        />
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm">处理方式</span>
+          <NSelect
+            v-model:value="textMode"
+            size="small"
+            style="width: 200px"
+            :options="textModeOptions"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <NButton size="small" @click="textVisible = false">取消</NButton>
+          <NButton size="small" type="primary" data-testid="mindmap-text-confirm" @click="applyTextOutline">
+            生成
+          </NButton>
+        </div>
+      </template>
+    </NModal>
+
+    <NModal
+      v-model:show="noteVisible"
+      preset="card"
+      title="节点备注 / 链接"
+      style="width: 480px"
+      data-testid="mindmap-note-modal"
+    >
+      <div class="space-y-3">
+        <div class="space-y-1">
+          <span class="text-sm">备注</span>
+          <NInput
+            v-model:value="noteDraft"
+            type="textarea"
+            :autosize="{ minRows: 3, maxRows: 8 }"
+            placeholder="补充说明（可留空）"
+            data-testid="mindmap-note-input"
+          />
+        </div>
+        <div class="space-y-1">
+          <span class="text-sm">链接</span>
+          <NInput
+            v-model:value="linkDraft"
+            placeholder="https:// 或 mailto:（可留空）"
+            data-testid="mindmap-link-input"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <NButton size="small" @click="noteVisible = false">取消</NButton>
+          <NButton size="small" type="primary" data-testid="mindmap-note-confirm" @click="saveNoteMeta">
+            保存
+          </NButton>
+        </div>
+      </template>
+    </NModal>
+
+    <NModal
+      v-model:show="helpVisible"
+      preset="card"
+      title="快捷键"
+      style="width: 520px"
+      data-testid="mindmap-help-modal"
+    >
+      <div class="space-y-4">
+        <div v-for="group in shortcutGroups" :key="group.title" class="space-y-1">
+          <h3 class="text-sm font-medium text-[var(--lumin-color-text)]">{{ group.title }}</h3>
+          <div
+            v-for="item in group.items"
+            :key="item.keys"
+            class="flex items-center justify-between gap-3 text-xs"
+          >
+            <span class="text-[var(--lumin-color-text-secondary)]">{{ item.desc }}</span>
+            <code
+              class="rounded bg-[var(--lumin-color-bg-elevated)] px-1.5 py-0.5 text-[var(--lumin-color-text)]"
+            >
+              {{ item.keys }}
+            </code>
+          </div>
+        </div>
+        <p class="text-xs text-[var(--lumin-color-text-secondary)]">
+          大纲视图内 Tab / Shift+Tab 可缩进与减少缩进，Enter 新建同级，Ctrl+Z 与导图共享同一撤销栈。
+        </p>
+      </div>
     </NModal>
   </div>
 </template>

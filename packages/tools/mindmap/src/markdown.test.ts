@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { MAX_DEPTH } from './contract'
-import { exportMarkdown, importMarkdown, splitTrailingLink } from './markdown'
+import { exportMarkdown, importMarkdown, importOutlineText, splitTrailingLink } from './markdown'
 
 /** 顺序 id 生成器 */
 function sequentialIds(): () => string {
@@ -174,6 +174,42 @@ describe('markdown', () => {
       expect(data.nodeData.topic).toBe('根')
       expect(data.nodeData.children?.[0]?.topic).toBe('A')
       expect(data.nodeData.children?.[0]?.children?.[0]?.topic).toBe('B')
+    })
+  })
+
+  describe('importOutlineText', () => {
+    it('Markdown 标题可解析时 entries 为单根', () => {
+      const result = importOutlineText('# 根\n## A\n## B', sequentialIds())
+      expect(result.data.nodeData.topic).toBe('根')
+      expect(result.data.nodeData.children?.map((node) => node.topic)).toEqual(['A', 'B'])
+      expect(result.entries).toHaveLength(1)
+      expect(result.entries[0]?.topic).toBe('根')
+    })
+
+    it('Markdown 多顶层时 entries 取虚拟根的子节点', () => {
+      const result = importOutlineText('# A\n# B', sequentialIds())
+      expect(result.data.nodeData.topic).toBe('导入导图')
+      expect(result.entries.map((node) => node.topic)).toEqual(['A', 'B'])
+    })
+
+    it('无标记纯文本按两空格缩进回退成树', () => {
+      const result = importOutlineText('第一版\n  需求\n  排期\n第二版', sequentialIds())
+      expect(result.data.nodeData.children?.map((node) => node.topic)).toEqual(['第一版', '第二版'])
+      expect(
+        result.data.nodeData.children?.[0]?.children?.map((node) => node.topic)
+      ).toEqual(['需求', '排期'])
+    })
+
+    it('Tab 缩进按一级处理，单空格缩进归零', () => {
+      const result = importOutlineText('A\n\tB\n\n C', sequentialIds())
+      expect(result.entries.map((node) => node.topic)).toEqual(['A', 'C'])
+      expect(result.entries[0]?.children?.map((node) => node.topic)).toEqual(['B'])
+    })
+
+    it('全空文本抛 MM_IMPORT_INVALID', () => {
+      expect(() => importOutlineText('  \n\t\n', sequentialIds())).toThrowError(
+        expect.objectContaining({ code: 'MM_IMPORT_INVALID' })
+      )
     })
   })
 })
