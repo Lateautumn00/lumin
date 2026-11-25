@@ -28,7 +28,8 @@ import type { MainPluginContext, RegisterMain, TaskHandlerContext } from '@lumin
 import { makeError } from '@lumin/shared'
 import { batchProgressMessage, dedupeInputPaths, toBatchFailure } from './batch'
 import { downloadMsi, type DownloadOptions } from './download'
-import { convertFailureCode, toolError, errnoCode, isStructuredError } from './errors'
+import { convertFailureCode } from './convert-failure'
+import { toolError, errnoCode, isStructuredError } from './errors'
 import { OFFICE_INPUT_HINT } from './formats'
 import { resolveOutputPath } from './naming'
 import {
