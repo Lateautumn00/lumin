@@ -32,7 +32,7 @@
 
 ## 下载与安装
 
-在 [GitHub Releases](https://github.com/OWNER/lumin/releases) 或 [Gitee Releases](https://gitee.com/Lateautumn00/lumin/releases) 下载（两处产物与 SHA256 一致）：
+在 [GitHub Releases](https://github.com/Lateautumn00/lumin/releases) 或 [Gitee Releases](https://gitee.com/Lateautumn00/lumin/releases) 下载（两处产物与 SHA256 一致）：
 
 - `Lumin-<版本>-win-x64-setup.exe`：NSIS 安装版，可选安装目录，创建桌面/开始菜单快捷方式
 - `Lumin-<版本>-win-x64-portable.exe`：便携版，双击即用，不写安装目录
@@ -104,7 +104,7 @@ pnpm update:serve             # 本地更新源 http://127.0.0.1:8787（更新�
 
 ## 贡献与反馈
 
-- 问题与建议：提交 [GitHub Issue](https://github.com/OWNER/lumin/issues) 或 [Gitee Issue](https://gitee.com/Lateautumn00/lumin/issues)
+- 问题与建议：提交 [GitHub Issue](https://github.com/Lateautumn00/lumin/issues) 或 [Gitee Issue](https://gitee.com/Lateautumn00/lumin/issues)
 - 代码贡献：从 `master` 拉 `feature/*` 或 `fix/*` 分支，门禁（`pnpm gate`）全绿后提交 Pull Request，并同步 `CHANGELOG.md` 与对应 `docs/spec`、`docs/smoke`
 
 ## 免责声明

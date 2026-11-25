@@ -32,7 +32,7 @@ An offline-first Windows desktop toolbox. Single window with a sidebar; every to
 
 ## Download & install
 
-Get the latest build from [GitHub Releases](https://github.com/OWNER/lumin/releases) or [Gitee Releases](https://gitee.com/Lateautumn00/lumin/releases) (identical artifacts and SHA256):
+Get the latest build from [GitHub Releases](https://github.com/Lateautumn00/lumin/releases) or [Gitee Releases](https://gitee.com/Lateautumn00/lumin/releases) (identical artifacts and SHA256):
 
 - `Lumin-<version>-win-x64-setup.exe` — NSIS installer (choose directory, desktop/start-menu shortcuts)
 - `Lumin-<version>-win-x64-portable.exe` — portable single executable
@@ -101,7 +101,7 @@ See each project's release page for full notices.
 
 ## Contributing
 
-- Issues & suggestions: [GitHub Issues](https://github.com/OWNER/lumin/issues) or [Gitee Issues](https://gitee.com/Lateautumn00/lumin/issues)
+- Issues & suggestions: [GitHub Issues](https://github.com/Lateautumn00/lumin/issues) or [Gitee Issues](https://gitee.com/Lateautumn00/lumin/issues)
 - Code: branch from `master` as `feature/*` or `fix/*`, make sure `pnpm gate` is green, open a Pull Request, and update `CHANGELOG.md` plus the matching `docs/spec` and `docs/smoke` notes
 
 ## Disclaimer
