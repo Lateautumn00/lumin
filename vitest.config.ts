@@ -214,6 +214,12 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
+        'packages/tools/print-tool/src/**/*.ts': {
+          lines: 80,
+          functions: 80,
+          statements: 80,
+          branches: 80
+        },
         'packages/tools/qr-code/src/**/*.ts': {
           lines: 80,
           functions: 80,

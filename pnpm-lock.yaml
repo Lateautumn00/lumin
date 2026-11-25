@@ -338,6 +338,9 @@ importers:
       '@lumin/tool-pdf-toolkit':
         specifier: workspace:*
         version: link:../../packages/tools/pdf-toolkit
+      '@lumin/tool-print':
+        specifier: workspace:*
+        version: link:../../packages/tools/print-tool
       '@lumin/tool-qr-code':
         specifier: workspace:*
         version: link:../../packages/tools/qr-code
@@ -1296,6 +1299,40 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+
+  packages/tools/print-tool:
+    dependencies:
+      '@lucide/vue':
+        specifier: 1.72.0
+        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
+      '@lumin/node-kit':
+        specifier: workspace:*
+        version: link:../../node-kit
+      '@lumin/plugin-api':
+        specifier: workspace:*
+        version: link:../../plugin-api
+      '@lumin/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@lumin/ui':
+        specifier: workspace:*
+        version: link:../../ui
+      naive-ui:
+        specifier: 2.45.3
+        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
+      vue:
+        specifier: 3.5.45
+        version: 3.5.45(typescript@6.0.3)
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      electron:
+        specifier: 45.3.1
+        version: 45.3.1(supports-color@7.2.0)
+      pdfjs-dist:
+        specifier: 6.5.438
+        version: 6.5.438
 
   packages/tools/qr-code:
     dependencies:

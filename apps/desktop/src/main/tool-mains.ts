@@ -25,6 +25,7 @@ import { registerMain as miscToolboxRegisterMain } from '@lumin/tool-misc-toolbo
 import { registerMain as ocrTextRegisterMain } from '@lumin/tool-ocr-text/node'
 import { registerMain as pdfImagesRegisterMain } from '@lumin/tool-pdf-images/node'
 import { registerMain as pdfToolkitRegisterMain } from '@lumin/tool-pdf-toolkit/node'
+import { registerMain as printRegisterMain } from '@lumin/tool-print/node'
 import { registerMain as qrCodeRegisterMain } from '@lumin/tool-qr-code/node'
 import { registerMain as systemInfoRegisterMain } from '@lumin/tool-system-info/node'
 import { registerMain as textDiffRegisterMain } from '@lumin/tool-text-diff/node'
@@ -60,6 +61,7 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'ocr-text': ocrTextRegisterMain,
   'pdf-images': pdfImagesRegisterMain,
   'pdf-toolkit': pdfToolkitRegisterMain,
+  print: printRegisterMain,
   'qr-code': qrCodeRegisterMain,
   'system-info': systemInfoRegisterMain,
   'text-diff': textDiffRegisterMain,

@@ -55,6 +55,7 @@
     "@lumin/tool-password-generator": "workspace:*",
     "@lumin/tool-pdf-images": "workspace:*",
     "@lumin/tool-pdf-toolkit": "workspace:*",
+    "@lumin/tool-print": "workspace:*",
     "@lumin/tool-qr-code": "workspace:*",
     "@lumin/tool-system-info": "workspace:*",
     "@lumin/tool-text-diff": "workspace:*",

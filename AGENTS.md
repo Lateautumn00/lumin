@@ -177,6 +177,7 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 - 禁止验收模糊化：「能用/差不多/正常」不算验收，必须可复现断言
 - 视频下载免责文案**已定稿**（2026-11-18，用户拍板三重呈现：工具首次弹窗 + 页内 banner + 关于页声明；正文见 `docs/opencode/plan.md` §4.5，修改须重走 R8）
 - 壳级 UX 决策（2026-11-23，plan Q60）：**无原生菜单栏**（`Menu.setApplicationMenu(null)`，dev 经 `before-input-event` 保留 F12/Ctrl+Shift+I/F5/Ctrl+R）；**启动默认工具 = 日历**（`tool-manifests.ts` 的 `DEFAULT_TOOL_ID`）；修改须重走 R8
+- 文件打印决策（2026-11-25，plan Q69/M68）：新增独立工具 `@lumin/tool-print`（id `print`，Office/PDF/图片三类输入）；**统一系统打印对话框 `silent:false`**，不做应用内预览与静默打印；PDF 走 Electron PDFium 视图（隐藏窗口 `plugins:true`）+ `node-kit/pdf` 栅格兜底；Office 经 `soffice` 转 PDF 后打印（串行锁）；**零新增依赖/二进制**；修改须重走 R8
 
 ---
 

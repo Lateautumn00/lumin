@@ -29,6 +29,7 @@ import { manifest as ocrTextManifest } from '@lumin/tool-ocr-text/manifest'
 import { manifest as passwordGeneratorManifest } from '@lumin/tool-password-generator/manifest'
 import { manifest as pdfImagesManifest } from '@lumin/tool-pdf-images/manifest'
 import { manifest as pdfToolkitManifest } from '@lumin/tool-pdf-toolkit/manifest'
+import { manifest as printManifest } from '@lumin/tool-print/manifest'
 import { manifest as qrCodeManifest } from '@lumin/tool-qr-code/manifest'
 import { manifest as systemInfoManifest } from '@lumin/tool-system-info/manifest'
 import { manifest as textDiffManifest } from '@lumin/tool-text-diff/manifest'
@@ -57,6 +58,7 @@ export const toolManifests: readonly ToolManifest[] = [
   imageDewatermarkManifest,
   pdfImagesManifest,
   pdfToolkitManifest,
+  printManifest,
   fileRenamerManifest,
   textToolboxManifest,
   textEditorManifest,
