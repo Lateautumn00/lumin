@@ -1,7 +1,11 @@
 # 自动更新源（generic provider，客户端读取本文件）
 # v0.1.0 首个开源版本：先置为与 app 版本一致的空条目，客户端不会提示更新。
-# 发布时执行 pnpm dist，用产物 dist/latest.yml 覆盖本文件（真实 sha512 / size / 下载地址以产物为准），
-# 并将安装包与 .blockmap 上传到对应 Release，详见 docs/release。
+# 发布时执行 pnpm dist，用产物 dist/latest.yml 覆盖本文件（真实 sha512 / size / 下载地址以产物为准）。
+#
+# Q84（2026-11-25）双源发布：同一份 latest.yml 与安装包同时上传 GitHub Release 与 Gitee Release；
+# 客户端固定读取 electron-builder.yml 里 publish.url 指向的一份 feed（当前为 Gitee），
+# 另一处仅作下载备用源，若不改 feed 地址则两处版本必须保持一致，避免出现「检测到旧版/不存在的包」。
+# GitHub 资产地址形如：https://github.com/<OWNER>/lumin/releases/download/v0.1.0/Lumin-0.1.0-win-x64-setup.exe
 version: 0.1.0
 files: []
 path: ''

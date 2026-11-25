@@ -56,6 +56,9 @@ artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 
 # 更新源（§5.3）：generic provider，latest.yml + blockmap 放仓库 updates/ 固定目录
 # M5（2026-11-19）落定实际 Gitee 仓库；换 OSS 只改此处
+# Q84（2026-11-25）双源发布：GitHub / Gitee 两处 Release 均上传同一产物与 latest.yml；
+# generic provider 只支持单一 feed 地址，这里保留 Gitee（国内可达性优先）。
+# 若切换为 GitHub 为主源，把 url 改成 https://raw.githubusercontent.com/<OWNER>/lumin/master/updates 即可（代码零改动）。
 publish:
   provider: generic
   url: https://gitee.com/Lateautumn00/lumin/raw/master/updates

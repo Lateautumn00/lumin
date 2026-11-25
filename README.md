@@ -32,7 +32,7 @@
 
 ## 下载与安装
 
-在 [Releases](https://gitee.com/Lateautumn00/lumin/releases) 下载：
+在 [GitHub Releases](https://github.com/OWNER/lumin/releases) 或 [Gitee Releases](https://gitee.com/Lateautumn00/lumin/releases) 下载（两处产物与 SHA256 一致）：
 
 - `Lumin-<版本>-win-x64-setup.exe`：NSIS 安装版，可选安装目录，创建桌面/开始菜单快捷方式
 - `Lumin-<版本>-win-x64-portable.exe`：便携版，双击即用，不写安装目录
@@ -62,7 +62,8 @@ Get-FileHash .\Lumin-0.1.0-win-x64-setup.exe -Algorithm SHA256
 ## 自动更新
 
 - 关于页「检查更新」：检测 → 下载 → 「安装并重启」
-- 更新源为 Gitee `updates/` 目录（generic provider）；`allowDowngrade=false`，回滚通过发布新版本覆盖
+- 更新源为仓库 `updates/` 目录（generic provider，固定读取 Gitee feed）；`allowDowngrade=false`，回滚通过发布新版本覆盖
+- 双源发布：GitHub 与 Gitee 的 Release 同时提供安装包与 `latest.yml`，版本必须一致；切换主源只需改 `electron-builder.yml` 的 `publish.url`
 - 便携版同样可自更新，但更新后写入同一路径
 
 ## 开发
@@ -103,7 +104,7 @@ pnpm update:serve             # 本地更新源 http://127.0.0.1:8787（更新�
 
 ## 贡献与反馈
 
-- 问题与建议：提交 [Issue](https://gitee.com/Lateautumn00/lumin/issues)
+- 问题与建议：提交 [GitHub Issue](https://github.com/OWNER/lumin/issues) 或 [Gitee Issue](https://gitee.com/Lateautumn00/lumin/issues)
 - 代码贡献：从 `master` 拉 `feature/*` 或 `fix/*` 分支，门禁（`pnpm gate`）全绿后提交 Pull Request，并同步 `CHANGELOG.md` 与对应 `docs/spec`、`docs/smoke`
 
 ## 免责声明
