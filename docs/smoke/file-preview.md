@@ -14,7 +14,7 @@
 | 1 | 页面加载 + 空态 | 侧栏可进入；拖拽区文案可见；`accept` 含 `.md`/`.docx` | 通过 |
 | 2 | 文本类五格式 | `inspect` 类型正确；`read-text` 文本/编码/EOL/截断 | 通过 |
 | 3 | GBK / UTF-8 BOM / 编码判定 | GBK 字节 → `gbk`；BOM 识别并剥离 | 通过 |
-| 4 | 图片预览 | `inspect` 为 image；`asset-url` 为 `file:///` | 通过 |
+| 4 | 图片预览 | `inspect` 为 image；`asset-url` 为 `lumin-media://local/` | 通过 |
 | 5 | PDF 翻页 | 页数正确；页 1/2 返回 PNG；越界/释放后渲染 → `FP_PDF_RENDER_FAILED` | 通过 |
 | 6 | 不支持/缺失/目录/损坏 PDF | `FP_UNSUPPORTED`/`FP_NOT_FOUND`/`FP_INVALID_PATH`/`FP_READ_FAILED` | 通过 |
 | 7 | Office 类型 + 缺失预检 + 非 Office 拒绝 | `office`；缺失 → `FP_NOT_FOUND`；`.txt` → `FP_UNSUPPORTED` | 通过 |

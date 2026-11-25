@@ -7,7 +7,7 @@ import {
   type RunProcessResult
 } from '@lumin/node-kit'
 import type { PdfDocumentHandle, RenderedCanvas } from '@lumin/node-kit/pdf'
-import type { TaskUpdate } from '@lumin/shared'
+import { fromMediaUrl, type TaskUpdate } from '@lumin/shared'
 import { describe, expect, it, vi } from 'vitest'
 import { toolError } from './errors'
 import type {
@@ -317,14 +317,14 @@ describe('read-text', () => {
 })
 
 describe('asset-url', () => {
-  it('图片返回 file:// URL，非图片拒绝', async () => {
+  it('图片返回 lumin-media:// URL，非图片拒绝', async () => {
     const harness = makeCtx()
     registerWith(harness.ctx, makeDeps())
     const result = (await getIpc(harness, 'asset-url')({
       payload: { path: 'C:\\图\\a.png' }
     })) as { url: string }
-    expect(result.url.startsWith('file:///')).toBe(true)
-    expect(result.url).toContain('a.png')
+    expect(result.url.startsWith('lumin-media://local/')).toBe(true)
+    expect(fromMediaUrl(result.url)).toBe('C:\\图\\a.png')
 
     await expect(
       getIpc(harness, 'asset-url')({ payload: { path: 'C:\\a.txt' } })

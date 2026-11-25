@@ -29,7 +29,7 @@
 | --- | --- | --- |
 | `inspect` | sync | `{path}` → `{previewId,kind,ext,name,size,pageCount?}` |
 | `read-text` | sync | `{path,maxBytes?}` → `{text,encoding,eol,truncated}` |
-| `asset-url` | sync | `{path}` → `{url}`（仅图片） |
+| `asset-url` | sync | `{path}` → `{url}`（仅图片，`lumin-media://` 协议 URL） |
 | `convert-office` | task | `{path}` → progress → `{previewId,pageCount}` |
 | `render-pdf-page` | sync | `{previewId,page,scale?}` → `{png,width,height}` |
 | `release-preview` | sync | `{previewId}` → `{released}` |

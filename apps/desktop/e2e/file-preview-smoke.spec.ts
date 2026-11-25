@@ -285,7 +285,7 @@ test.describe('file-preview（文件预览）冒烟', () => {
     }
   })
 
-  test('图片：inspect + asset-url（file://）', async () => {
+  test('图片：inspect + asset-url（lumin-media:// 可真实加载）', async () => {
     const { app, page } = await launch()
     const workDir = freshDir('lumin-fp-e2e-image')
     try {
@@ -295,8 +295,19 @@ test.describe('file-preview（文件预览）冒烟', () => {
       expect(inspected.kind).toBe('image')
       expect(inspected.name).toBe('图片 样张.png')
       const asset = await invoke<{ url: string }>(page, 'file-preview:asset-url', { path: png })
-      expect(asset.url.startsWith('file:///')).toBe(true)
-      expect(decodeURIComponent(asset.url).endsWith('图片 样张.png')).toBe(true)
+      expect(asset.url.startsWith('lumin-media://local/')).toBe(true)
+      // 真实 <img> 加载：协议 + CSP 均已放行时 naturalWidth 才非 0
+      const loaded = await page.evaluate(async (url) => {
+        const img = new Image()
+        img.src = url
+        try {
+          await img.decode()
+          return img.naturalWidth
+        } catch {
+          return 0
+        }
+      }, asset.url)
+      expect(loaded).toBe(120)
       // 非图片 → FP_UNSUPPORTED
       const txt = path.join(workDir, '说明.txt')
       fs.writeFileSync(txt, 'x')

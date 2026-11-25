@@ -11,7 +11,6 @@ import { randomUUID } from 'node:crypto'
 import { accessSync, constants, statSync } from 'node:fs'
 import { access, copyFile, mkdir, open, readdir, rename, rm, stat, unlink } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import {
   runProcess,
   SpawnError,
@@ -50,6 +49,7 @@ import {
   isStructuredError,
   makeError,
   stripBom,
+  toMediaUrl,
   type StructuredError,
   type TextEncoding,
   type TaskUpdate
@@ -347,7 +347,7 @@ export function registerWith(ctx: MainPluginContext, deps: FilePreviewDeps): voi
     })
   })
 
-  // —— asset-url（sync）：图片 → file:// URL（renderer <img> 展示） ——
+  // —— asset-url（sync）：图片 → lumin-media:// URL（renderer <img> 展示；dev 下 file:// 会被拦截） ——
   ctx.registerIpc('asset-url', async ({ payload }) => {
     const { path } = parseOrThrow(assetUrlPayloadSchema, payload)
     if (detectKind(path) !== 'image') throw toolError('FP_UNSUPPORTED', extensionOf(path) ?? '')
@@ -358,7 +358,7 @@ export function registerWith(ctx: MainPluginContext, deps: FilePreviewDeps): voi
       throw classifyFsError(err)
     }
     if (!info.isFile()) throw toolError('FP_INVALID_PATH')
-    return assetUrlResultSchema.parse({ url: pathToFileURL(path).href })
+    return assetUrlResultSchema.parse({ url: toMediaUrl(path) })
   })
 
   // —— soffice-status（sync）：三级定位当前结果 ——
