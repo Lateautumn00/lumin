@@ -1,8 +1,8 @@
 <script setup lang="ts">
-// 音视频处理主视图（M14：格式转换/截取/提取音频/压缩四 Tab；M50 音频互转；M57 格式转换增强）
-// 作者：cuilanchao · 修改时间：2026-11-23
+// 媒体工具箱主视图（M14：格式转换/截取/提取音频/压缩；M50 音频互转；M57 转换增强；M73 并入下载/播放页签）
+// 作者：cuilanchao · 修改时间：2026-11-25
 // 三态强制（空态拖拽引导/加载进度可取消/报错码 + 详情）、tokens、@lucide/vue（spec §3）
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   NButton,
   NCheckbox,
@@ -28,9 +28,14 @@ import { formatClock, parseTimecode } from '../media'
 import { canRemux, codecSelectable, type AudioFormat, type VideoContainer } from '../compat'
 import type { VideoStream, AudioStream } from '../schema'
 import type { OutputItem, ProcessFailure, ProcessPayload } from '../schema'
+import DownloadTab from './tabs/DownloadTab.vue'
+import PlayerTab from './tabs/PlayerTab.vue'
 
-/** Tab 标识（spec §2） */
-type TabId = 'transcode' | 'trim' | 'extract-audio' | 'audio-convert' | 'compress'
+/** 原五页签（共享宿主文件列表/输出目录区，保留 v-show 切换不丢状态） */
+const LEGACY_TABS = ['transcode', 'trim', 'extract-audio', 'audio-convert', 'compress'] as const
+
+/** Tab 标识（spec §2；M73 追加 download / player） */
+type TabId = (typeof LEGACY_TABS)[number] | 'download' | 'player'
 
 /** 质量档中文标签（格式转换 / 压缩共用，spec §2） */
 const QUALITY_OPTIONS = [
@@ -86,6 +91,15 @@ const accept = computed(() => {
 
 // —— Tab 与参数（spec §2 默认值） ——
 const tab = ref<TabId>('transcode')
+
+/** 当前是否落在宿主五页签（决定共享处理区显隐） */
+const isLegacyTab = computed(() => (LEGACY_TABS as readonly string[]).includes(tab.value))
+
+/** 下载页签懒挂载：首次切到「下载」才实例化（避免打开工具箱就弹免责声明） */
+const downloadMounted = ref(false)
+watch(tab, (value) => {
+  if (value === 'download') downloadMounted.value = true
+})
 const transcodeFormat = ref<VideoContainer>('mp4')
 const transcodeMode = ref<'encode' | 'remux'>('encode')
 const transcodeCodec = ref<'h264' | 'h265'>('h264')
@@ -473,13 +487,13 @@ onUnmounted(detach)
 <template>
   <div class="flex max-w-3xl flex-col gap-4">
     <div>
-      <h1 class="text-base font-semibold">音视频处理</h1>
+      <h1 class="text-base font-semibold">媒体工具箱</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        视频/音频格式转换、截取片段、提取音频与压缩（基于 ffmpeg）
+        格式转换 / 截取 / 提取音频 / 音频互转 / 压缩 / 视频下载 / 本地播放
       </p>
     </div>
 
-    <!-- 五 Tab：切换不丢文件列表与输出目录 -->
+    <!-- 七 Tab：宿主五页签共享文件列表与输出目录；下载/播放为 M73 并入的独立页签 -->
     <!-- 标签必须走 #tab 插槽：当前 naive-ui 构建下自闭合 pane 的 tab 文本不会渲染 -->
     <NTabs v-model:value="tab" type="line">
       <NTabPane name="transcode">
@@ -497,437 +511,451 @@ onUnmounted(detach)
       <NTabPane name="compress">
         <template #tab>压缩</template>
       </NTabPane>
+      <NTabPane name="download">
+        <template #tab>下载</template>
+      </NTabPane>
+      <NTabPane name="player">
+        <template #tab>播放</template>
+      </NTabPane>
     </NTabs>
 
-    <!-- 文件列表区（空态 = 拖拽引导；非空时 DropZone 收窄为追加入口） -->
-    <NEmpty
-      v-if="rows.length === 0 && phase === 'idle' && error === null"
-      description="添加音视频开始处理"
-    />
-    <DropZone
-      :accept="accept"
-      :hint="rows.length === 0 ? '拖入音视频，或点击选择' : '继续添加'"
-      multiple
-      :disabled="phase === 'running'"
-      @select="onAdd([$event.path])"
-      @invalid="onInvalid"
-    />
-    <NText v-if="invalidHint !== ''" type="warning" class="text-xs">{{ invalidHint }}</NText>
-    <div v-if="rows.length > 0" class="flex flex-col gap-2">
-      <div class="flex items-center justify-between">
-        <NText depth="2" class="text-sm font-medium">
-          已选 {{ rows.length }} 个<template v-if="probing"> · 读取信息中…</template>
-        </NText>
-        <NButton
-          size="tiny"
-          quaternary
-          type="error"
-          :disabled="phase === 'running'"
-          @click="clearRows"
-        >
-          清空
-        </NButton>
-      </div>
-      <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
-        <div
-          v-for="row in rows"
-          :key="row.file"
-          class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
-        >
-          <div class="min-w-0 flex-1">
-            <div class="truncate text-sm">{{ row.name }}</div>
-            <div class="text-xs text-[var(--lumin-color-text-secondary)]">
-              {{ rowSummary(row) }}
-            </div>
-          </div>
+    <div v-show="isLegacyTab" class="flex flex-col gap-4">
+      <!-- 文件列表区（空态 = 拖拽引导；非空时 DropZone 收窄为追加入口） -->
+      <NEmpty
+        v-if="rows.length === 0 && phase === 'idle' && error === null"
+        description="添加音视频开始处理"
+      />
+      <DropZone
+        :accept="accept"
+        :hint="rows.length === 0 ? '拖入音视频，或点击选择' : '继续添加'"
+        multiple
+        :disabled="phase === 'running'"
+        @select="onAdd([$event.path])"
+        @invalid="onInvalid"
+      />
+      <NText v-if="invalidHint !== ''" type="warning" class="text-xs">{{ invalidHint }}</NText>
+      <div v-if="rows.length > 0" class="flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <NText depth="2" class="text-sm font-medium">
+            已选 {{ rows.length }} 个<template v-if="probing"> · 读取信息中…</template>
+          </NText>
           <NButton
             size="tiny"
             quaternary
+            type="error"
             :disabled="phase === 'running'"
-            @click="removeRow(row.file)"
+            @click="clearRows"
           >
-            <X class="h-3.5 w-3.5" />
+            清空
           </NButton>
         </div>
-      </div>
-    </div>
-
-    <!-- 参数区（随 Tab） -->
-    <NSpace vertical :size="12">
-      <template v-if="tab === 'transcode'">
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">目标格式</NText>
-          <select
-            v-model="transcodeFormat"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+        <div class="flex max-h-56 flex-col gap-1 overflow-y-auto">
+          <div
+            v-for="row in rows"
+            :key="row.file"
+            class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
           >
-            <option v-for="opt in CONTAINER_OPTIONS" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-          <NText v-if="transcodeFormat === 'webm'" depth="3" class="text-xs">
-            固定 VP9 + Opus
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-sm">{{ row.name }}</div>
+              <div class="text-xs text-[var(--lumin-color-text-secondary)]">
+                {{ rowSummary(row) }}
+              </div>
+            </div>
+            <NButton
+              size="tiny"
+              quaternary
+              :disabled="phase === 'running'"
+              @click="removeRow(row.file)"
+            >
+              <X class="h-3.5 w-3.5" />
+            </NButton>
+          </div>
+        </div>
+      </div>
+
+      <!-- 参数区（随 Tab） -->
+      <NSpace vertical :size="12">
+        <template v-if="tab === 'transcode'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">目标格式</NText>
+            <select
+              v-model="transcodeFormat"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option v-for="opt in CONTAINER_OPTIONS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+            <NText v-if="transcodeFormat === 'webm'" depth="3" class="text-xs">
+              固定 VP9 + Opus
+            </NText>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">转换方式</NText>
+            <NRadioGroup v-model:value="transcodeMode" :disabled="phase === 'running'" size="small">
+              <NRadioButton value="encode">重新编码</NRadioButton>
+              <NRadioButton value="remux">仅换封装（快速）</NRadioButton>
+            </NRadioGroup>
+          </div>
+          <div v-if="showCodec" class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">编码器</NText>
+            <select
+              v-model="transcodeCodec"
+              :disabled="phase === 'running' || isRemux"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option value="h264">H.264（兼容性好）</option>
+              <option value="h265">H.265（体积更小，兼容性较差且较慢）</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">质量</NText>
+            <select
+              v-model="transcodeQuality"
+              :disabled="phase === 'running' || isRemux"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option v-for="opt in QUALITY_OPTIONS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">分辨率</NText>
+            <select
+              v-model="resolutionValue"
+              :disabled="phase === 'running' || isRemux"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option value="original">原始</option>
+              <option value="1080">1080p</option>
+              <option value="720">720p</option>
+              <option value="480">480p</option>
+              <option value="custom">自定义</option>
+            </select>
+            <template v-if="resolutionKind === 'custom'">
+              <NInputNumber
+                v-model:value="customWidth"
+                :min="16"
+                :max="7680"
+                :step="2"
+                :disabled="phase === 'running' || isRemux"
+                placeholder="宽"
+                class="w-28"
+              />
+              <NText depth="3" class="text-xs">×</NText>
+              <NInputNumber
+                v-model:value="customHeight"
+                :min="16"
+                :max="7680"
+                :step="2"
+                :disabled="phase === 'running' || isRemux"
+                placeholder="高"
+                class="w-28"
+              />
+              <NText depth="3" class="text-xs">偶数</NText>
+            </template>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">帧率</NText>
+            <select
+              v-model.number="transcodeFps"
+              :disabled="phase === 'running' || isRemux"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option :value="0">原始</option>
+              <option :value="24">24 fps</option>
+              <option :value="25">25 fps</option>
+              <option :value="30">30 fps</option>
+              <option :value="60">60 fps</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">视频码率</NText>
+            <NInputNumber
+              v-model:value="videoBitrate"
+              :min="0"
+              :max="50000"
+              :step="100"
+              :disabled="phase === 'running' || isRemux"
+              class="w-32"
+            />
+            <NText depth="3" class="text-xs">kbps，0 = 按质量档</NText>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">音频码率</NText>
+            <select
+              v-model.number="transcodeAudioBitrate"
+              :disabled="phase === 'running' || isRemux || removeAudio"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option :value="64">64 kbps</option>
+              <option :value="96">96 kbps</option>
+              <option :value="128">128 kbps</option>
+              <option :value="160">160 kbps</option>
+              <option :value="192">192 kbps</option>
+              <option :value="256">256 kbps</option>
+              <option :value="320">320 kbps</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">去音轨</NText>
+            <NSwitch v-model:value="removeAudio" :disabled="phase === 'running' || isRemux" />
+            <NText depth="3" class="text-xs">输出无音频（remux 不适用）</NText>
+          </div>
+          <NText v-if="isRemux && remuxIncompatible.length > 0" type="warning" class="text-xs">
+            {{ remuxIncompatible.length }} 个文件编码与
+            {{ transcodeFormat.toUpperCase() }} 不兼容，请改用重新编码
           </NText>
-        </div>
+          <NText v-if="isRemux" depth="3" class="text-xs">
+            仅换封装不重新编码，速度最快，仅改变容器格式
+          </NText>
+        </template>
+
+        <template v-else-if="tab === 'trim'">
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-2">
+              <NText depth="2" class="w-20 text-sm">开始时间</NText>
+              <NInput
+                v-model:value="trimStart"
+                :disabled="phase === 'running'"
+                placeholder="如 0、1:30、01:02:03.5"
+                class="w-48"
+              />
+            </div>
+            <div class="flex items-center gap-2">
+              <NText depth="2" class="w-20 text-sm">结束时间</NText>
+              <NInput
+                v-model:value="trimEnd"
+                :disabled="phase === 'running'"
+                placeholder="如 90、2:00"
+                class="w-48"
+              />
+            </div>
+          </div>
+          <NCheckbox v-model:checked="trimFastCopy" :disabled="phase === 'running'">
+            快速模式（流复制，起点可能偏移到关键帧）
+          </NCheckbox>
+        </template>
+
+        <template v-else-if="tab === 'extract-audio'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">目标格式</NText>
+            <select
+              v-model="extractFormat"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option v-for="opt in EXTRACT_FORMATS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">码率</NText>
+            <select
+              v-model.number="extractBitrate"
+              :disabled="phase === 'running' || extractIsLossless"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option :value="128">128 kbps</option>
+              <option :value="192">192 kbps</option>
+              <option :value="320">320 kbps</option>
+            </select>
+            <NText v-if="extractIsLossless" depth="3" class="text-xs">无损格式忽略码率</NText>
+          </div>
+        </template>
+
+        <template v-else-if="tab === 'audio-convert'">
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">目标格式</NText>
+            <select
+              v-model="audioFormat"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option v-for="opt in CONVERT_FORMATS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">码率</NText>
+            <select
+              v-model.number="audioBitrate"
+              :disabled="phase === 'running' || audioIsLossless"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option :value="128">128 kbps</option>
+              <option :value="192">192 kbps</option>
+              <option :value="320">320 kbps</option>
+            </select>
+            <NText v-if="audioIsLossless" depth="3" class="text-xs">无损格式忽略码率</NText>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">采样率</NText>
+            <select
+              v-model.number="audioSampleRate"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option :value="0">原始</option>
+              <option :value="44100">44100 Hz</option>
+              <option :value="48000">48000 Hz</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">声道</NText>
+            <select
+              v-model.number="audioChannels"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option :value="0">原始</option>
+              <option :value="1">单声道</option>
+              <option :value="2">立体声</option>
+            </select>
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">质量</NText>
+            <select
+              v-model="compressLevel"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option v-for="opt in QUALITY_OPTIONS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <NText depth="2" class="w-20 text-sm">分辨率上限</NText>
+            <select
+              v-model.number="compressMaxHeight"
+              :disabled="phase === 'running'"
+              class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
+            >
+              <option :value="0">原尺寸</option>
+              <option :value="1080">1080p</option>
+              <option :value="720">720p</option>
+              <option :value="480">480p</option>
+            </select>
+            <NText depth="3" class="text-xs">只缩不放</NText>
+          </div>
+        </template>
+
         <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">转换方式</NText>
-          <NRadioGroup v-model:value="transcodeMode" :disabled="phase === 'running'" size="small">
-            <NRadioButton value="encode">重新编码</NRadioButton>
-            <NRadioButton value="remux">仅换封装（快速）</NRadioButton>
-          </NRadioGroup>
-        </div>
-        <div v-if="showCodec" class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">编码器</NText>
-          <select
-            v-model="transcodeCodec"
-            :disabled="phase === 'running' || isRemux"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option value="h264">H.264（兼容性好）</option>
-            <option value="h265">H.265（体积更小，兼容性较差且较慢）</option>
-          </select>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">质量</NText>
-          <select
-            v-model="transcodeQuality"
-            :disabled="phase === 'running' || isRemux"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option v-for="opt in QUALITY_OPTIONS" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">分辨率</NText>
-          <select
-            v-model="resolutionValue"
-            :disabled="phase === 'running' || isRemux"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option value="original">原始</option>
-            <option value="1080">1080p</option>
-            <option value="720">720p</option>
-            <option value="480">480p</option>
-            <option value="custom">自定义</option>
-          </select>
-          <template v-if="resolutionKind === 'custom'">
-            <NInputNumber
-              v-model:value="customWidth"
-              :min="16"
-              :max="7680"
-              :step="2"
-              :disabled="phase === 'running' || isRemux"
-              placeholder="宽"
-              class="w-28"
-            />
-            <NText depth="3" class="text-xs">×</NText>
-            <NInputNumber
-              v-model:value="customHeight"
-              :min="16"
-              :max="7680"
-              :step="2"
-              :disabled="phase === 'running' || isRemux"
-              placeholder="高"
-              class="w-28"
-            />
-            <NText depth="3" class="text-xs">偶数</NText>
-          </template>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">帧率</NText>
-          <select
-            v-model.number="transcodeFps"
-            :disabled="phase === 'running' || isRemux"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option :value="0">原始</option>
-            <option :value="24">24 fps</option>
-            <option :value="25">25 fps</option>
-            <option :value="30">30 fps</option>
-            <option :value="60">60 fps</option>
-          </select>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">视频码率</NText>
-          <NInputNumber
-            v-model:value="videoBitrate"
-            :min="0"
-            :max="50000"
-            :step="100"
-            :disabled="phase === 'running' || isRemux"
-            class="w-32"
+          <NText depth="2" class="w-20 text-sm">输出目录</NText>
+          <NInput
+            v-model:value="outputDir"
+            :disabled="phase === 'running'"
+            placeholder="输出目录"
+            class="flex-1"
           />
-          <NText depth="3" class="text-xs">kbps，0 = 按质量档</NText>
+          <NButton :disabled="phase === 'running'" @click="chooseDir">
+            <FolderOpen class="mr-1 h-3.5 w-3.5" />选择
+          </NButton>
         </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">音频码率</NText>
-          <select
-            v-model.number="transcodeAudioBitrate"
-            :disabled="phase === 'running' || isRemux || removeAudio"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option :value="64">64 kbps</option>
-            <option :value="96">96 kbps</option>
-            <option :value="128">128 kbps</option>
-            <option :value="160">160 kbps</option>
-            <option :value="192">192 kbps</option>
-            <option :value="256">256 kbps</option>
-            <option :value="320">320 kbps</option>
-          </select>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">去音轨</NText>
-          <NSwitch v-model:value="removeAudio" :disabled="phase === 'running' || isRemux" />
-          <NText depth="3" class="text-xs">输出无音频（remux 不适用）</NText>
-        </div>
-        <NText v-if="isRemux && remuxIncompatible.length > 0" type="warning" class="text-xs">
-          {{ remuxIncompatible.length }} 个文件编码与
-          {{ transcodeFormat.toUpperCase() }} 不兼容，请改用重新编码
-        </NText>
-        <NText v-if="isRemux" depth="3" class="text-xs">
-          仅换封装不重新编码，速度最快，仅改变容器格式
-        </NText>
-      </template>
+      </NSpace>
 
-      <template v-else-if="tab === 'trim'">
-        <div class="flex flex-wrap items-center gap-3">
-          <div class="flex items-center gap-2">
-            <NText depth="2" class="w-20 text-sm">开始时间</NText>
-            <NInput
-              v-model:value="trimStart"
-              :disabled="phase === 'running'"
-              placeholder="如 0、1:30、01:02:03.5"
-              class="w-48"
-            />
-          </div>
-          <div class="flex items-center gap-2">
-            <NText depth="2" class="w-20 text-sm">结束时间</NText>
-            <NInput
-              v-model:value="trimEnd"
-              :disabled="phase === 'running'"
-              placeholder="如 90、2:00"
-              class="w-48"
-            />
-          </div>
-        </div>
-        <NCheckbox v-model:checked="trimFastCopy" :disabled="phase === 'running'">
-          快速模式（流复制，起点可能偏移到关键帧）
-        </NCheckbox>
-      </template>
-
-      <template v-else-if="tab === 'extract-audio'">
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">目标格式</NText>
-          <select
-            v-model="extractFormat"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option v-for="opt in EXTRACT_FORMATS" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">码率</NText>
-          <select
-            v-model.number="extractBitrate"
-            :disabled="phase === 'running' || extractIsLossless"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option :value="128">128 kbps</option>
-            <option :value="192">192 kbps</option>
-            <option :value="320">320 kbps</option>
-          </select>
-          <NText v-if="extractIsLossless" depth="3" class="text-xs">无损格式忽略码率</NText>
-        </div>
-      </template>
-
-      <template v-else-if="tab === 'audio-convert'">
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">目标格式</NText>
-          <select
-            v-model="audioFormat"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option v-for="opt in CONVERT_FORMATS" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">码率</NText>
-          <select
-            v-model.number="audioBitrate"
-            :disabled="phase === 'running' || audioIsLossless"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option :value="128">128 kbps</option>
-            <option :value="192">192 kbps</option>
-            <option :value="320">320 kbps</option>
-          </select>
-          <NText v-if="audioIsLossless" depth="3" class="text-xs">无损格式忽略码率</NText>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">采样率</NText>
-          <select
-            v-model.number="audioSampleRate"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option :value="0">原始</option>
-            <option :value="44100">44100 Hz</option>
-            <option :value="48000">48000 Hz</option>
-          </select>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">声道</NText>
-          <select
-            v-model.number="audioChannels"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option :value="0">原始</option>
-            <option :value="1">单声道</option>
-            <option :value="2">立体声</option>
-          </select>
-        </div>
-      </template>
-
-      <template v-else>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">质量</NText>
-          <select
-            v-model="compressLevel"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option v-for="opt in QUALITY_OPTIONS" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-        </div>
-        <div class="flex items-center gap-3">
-          <NText depth="2" class="w-20 text-sm">分辨率上限</NText>
-          <select
-            v-model.number="compressMaxHeight"
-            :disabled="phase === 'running'"
-            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-2 py-1 text-sm"
-          >
-            <option :value="0">原尺寸</option>
-            <option :value="1080">1080p</option>
-            <option :value="720">720p</option>
-            <option :value="480">480p</option>
-          </select>
-          <NText depth="3" class="text-xs">只缩不放</NText>
-        </div>
-      </template>
-
-      <div class="flex items-center gap-3">
-        <NText depth="2" class="w-20 text-sm">输出目录</NText>
-        <NInput
-          v-model:value="outputDir"
-          :disabled="phase === 'running'"
-          placeholder="输出目录"
-          class="flex-1"
-        />
-        <NButton :disabled="phase === 'running'" @click="chooseDir">
-          <FolderOpen class="mr-1 h-3.5 w-3.5" />选择
+      <!-- 操作区 -->
+      <NSpace>
+        <NButton
+          type="primary"
+          :disabled="
+            phase !== 'idle' || rows.length === 0 || (isRemux && remuxIncompatible.length > 0)
+          "
+          @click="runProcess()"
+        >
+          开始处理
         </NButton>
-      </div>
-    </NSpace>
+      </NSpace>
 
-    <!-- 操作区 -->
-    <NSpace>
-      <NButton
-        type="primary"
-        :disabled="
-          phase !== 'idle' || rows.length === 0 || (isRemux && remuxIncompatible.length > 0)
+      <!-- 加载态：进度可见 + 可取消（R4 强制） -->
+      <TaskProgress
+        v-if="phase === 'running' && progress !== null"
+        :message="
+          progress.message !== '' && progress.message !== undefined
+            ? `处理中 · ${progress.message}`
+            : '处理中…'
         "
-        @click="runProcess()"
-      >
-        开始处理
-      </NButton>
-    </NSpace>
+        :percent="progress.current"
+        @cancel="cancelTask"
+      />
 
-    <!-- 加载态：进度可见 + 可取消（R4 强制） -->
-    <TaskProgress
-      v-if="phase === 'running' && progress !== null"
-      :message="
-        progress.message !== '' && progress.message !== undefined
-          ? `处理中 · ${progress.message}`
-          : '处理中…'
-      "
-      :percent="progress.current"
-      @cancel="cancelTask"
-    />
+      <!-- 结果区：逐文件成功/失败 -->
+      <div v-if="results.length > 0 || resultFailures.length > 0" class="flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <NText depth="2" class="text-sm font-medium">
+            完成 {{ results.length }} 个<template v-if="resultFailures.length > 0"
+              >，失败 {{ resultFailures.length }} 个</template
+            >
+          </NText>
+          <div class="flex items-center gap-1">
+            <NButton v-if="hasRetryable" size="tiny" quaternary @click="retryFailed">
+              <RotateCcw class="mr-1 h-3.5 w-3.5" />重试失败项
+            </NButton>
+            <NButton size="tiny" quaternary @click="revealAll">
+              <FolderOpen class="mr-1 h-3.5 w-3.5" />打开所在文件夹
+            </NButton>
+          </div>
+        </div>
+        <div
+          v-for="item in results"
+          :key="item.output"
+          class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
+        >
+          <div class="min-w-0 flex-1">
+            <div class="truncate text-sm">
+              <PathLink
+                :path="item.output"
+                :label="item.output.replace(/^.*[\\/]/, '')"
+                :reveal="false"
+              />
+            </div>
+            <div class="text-xs text-[var(--lumin-color-text-secondary)]">
+              {{ formatClock(item.durationSec) }} · {{ formatBytes(item.beforeBytes) }} →
+              {{ formatBytes(item.afterBytes) }}
+            </div>
+          </div>
+          <NButton size="tiny" quaternary @click="reveal(item)">
+            <FolderOpen class="h-3.5 w-3.5" />
+          </NButton>
+        </div>
+        <div
+          v-for="fail in resultFailures"
+          :key="fail.input"
+          class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-error, #e88080)] px-3 py-1.5"
+        >
+          <NText type="error" class="block truncate text-sm">{{
+            fail.input.replace(/^.*[\\/]/, '')
+          }}</NText>
+          <NText depth="3" class="block text-xs">{{ errorMessage(fail.code) }}</NText>
+        </div>
+      </div>
 
-    <!-- 结果区：逐文件成功/失败 -->
-    <div v-if="results.length > 0 || resultFailures.length > 0" class="flex flex-col gap-2">
-      <div class="flex items-center justify-between">
-        <NText depth="2" class="text-sm font-medium">
-          完成 {{ results.length }} 个<template v-if="resultFailures.length > 0"
-            >，失败 {{ resultFailures.length }} 个</template
-          >
+      <!-- 报错态：结构化错误码 → 中文文案 + 详情 -->
+      <div v-if="error !== null" class="flex flex-col gap-1">
+        <NText type="error" class="text-sm">
+          <Film class="mr-1 inline h-3.5 w-3.5" />{{ error.message }}
         </NText>
-        <div class="flex items-center gap-1">
-          <NButton v-if="hasRetryable" size="tiny" quaternary @click="retryFailed">
-            <RotateCcw class="mr-1 h-3.5 w-3.5" />重试失败项
-          </NButton>
-          <NButton size="tiny" quaternary @click="revealAll">
-            <FolderOpen class="mr-1 h-3.5 w-3.5" />打开所在文件夹
-          </NButton>
-        </div>
-      </div>
-      <div
-        v-for="item in results"
-        :key="item.output"
-        class="flex items-center justify-between rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border, #e0e0e6)] px-3 py-1.5"
-      >
-        <div class="min-w-0 flex-1">
-          <div class="truncate text-sm">
-            <PathLink
-              :path="item.output"
-              :label="item.output.replace(/^.*[\\/]/, '')"
-              :reveal="false"
-            />
-          </div>
-          <div class="text-xs text-[var(--lumin-color-text-secondary)]">
-            {{ formatClock(item.durationSec) }} · {{ formatBytes(item.beforeBytes) }} →
-            {{ formatBytes(item.afterBytes) }}
-          </div>
-        </div>
-        <NButton size="tiny" quaternary @click="reveal(item)">
-          <FolderOpen class="h-3.5 w-3.5" />
-        </NButton>
-      </div>
-      <div
-        v-for="fail in resultFailures"
-        :key="fail.input"
-        class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-error, #e88080)] px-3 py-1.5"
-      >
-        <NText type="error" class="block truncate text-sm">{{
-          fail.input.replace(/^.*[\\/]/, '')
-        }}</NText>
-        <NText depth="3" class="block text-xs">{{ errorMessage(fail.code) }}</NText>
+        <details v-if="errorDetail !== ''">
+          <summary class="cursor-pointer text-xs text-[var(--lumin-color-text-secondary)]">
+            详情
+          </summary>
+          <NText depth="3" class="block break-all text-xs">{{ errorDetail }}</NText>
+        </details>
       </div>
     </div>
 
-    <!-- 报错态：结构化错误码 → 中文文案 + 详情 -->
-    <div v-if="error !== null" class="flex flex-col gap-1">
-      <NText type="error" class="text-sm">
-        <Film class="mr-1 inline h-3.5 w-3.5" />{{ error.message }}
-      </NText>
-      <details v-if="errorDetail !== ''">
-        <summary class="cursor-pointer text-xs text-[var(--lumin-color-text-secondary)]">
-          详情
-        </summary>
-        <NText depth="3" class="block break-all text-xs">{{ errorDetail }}</NText>
-      </details>
-    </div>
+    <!-- 播放页签（v-show 常驻：切走不销毁播放状态） -->
+    <PlayerTab v-show="tab === 'player'" />
+
+    <!-- 下载页签（懒挂载：首次切入才实例化，免责弹窗不在打开工具时弹出） -->
+    <DownloadTab v-if="downloadMounted" v-show="tab === 'download'" />
   </div>
 </template>

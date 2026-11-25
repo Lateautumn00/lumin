@@ -182,6 +182,7 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 - 图片三件套合并决策（2026-11-25，plan Q71/M70）：`image-rotate` / `image-crop` **整包并入 `image-toolbox`** 为「旋转」「裁剪」两 Tab，删除两包与侧边栏入口、薄壳页、e2e；`process` union 与 `historyModeSchema` 增 `rotate`/`crop`，错误码统一 `IT_*`，产物扩展名沿用 `compressOutputExt`（gif/webp→webp，动图取首帧）；**零新增依赖/二进制**；修改须重走 R8
 - 文件扫描套件合并决策（2026-11-25，plan Q72/M71）：`file-hasher` / `duplicate-finder` / `folder-compare` **整包并入 `file-scanner`** 为「文件校验 / 重复文件 / 目录对比」三页签，删除三包与侧边栏入口、薄壳页、e2e（3 入口 → 1）；通道统一 `file-scanner:*`（`hash-*` / `dup-*` / `compare-*` 共 9 个），错误码保留 `FH_*`/`DF_*`/`FC_*`；**零新增依赖/二进制**；修改须重走 R8
 - 图片剩余三件套合并决策（2026-11-25，plan Q72/M72）：`image-watermark` / `image-dewatermark` / `image-stitch` **整包并入 `image-toolbox`** 为「水印 / 去水印 / 拼接」三 Tab，删除三包与侧边栏入口、薄壳页、e2e（图片入口 4 → 1）；通道统一 `image-toolbox:*`（10 个，按页签加前缀），错误码保留 `IW_*`/`IDW_*`/`IS_*`；设置键 `watermarkOutputDir` / `dewatermarkOutputDir` / `stitchOutputDir`；**零新增依赖/二进制**；修改须重走 R8
+- 视频下载/播放器合并决策（2026-11-25，plan Q73/M73）：`video-download` / `video-player` **整包并入 `media-convert`**（id 不变，显示名「媒体工具箱」，`version 0.3.0`）为「下载 / 播放」两页签，删除两包与侧边栏入口、薄壳页、e2e（媒体入口 3 → 1）；宿主五通道不变，子功能经上下文适配器加前缀 `media-convert:download-*` / `media-convert:player-*`；settings 迁至 `tools.media-convert.download.*`（旧键不迁移）；下载页签**懒挂载**防免责弹窗误弹；错误码保留 `VD_*`/`VP_*`；**零新增依赖/二进制**；修改须重走 R8
 
 ---
 

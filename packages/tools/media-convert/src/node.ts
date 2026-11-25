@@ -11,7 +11,13 @@ import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { runProcess, tail, type RunProcessResult } from '@lumin/node-kit'
 import { isStructuredError, makeError } from '@lumin/shared'
-import type { MainPluginContext, RegisterMain, TaskHandlerContext } from '@lumin/plugin-api'
+import type {
+  IpcHandler,
+  MainPluginContext,
+  RegisterMain,
+  TaskHandler,
+  TaskHandlerContext
+} from '@lumin/plugin-api'
 import {
   MAX_FILE_BYTES,
   configResultSchema,
@@ -56,6 +62,8 @@ import {
   buildTrimName,
   uniqueName
 } from './naming'
+import { registerMain as registerDownloadMain } from './download/node'
+import { registerMain as registerPlayerMain } from './player/node'
 
 /** 可注入依赖（单测传假件；image-toolbox/file-hasher 同口径） */
 export interface MediaConvertDeps {
@@ -81,6 +89,29 @@ export const PROCESS_TIMEOUT_MS = 30 * 60 * 1000
 
 /** 设置键：输出目录记忆（settings 命名空间由壳按工具 id 隔离） */
 const SETTINGS_KEY = 'outputDir'
+
+/**
+ * 子功能上下文适配（M73 整包并入）：通道加 `{prefix}-`、settings 键加 `{prefix}.` 前缀，
+ * 子模块仍按自身裸 action / 裸键编写，合并后互不冲突且单测零改动
+ * @param ctx 宿主主进程上下文
+ * @param prefix 页签前缀（download / player）
+ */
+function namespacedContext(
+  ctx: MainPluginContext,
+  prefix: 'download' | 'player'
+): MainPluginContext {
+  return {
+    ...ctx,
+    registerIpc: <P, R>(action: string, handler: IpcHandler<P, R>) =>
+      ctx.registerIpc(`${prefix}-${action}`, handler),
+    registerTask: <P, R>(action: string, handler: TaskHandler<P, R>) =>
+      ctx.registerTask(`${prefix}-${action}`, handler),
+    settings: {
+      get: <T>(key: string, defaultValue: T) => ctx.settings.get(`${prefix}.${key}`, defaultValue),
+      set: <T>(key: string, value: T) => ctx.settings.set(`${prefix}.${key}`, value)
+    }
+  }
+}
 
 /**
  * 从子进程输出提取诊断尾行（detail 用；超时给专属文案）
@@ -203,6 +234,10 @@ export function registerWith(ctx: MainPluginContext, deps: MediaConvertDeps): vo
       throw err
     }
   })
+
+  // —— 整包并入页签（M73）：下载 / 播放各自前缀注册，宿主五页签逻辑不动 ——
+  registerDownloadMain(namespacedContext(ctx, 'download'))
+  registerPlayerMain(namespacedContext(ctx, 'player'))
 
   ctx.log.info('media-convert registered', { engineDir })
 }

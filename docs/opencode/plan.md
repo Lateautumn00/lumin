@@ -83,6 +83,7 @@
 | Q70 | 页面切分（M69，2026-11-25 用户拍板）           | **`exam-split` 在 OCR 页签内置「切成两页」处理方式（默认选中，与「识别切题」互斥切换；不新增第三个页签；零新增依赖、零新增二进制）**：单文件输入（PDF / png/jpg/jpeg/webp）；**纯像素检测**（灰度 → Otsu → 纸张亮区包围盒（仅深色边带裁边）→ 纸面竖向墨迹投影找 33%–67% 中央装订沟，低于均值 35% 且宽 ≥0.8% 页宽才算沟，无沟回退 0.5）；**竖版（宽 < 高×1.15）→ `PAGE_NOT_SPREAD`**，不静默硬切；PDF 逐页渲染检测后**两次独立 `copyPages`** 得左/右副本 → `setMediaBox`/`setCropBox` 收窄为半页 → **单文件 2N 页（左→右）**；图片按纸面裁左/右 → **同格式编码**（PNG 无损 / JPEG·WebP q95）左右成对写盘；产物 `{原名}_对半切.pdf` / `{原名}_左.ext`+`{原名}_右.ext`；详见 §4.69 |
 | Q71 | 图片三件套合并（M70，2026-11-25 用户拍板「先做图片三件套合并，用户能直接感知入口精简」） | **`image-rotate` / `image-crop` 整包合并进 `image-toolbox`**：新增「旋转」「裁剪」两 Tab（`TabId` 扩为 compress/convert/resize/rotate/crop/effect/gif），删除两个独立工具包、两个侧边栏入口、两个薄壳页与两个 e2e 文件；`process` discriminated union 增 `mode:'rotate'|'crop'`，`historyModeSchema` 同步；错误码统一 `IT_*`（原 `IR_*`/`IC_*` 归并）；产物扩展名沿用 `compressOutputExt`（gif/webp→webp，动图取首帧）；**零新增依赖/二进制**；详见 §4.70 |
 | Q72 | 图片剩余三件套合并（M72，2026-11-25 用户拍板「继续优化其他功能模块」） | **`image-watermark` / `image-dewatermark` / `image-stitch` 整包合并进 `image-toolbox`**：新增「水印」「去水印」「拼接」三 Tab（`TabId` 扩为 compress/convert/resize/rotate/crop/effect/gif/watermark/dewatermark/stitch），删除三个独立工具包、三个侧边栏入口、三个薄壳页与三个 e2e 文件（图片入口 4 → 1）；通道收敛为 `image-toolbox:watermark|dewatermark|stitch|split` + `{页签}-config` / `{页签}-set-output-dir`；错误码保留 `IW_*` / `IDW_*` / `IS_*` 前缀；**零新增依赖/二进制**；详见 §4.72 |
+| Q73 | 视频下载 / 播放器合并（M73，2026-11-25 用户拍板「继续优化其他功能模块」） | **`video-download` / `video-player` 整包合并进 `media-convert`（id 不变，显示名「媒体工具箱」，`version 0.3.0`）**：新增「下载」「播放」两页签（`TabId` 扩为 transcode/trim/extract-audio/audio-convert/compress/download/player），删除两个独立工具包、两个侧边栏入口、两个薄壳页与对应 e2e（媒体入口 3 → 1）；通道收敛 `media-convert:download-*` / `media-convert:player-*`；settings 键迁到 `tools.media-convert.download.*`（`history` / `disclaimerAccepted` / `cookies.<platform>`，旧键不迁移）；错误码保留 `VD_*` / `VP_*` 前缀；下载页签**懒挂载**，免责弹窗不在打开工具箱时弹出；**零新增依赖/二进制**；详见 §4.73 |
 | —   | 硬约束                                         | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -1013,6 +1014,19 @@ lumin/
 
 ---
 
+### 4.73 视频下载 / 播放器合并（M73，2026-11-25 R8 登记）
+
+- **决策（用户拍板 2026-11-25）**：把 `@lumin/tool-video-download`、`@lumin/tool-video-player` **两包整包合并**进 `@lumin/tool-media-convert`（id 保持 `media-convert`，**显示名改为「媒体工具箱」**，`version 0.3.0`），新增「下载」「播放」两页签；**删除两个旧包**及侧边栏入口、薄壳页与 e2e（侧边栏 media 入口 3 → 1）。**零新增依赖、零新增二进制**（下载沿用 `binaries/download/yt-dlp.exe` 与 ffmpeg，播放沿用壳的 `lumin-media://` 协议）。
+- **包内结构**：`src/download/`（原 video-download 的 `schema / errors / progress / history / cookies / browser-cookies / node` 与单测）、`src/player/`（原 video-player 的 `schema / errors / formats / node` 与单测）；`src/renderer/clients/{download,player}.ts` 为两页签 invoke 封装；`renderer/tabs/{DownloadTab,PlayerTab,CookieDialog}.vue` 为页签视图。
+- **通道收敛**：宿主五页签通道（`probe` / `config` / `set-output-dir` / `process`）**不变**；子功能经上下文适配器统一加前缀——`media-convert:download-probe|start|mark-pause|history|history:clear|cookie:list|cookie:set|cookie:remove|cookie:import-browser`、`media-convert:player-resolve`。
+- **错误码**：保留原 `VD_*` / `VP_*` 前缀（降低回归风险），取消统一 `CANCELLED`。
+- **设置记忆**：共用 `tools.media-convert.*` 命名空间——宿主 `outputDir`；下载 `download.history` / `download.disclaimerAccepted` / `download.cookies.<platform>`；播放无持久化。**旧工具 id 的存量设置不迁移**（免责状态、历史与 Cookie 需重新设置；免责二次弹窗属安全优先的可接受成本）。
+- **合并方式**：子模块 `registerMain` 经 `namespacedContext(ctx, 'download' | 'player')` 适配（通道加 `{prefix}-`、settings 键加 `{prefix}.`），子模块逻辑与单测零改动；父 `ToolView.vue` 用 `LEGACY_TABS` + `v-show` 保留宿主五页签状态，**下载页签懒挂载**（首次切入才实例化，规避 plan §4.5 免责弹窗在打开工具箱时误弹）。
+- **注册点清理**：`tool-manifests.ts`、`main/tool-mains.ts`、`electron.vite.config.ts` 三端 alias、`apps/desktop/package.json`、`vitest.config.ts` 覆盖率分组移除两包；删除 `renderer/src/tools/{video-download,video-player}.vue`；e2e 改名为 `apps/desktop/e2e/media-toolbox-{download,player}.spec.ts`（进入「媒体工具箱」后切页签）；`docs/spec|smoke` 两套旧文档改名 `media-convert-{download,player}.md` 并同步通道/设置键。
+- **验收**：两包测试全部并入新包且本包覆盖率 ≥80%；e2e 断言七页签加载/空态、下载免责三态与假引擎主链路、播放解析与真实 WebM 播放、错误码；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步。
+
+---
+
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
 
 ### 5.1 精选 8 份 → AGENTS.md（已生成于根目录）
@@ -1128,6 +1142,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M70 v5.17** | 图片三件套合并（§4.70，2026-11-25 用户拍板）：`image-rotate`（M33）/`image-crop`（M35）**整包并入 `image-toolbox`** 为「旋转」「裁剪」两 Tab，删除两包与侧边栏入口/薄壳页/e2e；`process` union + `historyModeSchema` 增 rotate/crop；错误码统一 `IT_*`；产物扩展名沿用 `compressOutputExt`，动图取首帧；零新增依赖/二进制 | §4.70 验收；toolbox 覆盖率 ≥80%；e2e 旋转尺寸/翻转冲突命名/裁剪尺寸/混合失败码；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
 | **M71 v5.18** | 文件扫描套件合并（§4.71，2026-11-25 用户拍板）：`file-hasher`（M13）/`duplicate-finder`（M18）/`folder-compare`（M24）**三包整包并入 `file-scanner`** 为「文件校验 / 重复文件 / 目录对比」三页签，删除三包与侧边栏入口/薄壳页/e2e（3 入口 → 1）；9 通道 `file-scanner:*`；错误码保留 `FH_*`/`DF_*`/`FC_*`；零新增依赖/二进制 | §4.71 验收；本包覆盖率 ≥80%；e2e 三页签加载/四算法向量/期望哈希/重复分组/对比分类与内容比较/错误码/取消/并发/强杀恢复；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
 | **M72 v5.19** | 图片剩余三件套合并（§4.72，2026-11-25 用户拍板）：`image-watermark`（M20）/`image-dewatermark`（M31）/`image-stitch`（M14/M40）**三包整包并入 `image-toolbox`** 为「水印 / 去水印 / 拼接」三 Tab，删除三包与侧边栏入口/薄壳页/e2e（图片入口 4 → 1）；10 通道 `image-toolbox:*`；错误码保留 `IW_*`/`IDW_*`/`IS_*`；零新增依赖/二进制 | §4.72 验收；本包覆盖率 ≥80%；e2e 三页签加载/水印批量出图与原名保护/去水印框选出图/拼接出图与按份数切分；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
+| **M73 v5.20** | 视频下载 / 播放器合并（§4.73，2026-11-25 用户拍板）：`video-download`（M4/M5）/`video-player`（M56）**整包并入 `media-convert`** 为「下载 / 播放」两页签，显示名改「媒体工具箱」，删除两包与侧边栏入口/薄壳页/e2e（媒体入口 3 → 1）；通道 `media-convert:download-*` / `media-convert:player-*`；错误码保留 `VD_*`/`VP_*`；下载页签懒挂载防免责误弹；零新增依赖/二进制 | §4.73 验收；本包覆盖率 ≥80%；e2e 七页签加载/下载免责三态与假引擎主链路/播放解析与真实 WebM；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

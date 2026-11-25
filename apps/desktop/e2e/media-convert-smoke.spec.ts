@@ -1,5 +1,5 @@
 /**
- * @file media-convert（音视频处理）e2e 冒烟：真实 Electron + 真实 ffmpeg 二进制
+ * @file media-convert（媒体工具箱）e2e 冒烟：真实 Electron + 真实 ffmpeg 二进制
  * @author cuilanchao
  * @date 2026-11-19
  * @description 覆盖 spec §8：probe（中文+空格路径/音频-only/损坏）、转码 webm、截取（精确/快速）、
@@ -196,7 +196,7 @@ function transcodeOptions(overrides: Record<string, unknown> = {}): Record<strin
   }
 }
 
-test.describe('media-convert（音视频处理）冒烟', () => {
+test.describe('media-convert（媒体工具箱）冒烟', () => {
   test.beforeAll(async () => {
     test.skip(!fs.existsSync(ffmpeg), '缺少 ffmpeg（先跑 node scripts/fetch-binaries.mjs）')
   })
@@ -209,15 +209,17 @@ test.describe('media-convert（音视频处理）冒烟', () => {
     fs.rmSync(workDir, { recursive: true, force: true })
     fs.mkdirSync(workDir, { recursive: true })
     try {
-      await clickSidebarTool(page, '音视频处理')
-      await expect(page.getByRole('heading', { name: '音视频处理' })).toBeVisible()
-      // 五 Tab 标签可见（naive-ui 自闭合 pane 渲染回归）
+      await clickSidebarTool(page, '媒体工具箱')
+      await expect(page.getByRole('heading', { name: '媒体工具箱' })).toBeVisible()
+      // 七 Tab 标签可见（naive-ui 自闭合 pane 渲染回归；M73 追加下载/播放）
       for (const [name, label] of [
         ['transcode', '格式转换'],
         ['trim', '截取'],
         ['extract-audio', '提取音频'],
         ['audio-convert', '音频互转'],
-        ['compress', '压缩']
+        ['compress', '压缩'],
+        ['download', '下载'],
+        ['player', '播放']
       ] as const) {
         const tab = page.locator(`.n-tabs-tab[data-name="${name}"]`)
         await expect(tab).toBeVisible()

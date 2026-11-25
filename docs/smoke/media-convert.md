@@ -2,7 +2,7 @@
 
 > 版本：v0.3.0 · 日期：2026-11-19（M14）/ 2026-11-21（M50 音频互转）/ 2026-11-23（M57 格式转换增强）· 环境：Windows 11 x64 / Electron（本地构建）
 > 依据：AGENTS §7.3（R2 八类全覆盖）+ §8（R5 chunk）+ §5.3（三态）。
-> 自动化：单测 `pnpm vitest run --project @lumin/tool-media-convert`（**103/103**）；e2e `apps/desktop/e2e/media-convert-smoke.spec.ts`（**12 用例**，`beforeAll` 检测 `binaries/download/ffmpeg.exe`，缺失时整组 skip）。
+> 自动化：单测 `pnpm vitest run --project @lumin/tool-media-convert`（**245/245**，含并入的下载/播放子模块）；e2e `apps/desktop/e2e/media-convert-smoke.spec.ts`（**12 用例**，`beforeAll` 检测 `binaries/download/ffmpeg.exe`，缺失时整组 skip）。
 >
 > **M57 复跑（2026-11-23）**：本机 `binaries/download/ffmpeg.exe`（6.1.1 essentials）就绪，e2e **12/12 真实执行并通过**，含新增「8 容器格式矩阵」「remux 直通与不兼容」「H.265/自定义分辨率/帧率/码率/去音轨」「aac/opus 采样率声道」四组用例。下表仍保留未真实执行的 R2 类别（占用/加密/VHD 磁盘满/强杀）待手工补录。
 
@@ -51,14 +51,15 @@
 
 ## 4. chunk 实测（R5）
 
-| 产物                                      | raw      | gzip     | 口径说明                                                          |
-| ----------------------------------------- | -------- | -------- | ----------------------------------------------------------------- |
-| `renderer/assets/media-convert-*.js`      | 63,462 B | 14,268 B | M57 实测（五 Tab + 8 容器/remux/高级参数），工具 chunk 基线 200KB |
-| `renderer/assets/Switch-*.js`（独占依赖） | 15,963 B | 4,009 B  | 新增 `NSwitch`（去音轨）；若其他工具已用则为共享 vendor，口径内计 |
-| `renderer/assets/RadioButton-*.js`        | 1,872 B  | 766 B    | 新增 `NRadioButton`（转换方式）                                   |
-| 历史 `media-convert-CBt5i4P-.js`（M50）   | 38,569 B | 10,106 B | 五 Tab 版本，M57 改动 +24,893 B raw / +4,162 B gzip               |
+| 产物                                      | raw       | gzip     | 口径说明                                                          |
+| ----------------------------------------- | --------- | -------- | ----------------------------------------------------------------- |
+| `renderer/assets/media-convert-*.js`（M73） | 107,332 B | 25,640 B | 七 Tab（并入下载/播放页签）实测；工具 chunk 基线 200KB            |
+| `renderer/assets/media-convert-*.js`（M57） | 63,462 B  | 14,268 B | 五 Tab + 8 容器/remux/高级参数                                    |
+| `renderer/assets/Switch-*.js`（独占依赖） | 15,963 B  | 4,009 B  | 新增 `NSwitch`（去音轨）；若其他工具已用则为共享 vendor，口径内计 |
+| `renderer/assets/RadioButton-*.js`        | 1,872 B   | 766 B    | 新增 `NRadioButton`（转换方式）                                   |
+| 历史 `media-convert-CBt5i4P-.js`（M50）   | 38,569 B  | 10,106 B | 五 Tab 版本，M57 改动 +24,893 B raw / +4,162 B gzip               |
 
-结论：工具增量（chunk + 独占 Switch/RadioButton）**≈19.0KB gzip**，远低于 200KB 基线；零新增第三方依赖（复用 `binaries/download/ffmpeg.exe`，fetcher 固定 URL + SHA256 校验，不入 git），主进程逻辑不进入 renderer。
+结论：M73 合并下载/播放后工具 chunk **107,332 B raw / 25,640 B gzip**（+43,870 B raw / +11,372 B gzip，替换原两个独立工具 chunk），仍远低于 200KB 基线；下载/播放视图未引入新第三方依赖（复用 `binaries/download/{yt-dlp,ffmpeg}.exe` 与壳 `lumin-media://` 协议，fetcher 固定 URL + SHA256 校验，不入 git），主进程逻辑不进入 renderer。
 
 ## 5. 补测指引
 

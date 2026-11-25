@@ -15,7 +15,7 @@
  * cls 与字典以上游不可达时的本机实测值钉死（2026-11-16，见 plan §4.4 M3b 记录）。
  * 下载引擎：yt-dlp 2026.10.26 官方 Release（SHA256 本机实测钉死）；ffmpeg 来自
  * ffmpeg-static b6.1.1 Release（win32-x64，.gz 压缩变体，SHA256 为解压后本机实测钉死，
- * 2026-11-18，见 docs/smoke/video-download.md）。ffprobe 已于 2026-11-19 移除（体积优化，
+ * 2026-11-18，见 docs/smoke/media-convert-download.md）。ffprobe 已于 2026-11-19 移除（体积优化，
  * 图片元信息改由 `ffmpeg -i` stderr 解析，见 plan §4.10）。
  */
 import { createHash } from 'node:crypto'

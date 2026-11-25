@@ -56,8 +56,6 @@
     "@lumin/tool-text-toolbox": "workspace:*",
     "@lumin/tool-time-toolbox": "workspace:*",
     "@lumin/tool-unit-converter": "workspace:*",
-    "@lumin/tool-video-download": "workspace:*",
-    "@lumin/tool-video-player": "workspace:*",
     "@lumin/tool-zip-tool": "workspace:*",
     "@playwright/test": "1.65.0",
     "@tailwindcss/vite": "4.3.5",

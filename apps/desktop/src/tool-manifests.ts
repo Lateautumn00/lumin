@@ -30,8 +30,6 @@ import { manifest as textEditorManifest } from '@lumin/tool-text-editor/manifest
 import { manifest as textToolboxManifest } from '@lumin/tool-text-toolbox/manifest'
 import { manifest as timeToolboxManifest } from '@lumin/tool-time-toolbox/manifest'
 import { manifest as unitConverterManifest } from '@lumin/tool-unit-converter/manifest'
-import { manifest as videoDownloadManifest } from '@lumin/tool-video-download/manifest'
-import { manifest as videoPlayerManifest } from '@lumin/tool-video-player/manifest'
 import { manifest as zipToolManifest } from '@lumin/tool-zip-tool/manifest'
 
 /** 壳内唯一工具清单（Q14）：新增工具 = 新包 + 此处 1 行 + tool-mains 1 行（如有主进程）+ renderer 薄壳 1 行 */
@@ -53,8 +51,6 @@ export const toolManifests: readonly ToolManifest[] = [
   mindmapManifest,
   markdownToolManifest,
   textDiffManifest,
-  videoDownloadManifest,
-  videoPlayerManifest,
   fileScannerManifest,
   mediaConvertManifest,
   qrCodeManifest,

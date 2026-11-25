@@ -341,12 +341,6 @@ importers:
       '@lumin/tool-unit-converter':
         specifier: workspace:*
         version: link:../../packages/tools/unit-converter
-      '@lumin/tool-video-download':
-        specifier: workspace:*
-        version: link:../../packages/tools/video-download
-      '@lumin/tool-video-player':
-        specifier: workspace:*
-        version: link:../../packages/tools/video-player
       '@lumin/tool-zip-tool':
         specifier: workspace:*
         version: link:../../packages/tools/zip-tool
@@ -1291,57 +1285,6 @@ importers:
       vue:
         specifier: 3.5.45
         version: 3.5.45(typescript@6.0.3)
-
-  packages/tools/video-download:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-
-  packages/tools/video-player:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
 
   packages/tools/zip-tool:
     dependencies:
