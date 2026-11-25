@@ -721,6 +721,16 @@ describe('createNodeDeps 真实实现', () => {
     await expect(deps.queryRegistry('HKLM\\SOFTWARE\\LibreOffice')).resolves.toBe(
       'C:\\LO\\program\\'
     )
+    // 真实注册表输出：值名为 (Default) / 带版本号，且先出现键名标题行
+    vi.mocked(runProcess).mockResolvedValueOnce(
+      okResult({
+        stdout:
+          'HKEY_LOCAL_MACHINE\\SOFTWARE\\LibreOffice\\UNO\\InstallPath\r\n' +
+          '    (Default)    REG_SZ    D:\\software\\LibreOffice\\program\r\n' +
+          '    LibreOffice 26.8    REG_SZ    D:\\software\\LibreOffice\\program\r\n'
+      })
+    )
+    await expect(deps.queryRegistry('x')).resolves.toBe('D:\\software\\LibreOffice\\program')
     vi.mocked(runProcess).mockResolvedValueOnce(okResult({ code: 1 }))
     await expect(deps.queryRegistry('x')).resolves.toBeNull()
     vi.mocked(runProcess).mockRejectedValueOnce(new Error('boom'))

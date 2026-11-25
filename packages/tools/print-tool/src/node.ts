@@ -34,6 +34,7 @@ import {
   convertDetail,
   locateSoffice,
   moveFile,
+  parseRegistryInstallPath,
   pickSofficeCommand,
   precheckInput,
   producedPdfPath,
@@ -625,8 +626,9 @@ export function createNodeDeps(): PrintDeps {
           maxOutputChars: 8192
         })
         if (result.code !== 0) return null
-        const match = /InstallPath\s+REG_SZ\s+(.+)/i.exec(result.stdout)
-        return match?.[1]?.trim() ?? null
+        // 与 docx2pdf / file-preview 共用同一解析口径：兼容 (Default) 与具名值、
+        // REG_SZ / REG_EXPAND_SZ，避免因值名不同导致已安装却判定未检测到
+        return parseRegistryInstallPath(result.stdout)
       } catch {
         return null
       }
