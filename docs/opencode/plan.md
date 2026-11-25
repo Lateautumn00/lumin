@@ -84,6 +84,7 @@
 | Q71 | 图片三件套合并（M70，2026-11-25 用户拍板「先做图片三件套合并，用户能直接感知入口精简」） | **`image-rotate` / `image-crop` 整包合并进 `image-toolbox`**：新增「旋转」「裁剪」两 Tab（`TabId` 扩为 compress/convert/resize/rotate/crop/effect/gif），删除两个独立工具包、两个侧边栏入口、两个薄壳页与两个 e2e 文件；`process` discriminated union 增 `mode:'rotate'|'crop'`，`historyModeSchema` 同步；错误码统一 `IT_*`（原 `IR_*`/`IC_*` 归并）；产物扩展名沿用 `compressOutputExt`（gif/webp→webp，动图取首帧）；**零新增依赖/二进制**；详见 §4.70 |
 | Q72 | 图片剩余三件套合并（M72，2026-11-25 用户拍板「继续优化其他功能模块」） | **`image-watermark` / `image-dewatermark` / `image-stitch` 整包合并进 `image-toolbox`**：新增「水印」「去水印」「拼接」三 Tab（`TabId` 扩为 compress/convert/resize/rotate/crop/effect/gif/watermark/dewatermark/stitch），删除三个独立工具包、三个侧边栏入口、三个薄壳页与三个 e2e 文件（图片入口 4 → 1）；通道收敛为 `image-toolbox:watermark|dewatermark|stitch|split` + `{页签}-config` / `{页签}-set-output-dir`；错误码保留 `IW_*` / `IDW_*` / `IS_*` 前缀；**零新增依赖/二进制**；详见 §4.72 |
 | Q73 | 视频下载 / 播放器合并（M73，2026-11-25 用户拍板「继续优化其他功能模块」） | **`video-download` / `video-player` 整包合并进 `media-convert`（id 不变，显示名「媒体工具箱」，`version 0.3.0`）**：新增「下载」「播放」两页签（`TabId` 扩为 transcode/trim/extract-audio/audio-convert/compress/download/player），删除两个独立工具包、两个侧边栏入口、两个薄壳页与对应 e2e（媒体入口 3 → 1）；通道收敛 `media-convert:download-*` / `media-convert:player-*`；settings 键迁到 `tools.media-convert.download.*`（`history` / `disclaimerAccepted` / `cookies.<platform>`，旧键不迁移）；错误码保留 `VD_*` / `VP_*` 前缀；下载页签**懒挂载**，免责弹窗不在打开工具箱时弹出；**零新增依赖/二进制**；详见 §4.73 |
+| Q74 | 思维导图交互升级（M74，2026-11-25 用户拍板「当前思维导图不好用，优化一下，调研主流的思维导图工具」后选「全选 A–E」） | **`mindmap` v0.2.0**：新增①导图/大纲双视图（库内置 `Outliner`，同一文档、共享撤销栈）；②节点操作条（加子级/同级/父级、上下移、删除、备注与链接）；③`Ctrl+F` 搜索定位（主题 + 备注）；④从文本大纲生成/追加（Markdown 优先、纯文本缩进回退）；⑤细节打磨（工具栏 tooltip、快捷键帮助、边框改「无/细/粗 + 颜色」、字号下拉、多选批量样式）；**零新增依赖/二进制**，解冻 spec §0.3「由文本生成导图」一项（OCR/AI 仍冻结）；详见 §4.74 |
 | —   | 硬约束                                         | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -1025,6 +1026,17 @@ lumin/
 - **注册点清理**：`tool-manifests.ts`、`main/tool-mains.ts`、`electron.vite.config.ts` 三端 alias、`apps/desktop/package.json`、`vitest.config.ts` 覆盖率分组移除两包；删除 `renderer/src/tools/{video-download,video-player}.vue`；e2e 改名为 `apps/desktop/e2e/media-toolbox-{download,player}.spec.ts`（进入「媒体工具箱」后切页签）；`docs/spec|smoke` 两套旧文档改名 `media-convert-{download,player}.md` 并同步通道/设置键。
 - **验收**：两包测试全部并入新包且本包覆盖率 ≥80%；e2e 断言七页签加载/空态、下载免责三态与假引擎主链路、播放解析与真实 WebM 播放、错误码；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步。
 
+### 4.74 思维导图交互升级（M74，2026-11-25 R8 登记）
+
+- **决策（用户拍板 2026-11-25）**：对 `@lumin/tool-mindmap` 做交互升级（`version 0.2.0`），解决「只能一个个点、操作发现不了、大图找不到节点、录入慢」。范围 A–E 全选，**零新增依赖、零新增二进制**：全部复用已锁定 `mind-elixir@6.0.3` 自带能力（`Outliner`、`addChild`/`insertSibling`/`insertParent`/`moveUpNode`/`moveDownNode`/`removeNodes`、`findEle`/`selectNode`/`scrollIntoView`）。
+- **A 大纲视图**：工具栏「导图 / 大纲」分段切换；`new Outliner({ el, mei, fileName, i18n })` 绑定**同一实例**，双向同步且共享撤销栈；容器加 `dark` 类跟随壳主题，切主题重建；切页/新建/打开/导入前先 `destroy()`；创建失败回退导图并报结构化错误。
+- **B 节点操作条与备注/链接**：选中节点浮出操作条（`Plus` 子级、`ListPlus` 同级、`CornerUpLeft` 父级、`ArrowUp`/`ArrowDown` 上下移、`MessageSquare` 备注/链接、`Trash` 删除）；根节点过滤不可删，多选批量删除；备注写入 `note`、链接仅放行 http/https/mailto，空串清除。
+- **C 搜索定位**：新增纯函数 `searchNodes(data, keyword, limit=50)`（主题 + 备注、忽略大小写、返回 `{id,topic,path,matchedNote}`）；点击命中先切回导图、展开祖先链、选中并居中；`Ctrl+F` 聚焦、`Esc` 收起。
+- **D 从文本生成**：新增 `importOutlineText(text, newId)`——先按 Markdown 解析，`MM_IMPORT_INVALID` 时回退纯文本缩进大纲（2 空格或 1 Tab 一级），返回 `{data, warnings, entries}`；弹窗支持「追加到选中节点 / 替换当前导图」，追加走 `mei.addChild` 保留撤销栈且受 5000 节点上限约束；空态新增入口。
+- **E 细节打磨**：所有纯图标按钮补 `title` tooltip；快捷键帮助弹窗（`Ctrl+/` 或 `?`）；样式面板边框改「无 / 细 1px / 粗 2px + 颜色」（默认色取 `--lumin-color-primary`，不再手打 CSS 串）、字号改下拉；多选批量写样式。
+- **解冻与冻结**：spec §0.3「由文本或 OCR 自动生成导图」拆分为「纯文本/Markdown 大纲生成（解冻，M74 提供）」与「OCR/AI 生成（仍冻结）」。
+- **验收**：本包覆盖率 ≥80%（`contract.searchNodes`、`markdown.importOutlineText`、适配层新方法均有用例）；e2e 新增「从文本追加 → 选中出操作条 → 搜索命中跳转 → 大纲显示同一节点 → 切回导图」；R2 八类映射复验；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步（spec/plan/AGENTS/CHANGELOG/README + smoke 增量）。
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -1143,6 +1155,7 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M71 v5.18** | 文件扫描套件合并（§4.71，2026-11-25 用户拍板）：`file-hasher`（M13）/`duplicate-finder`（M18）/`folder-compare`（M24）**三包整包并入 `file-scanner`** 为「文件校验 / 重复文件 / 目录对比」三页签，删除三包与侧边栏入口/薄壳页/e2e（3 入口 → 1）；9 通道 `file-scanner:*`；错误码保留 `FH_*`/`DF_*`/`FC_*`；零新增依赖/二进制 | §4.71 验收；本包覆盖率 ≥80%；e2e 三页签加载/四算法向量/期望哈希/重复分组/对比分类与内容比较/错误码/取消/并发/强杀恢复；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
 | **M72 v5.19** | 图片剩余三件套合并（§4.72，2026-11-25 用户拍板）：`image-watermark`（M20）/`image-dewatermark`（M31）/`image-stitch`（M14/M40）**三包整包并入 `image-toolbox`** 为「水印 / 去水印 / 拼接」三 Tab，删除三包与侧边栏入口/薄壳页/e2e（图片入口 4 → 1）；10 通道 `image-toolbox:*`；错误码保留 `IW_*`/`IDW_*`/`IS_*`；零新增依赖/二进制 | §4.72 验收；本包覆盖率 ≥80%；e2e 三页签加载/水印批量出图与原名保护/去水印框选出图/拼接出图与按份数切分；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
 | **M73 v5.20** | 视频下载 / 播放器合并（§4.73，2026-11-25 用户拍板）：`video-download`（M4/M5）/`video-player`（M56）**整包并入 `media-convert`** 为「下载 / 播放」两页签，显示名改「媒体工具箱」，删除两包与侧边栏入口/薄壳页/e2e（媒体入口 3 → 1）；通道 `media-convert:download-*` / `media-convert:player-*`；错误码保留 `VD_*`/`VP_*`；下载页签懒挂载防免责误弹；零新增依赖/二进制 | §4.73 验收；本包覆盖率 ≥80%；e2e 七页签加载/下载免责三态与假引擎主链路/播放解析与真实 WebM；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
+| **M74 v5.21** | 思维导图交互升级（§4.74，2026-11-25 用户拍板「全选 A–E」）：`mindmap` v0.2.0 —— 导图/大纲双视图（库内置 `Outliner`，同文档共享撤销栈）、节点操作条 + 备注/链接、`Ctrl+F` 搜索定位、从文本大纲生成/追加、工具栏 tooltip/快捷键帮助/边框字号控件重做/多选批量样式；零新增依赖/二进制 | §4.74 验收；本包覆盖率 ≥80%；e2e 新增文本/操作条/搜索/大纲用例；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

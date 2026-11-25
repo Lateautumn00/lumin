@@ -35,7 +35,7 @@
 | 图片文字识别  | 单张或批量本地图片 OCR（离线 PP-OCR），逐张可编辑预览，复制、逐张或合并导出 TXT                                                                                                                         |
 | 文件预览      | 本地预览文本 / Markdown / HTML / JSON / CSV / PDF / 图片 / Office（经 LibreOffice 转 PDF）；PDF 逐页渲染，Markdown/HTML 走 sandbox 隔离预览                                                             |
 | 文本编辑器    | 纯文本编辑：UTF-8/UTF-16/GBK 编码识别与保存、CRLF/LF、行号与当前行高亮、只读与 5MiB 大文件保护、外部修改冲突检测                                                                                        |
-| 思维导图      | 树形导图编辑（拖拽重排、折叠展开、主题样式）、Markdown/OPML/JSON 导入导出、PNG/SVG 导出、本地 .json 打开另存与草稿恢复                                                                                  |
+| 思维导图      | 导图/大纲双视图（同文档共享撤销栈）、节点操作条与备注链接、搜索定位、从文本大纲生成、拖拽重排、折叠展开、主题样式、Markdown/OPML/JSON 导入导出、PNG/SVG 导出、本地 .json 打开另存与草稿恢复 |
 | 外观主题      | 跟随系统 / 浅色 / 深色切换，全工具统一生效（tokens 单源，无逐工具适配）                                                                                                                                 |
 
 ## 系统要求

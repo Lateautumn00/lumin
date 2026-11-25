@@ -1,9 +1,9 @@
 # 思维导图（mindmap）字段级功能清单
 
-> 里程碑：M66（已登记 `docs/opencode/plan.md` §1 Q68 / §4.66 / §6）
-> 状态：**2026-11-24 规划定稿，待开工**
+> 里程碑：M66（已登记 `docs/opencode/plan.md` §1 Q68 / §4.66 / §6）；M74 交互升级（plan Q74 / §4.74）
+> 状态：**2026-11-25 v0.2.0 交互升级已交付**（导图/大纲双视图、节点操作条、搜索定位、从文本生成）
 > 关联规范：`AGENTS.md` §2（零耦合）、§5（三态/tokens/图标）、§6（IPC 三段式）、§7（测试门禁）、§8（性能）
-> 依赖实测：`mind-elixir@6.0.3`（MIT、零传递依赖）`dist/MindElixir.js` 42,200 B gzip、`MindElixir.css` 4,858 B gzip；`./i18n` 2,651 B gzip
+> 依赖实测：`mind-elixir@6.0.3`（MIT、零传递依赖）`dist/MindElixir.js` 42,200 B gzip、`MindElixir.css` 4,858 B gzip；`./i18n` 2,651 B gzip；M74 新增使用库内置 `Outliner`（`dist/Outliner.js` 23.8KB raw）与 `PlaintextConverter` 思路，**零新增依赖**
 
 ---
 
@@ -13,11 +13,15 @@
 
 新增独立工具包 `mindmap`（名称「思维导图」）：在应用内新建/编辑树形思维导图，支持增删改、折叠、自动左右布局、缩放平移、拖拽重排、节点与连线样式、明暗主题、原生 JSON / Markdown 大纲 / OPML 导入导出、PNG/SVG 导出、本地 `.json` 打开与另存、`userData` 草稿自动保存与重启恢复。全程离线，不新增自研渲染引擎。
 
+v0.2.0（M74）补充**录入效率**能力：导图 / 大纲双视图（同一文档、共享撤销栈）、节点操作条、备注与链接编辑、主题/备注搜索定位、从文本大纲一键成图。
+
 ### 0.2 做
 
 | 能力       | 说明                                                                                       |
 | ---------- | ------------------------------------------------------------------------------------------ |
-| 基础编辑   | 根/子/同级节点增删改、折叠展开、自动左右布局、缩放平移、内置快捷键                         |
+| 基础编辑   | 根/子/同级/父级节点增删改、上下移、折叠展开、自动左右布局、缩放平移、内置快捷键             |
+| 双视图     | 导图与大纲同一文档双向同步、共享撤销栈；大纲内 Tab / Shift+Tab 缩进、Enter 新建            |
+| 高效录入   | 节点操作条（浮动）、备注 / 链接编辑弹窗、搜索定位（`Ctrl+F`）、从文本大纲生成 / 追加        |
 | 拖拽重排   | 拖拽改父级或同层排序；节点背景/文字/边框/字号/加粗与分支连线色；明暗主题随壳切换            |
 | 导入导出   | 原生 JSON、Markdown 大纲、OPML 导入导出；导出 PNG/SVG                                      |
 | 本地文件   | `.json` 打开 / 保存 / 另存为（主进程 `dialog` + zod + `.tmp`+rename 原子写）               |
@@ -29,7 +33,7 @@
 - 多人协作、云同步、在线分享、导出可交互 HTML
 - 图片节点、附件节点、图标选择器（`icons` 仅原样保留，不提供 UI）
 - 多文档标签页、移动端布局、自由画布（非树形）
-- 由文本或 OCR 自动生成导图、AI 扩写
+- OCR 自动生成导图、AI 扩写（**纯文本/Markdown 大纲生成不在此列**，已由 M74 提供）
 - 富文本/公式/Markdown 渲染开关（`markdown` 选项不启用，节点按纯文本编辑）
 
 ---
@@ -40,11 +44,11 @@
 | ----------- | ------------------------------------------------------------------ |
 | id          | `mindmap`                                                          |
 | name        | `思维导图`                                                         |
-| description | `新建与编辑树形思维导图，支持导入导出与本地文件`                   |
+| description | `新建与编辑树形思维导图，支持导图/大纲双视图、文本生成、搜索与导入导出` |
 | icon        | `network`（壳 `AppSidebar` iconMap 注册 `Network`）                |
 | category    | `text`                                                             |
 | order       | `58`（text-editor 55 之后、text-toolbox 60 之前）                  |
-| version     | `0.1.0`                                                            |
+| version     | `0.2.0`                                                            |
 
 无自定义 settings 键；最近目录交给壳 `pickSaveFile` 记忆。
 
@@ -57,9 +61,11 @@
 ### 2.1 页面结构
 
 ```
-┌ 工具栏（新建/打开/保存/另存为 | 撤销/重做 | 导入/导出 | 布局/缩放 | 主题）┐
-├ 画布区 .mindmap-stage（mind-elixir 挂载点，data-testid="mindmap-stage"）   ┤
-└ 状态栏（文件名 · 未保存标记 · 节点数 · 草稿时间 · 缩放比例）              ┘
+┌ 工具栏（新建/打开/保存/另存为 | 导图/大纲 | 撤销/重做 | 导入/导出 | 布局/缩放/展开 | 搜索/从文本/帮助/主题）┐
+├ 画布区 .mindmap-stage（mind-elixir 挂载点，data-testid="mindmap-stage"）                                  ┤
+│  ├ 节点操作条（选中节点后浮出，左上角，data-testid="mindmap-node-bar"）                                   │
+│  └ 大纲区（视图切到「大纲」时挂载 Outliner，data-testid="mindmap-outline"）                                │
+└ 状态栏（文件名 · 未保存标记 · 节点数 · 草稿时间 · 缩放比例）                                              ┘
 ```
 
 ### 2.2 空态
@@ -68,6 +74,7 @@
   - 主操作「新建导图」：`NInput` 输入中心主题（默认「中心主题」，≤200 字），确认后初始化并聚焦根节点。
   - 次操作「打开文件」：`.json`（`MM_*` 过滤）。
   - 次操作「导入」：`.md/.markdown/.opml` 二选一。
+  - 次操作「粘贴文本生成」（`data-testid="mindmap-text-empty"`）：打开文本弹窗，默认「替换当前导图」。
   - 若存在草稿：额外顶部 `NAlert`「检测到 {相对时间} 的草稿」+「恢复」/「丢弃」。
 
 ### 2.3 工具栏（按钮集）
@@ -78,6 +85,7 @@
 | 文件 | 打开             | `FolderOpen`        | `pickFile`（壳无 pickFile → 用 `mindmap:open-dialog`）+ 读取校验        |
 | 文件 | 保存             | `Save`              | 无路径 → 转另存为；有路径直接原子写；保存中禁用                         |
 | 文件 | 另存为           | `SaveAll`           | `window.lumin.pickSaveFile({ defaultName, filters })`                   |
+| 视图 | 导图 / 大纲      | `Network` / `ListTree` | 分段按钮，`data-testid="mindmap-view-map/outline"`；同一文档、共享撤销栈 |
 | 编辑 | 撤销 / 重做      | `Undo2` / `Redo2`   | 调 `mei.undo()/redo()`；无可撤销时禁用                                  |
 | 导入 | 导入 Markdown    | `FileDown`          | 选择 `.md/.markdown` → `mindmap:read-text-file` → `importMarkdown`      |
 | 导入 | 导入 OPML        | `FileDown`          | 选择 `.opml` → `mindmap:read-text-file` → `importOpml`                  |
@@ -89,6 +97,9 @@
 | 视图 | 适应窗口         | `Maximize`          | `mei.scaleFit()`                                                       |
 | 视图 | 缩放 − / 比例 / + | `ZoomOut` / `ZoomIn` | 10%–200% 步进 10%；调 `mei.scale()`                                    |
 | 视图 | 全部展开/折叠    | `ChevronsDownUp` / `ChevronsUpDown` | `mei.expandNodeAll(root, true/false)`                       |
+| 查找 | 搜索             | `Search`（前缀）    | 输入即查（主题 + 备注），命中列表点击跳转并居中；`Ctrl+F` 聚焦            |
+| 录入 | 从文本           | `FileText`          | 打开文本弹窗：追加到选中节点 / 替换当前导图                             |
+| 帮助 | 快捷键帮助       | `Keyboard`          | 打开帮助弹窗；`Ctrl+/` 同效                                            |
 | 视图 | 主题             | `Sun` / `Moon`      | 切换壳主题（写 `html[data-theme]`，经 tokens 桥接，不做工具内主题分叉）  |
 
 ### 2.4 节点样式面板（右侧抽屉，`NDrawer`）
@@ -97,13 +108,13 @@
 | -------- | --------------- | ----------------------------------------------------------------- |
 | 节点背景 | `NColorPicker`  | 写 `style.background`；「清除」回退主题                           |
 | 文字颜色 | `NColorPicker`  | 写 `style.color`                                                  |
-| 边框     | `NInput`        | 仅接受 `1px solid #RRGGBB` 形态；写 `style.border`                |
-| 字号     | `NInputNumber`  | 12–32；写 `style.fontSize`（纯数字字符串）                        |
+| 边框     | `NSelect` + `NColorPicker` | 粗细「无 / 细 1px / 粗 2px」+ 颜色（默认取 `--lumin-color-primary`）；写 `style.border = "{n}px solid {hex}"`，选「无」时清除 |
+| 字号     | `NSelect`       | 默认 / 14 / 16 / 18 / 20 / 24 / 28 / 32；写 `style.fontSize`（纯数字字符串） |
 | 加粗     | `NSwitch`       | 写 `style.fontWeight` = `'700'` / 清除                            |
 | 分支线色 | `NColorPicker`  | 写 `branchColor`                                                  |
-| 重置     | 按钮            | 删除当前节点全部样式字段并 `refresh`                              |
+| 重置     | 按钮            | 删除选中节点全部样式字段并 `refresh`                              |
 
-写回流程：`mei.reshapeNode(currentNode, patch)` → 触发 `operation` 事件 → 标脏 + 草稿调度。
+写回流程：`mei.reshapeNode(currentNode, patch)` → 触发 `operation` 事件 → 标脏 + 草稿调度。多选时（框选）逐个写回，样式面板显示「已选 N」。
 
 ### 2.5 快捷键
 
@@ -119,10 +130,12 @@
 | `Ctrl+Shift+S`   | 另存为                                 | 同上                          |
 | `Ctrl+O`         | 打开                                   | 同上                          |
 | `Ctrl+N`         | 新建                                   | 同上                          |
+| `Ctrl+F`         | 聚焦搜索框                             | 同上                          |
+| `Ctrl+/` / `?`   | 打开 / 关闭快捷键帮助                  | 同上                          |
 | `Ctrl+0`         | 适应窗口                               | 同上                          |
 | `Ctrl+=` / `Ctrl+-` | 放大 / 缩小                         | 同上                          |
 
-工具级快捷键仅在画布区获得焦点或页面激活时生效，`preventDefault` 后不冒泡到壳。
+工具级快捷键仅在画布区获得焦点或页面激活时生效，`preventDefault` 后不冒泡到壳。大纲视图获得焦点时 `Ctrl+Z/Ctrl+Y` 交给 Outliner 处理（避免与画布双重撤销），其余快捷键照常。
 
 ### 2.6 加载态
 
@@ -135,6 +148,42 @@
 - `NAlert`（error）展示：中文文案 + `code` + `detail`。
 - 「重试」仅对 `retryable` 码显示；文档损坏类提供「重新选择文件」。
 - 草稿损坏不上报错误态：`NAlert`（warning）一行「草稿已损坏，已忽略（原文保留为 draft.corrupt-*.json）」。
+
+### 2.8 大纲视图（M74）
+
+| 项       | 规则                                                                                     |
+| -------- | ---------------------------------------------------------------------------------------- |
+| 入口     | 工具栏「大纲」分段按钮；切回「导图」销毁 Outliner 并恢复画布缩放/选中                      |
+| 实现     | `new Outliner({ el, mei, fileName, i18n })`（库内置，`mind-elixir/style.css` 已含样式）；零新增依赖 |
+| 数据     | 与画布**同一实例**，编辑实时双向同步，共享撤销栈；标脏仍由 `operation` 事件驱动             |
+| 快捷键   | `Enter` 新建同级、`Tab` 缩进、`Shift+Tab` 减少缩进、上下方向键移动、`Ctrl+Z` 撤销           |
+| 主题     | 大纲容器加 `dark` 类跟随壳主题；切换主题时重建 Outliner                                    |
+| 边界     | 切页/新建/打开/导入前先 `destroy()`；Outliner 创建失败回退导图视图并报结构化错误            |
+
+### 2.9 节点操作条与备注 / 链接（M74）
+
+选中节点（`selectionCount > 0`，根节点外）后画布左上浮出操作条（`data-testid="mindmap-node-bar"`）：
+
+| 按钮（`@lucide/vue`） | 行为 |
+| --- | --- |
+| `Plus` 新增子节点 | `mei.addChild(currentNode)`（等价 `Tab`） |
+| `ListPlus` 新增同级 | `mei.insertSibling('after', currentNode)`（等价 `Enter`） |
+| `CornerUpLeft` 插入父级 | `mei.insertParent(currentNode)` |
+| `ArrowUp` / `ArrowDown` 上移 / 下移 | `mei.moveUpNode / moveDownNode` |
+| `MessageSquare` 备注 / 链接 | 打开弹窗，写 `note`（≤5000）与 `hyperLink`（http/https/mailto） |
+| `Trash` 删除 | `mei.removeNodes(currentNodes)`，根节点过滤不可删；多选批量删除 |
+
+- 操作后同步刷新统计、选中数与样式面板；所有操作触发 `operation` → 标脏 + 草稿调度。
+- 备注/链接弹窗校验失败（非 http/https/mailto）只提示不写回。
+
+### 2.10 搜索定位与从文本生成（M74）
+
+- **搜索**：`searchNodes(data, keyword)`（纯函数，主题 + 备注、忽略大小写、上限 50）→ 工具栏下拉列表显示「主题 / 路径（备注命中标记）」；点击命中项先切回导图、展开祖先链、`selectNode` 并 `scrollIntoView`；`Ctrl+F` 聚焦，`Esc` 收起。
+- **从文本生成**：弹窗 `NTextarea` + 处理方式「追加到选中节点 / 替换当前导图」。
+  - 解析走 `importOutlineText`：优先 Markdown（标题/列表/备注/行尾链接），无标记时回退纯文本缩进大纲（2 空格或 1 Tab 为一级）。
+  - 替换：空态默认；有未保存修改先走确认弹窗（`MM_*` 同新增/打开流程），成功后清空当前文件路径与草稿。
+  - 追加：`mei.addChild` 逐个挂到选中节点（未选中挂根），保留撤销栈；节点总数超 5000 → `MM_NODE_LIMIT`；提示「已追加 N 个顶层节点」。
+  - 全空文本 → `MM_IMPORT_INVALID`。
 
 ---
 
@@ -195,6 +244,7 @@
 | `collectIds(data)`                            | 全量 id 集合（查重）                                                 |
 | `createDocument(topic)`                       | 生成根节点最小文档（`MindElixir.new` 等价，脱离库可测）              |
 | `directionLabel(code)` / `normalizeDirection` | 布局枚举与文案/缺省归一                                              |
+| `searchNodes(data, keyword, limit)`           | 主题 + 备注搜索，返回 `{ id, topic, path, matchedNote }`，上限 50     |
 
 ---
 
@@ -233,6 +283,12 @@
 - 行尾 `[显示文本](url)` → `topic=显示文本`、`hyperLink=url`（协议校验同 §3.2）。
 - 多个顶层节点 → 建虚拟根「导入导图」并记 warning；0 节点 → `MM_IMPORT_INVALID`。
 - 上限与 §3.2 一致。
+
+通用大纲导入（`importOutlineText(text, newId)`，M74，供「从文本生成」使用）：
+
+- 先走 `importMarkdown`；抛 `MM_IMPORT_INVALID` 时回退**纯文本缩进大纲**：每行 `^([ \t]*)(\S.*)$`，Tab 折 2 空格，缩进 ÷2 取整为层级。
+- 返回 `{ data, warnings, entries }`：`entries` 为追加用顶层节点（多顶层时取虚拟根子节点）。
+- 解析、限额、清洗与 Markdown 分支共用 `finalizeEntries`，保证行为一致。
 
 ### 4.3 OPML 2.0
 
@@ -336,15 +392,15 @@ packages/tools/mindmap/
     manifest.ts           defineManifest（§1）
     schema.ts             文档/通道 zod schema（§3.2、§5.1）
     errors.ts             MM_* 错误码 + toolError + isRetryable
-    contract.ts           sanitizeDocument / countNodes / treeDepth / collectIds / createDocument / normalizeDirection
-    markdown.ts           importMarkdown / exportMarkdown（+ 行解析器）
+    contract.ts           sanitizeDocument / countNodes / treeDepth / collectIds / createDocument / normalizeDirection / searchNodes
+    markdown.ts           importMarkdown / importOutlineText / exportMarkdown（+ 行解析器）
     opml.ts               importOpml / exportOpml / escapeXml
     theme.ts              readThemeTokens / buildTheme（tokens → cssVar）
     node.ts               registerWith(ctx, deps) + registerMain（§5.1 八通道）
     renderer/
-      ToolView.vue        三态 UI + 工具栏 + 抽屉 + 快捷键 + 草稿调度
+      ToolView.vue        三态 UI + 工具栏 + 抽屉 + 快捷键 + 草稿调度 + 双视图/操作条/搜索/文本弹窗
       client.ts           类型化 invoke 封装（8 个函数）
-      mind-elixir-adapter.ts  动态 import、实例创建/销毁、事件桥、方向与缩放命令
+      mind-elixir-adapter.ts  动态 import、实例创建/销毁、事件桥、节点操作、大纲视图、方向与缩放命令
       export-image.ts     computeExportBox / buildSvgDocument / rasterizePng（AbortSignal）
 ```
 
@@ -420,8 +476,9 @@ packages/tools/mindmap/
     - 导入 Markdown → 断言层级；导出 Markdown/OPML 文件内容断言；
     - 导出 PNG → 断言文件存在、PNG 魔数、尺寸 ≈ 包围盒×倍率；
     - 损坏 JSON → `MM_INVALID_DOCUMENT` 提示；
-    - 草稿：编辑后触发保存，重建页面断言恢复条 → 恢复成功。
-11. `docs/smoke/mindmap.md` R2 八类逐条记录（映射见 §12）。
+    - 草稿：编辑后触发保存，重建页面断言恢复条 → 恢复成功；
+    - **M74**：从文本追加 → 节点出现；选中节点出操作条；搜索命中并跳转收起；切大纲显示同一节点；切回导图节点仍在。
+11. `docs/smoke/mindmap.md` R2 八类逐条记录（映射见 §12），并记录 M74 双视图/搜索/文本生成的实测结果。
 12. `pnpm gate` 退出码 0；全仓覆盖率 ≥60%；`pnpm boundary` 无违规。
 
 ---
@@ -448,6 +505,8 @@ packages/tools/mindmap/
 | 自研 SVG `foreignObject` 导出兼容性    | 仅 Chromium（Electron）目标；e2e 断言 PNG 魔数与尺寸；失败降级为 PNG-only 并回写 plan |
 | mind-elixir v6 API 与类型漂移          | 精确钉版 6.0.3；适配层集中 `mind-elixir-adapter.ts`，升级只改一处     |
 | 大文档卡顿                             | 5000 节点/深度 50 上限；导出像素上限；超限结构化报错                 |
+| 大纲视图与画布双写冲突                 | 同一实例共享撤销栈，禁止独立实例；切视图前先销毁 Outliner            |
+| 大纲视图主题错色                       | 容器加 `dark` 类跟随壳主题，切主题重建；不侵入库内部样式             |
 | 导入内容 XSS                           | 剥离 `dangerouslySetInnerHTML`；链接协议白名单；不启用 markdown 渲染  |
 | 草稿与手动保存互相覆盖                 | 草稿只写 `userData`，与用户文件路径彻底分离；保存成功后清草稿         |
 
