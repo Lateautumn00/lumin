@@ -7,7 +7,7 @@
 
 ---
 
-## 1. 决策总表（Q1–Q69 锁定）
+## 1. 决策总表（Q1–Q82 锁定）
 
 | #   | 决策项                                                                                                               | 结论                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | --- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -89,6 +89,10 @@
 | Q76 | PDF 图片互转合并（M76，2026-11-25 用户拍板，同上全选）                                                               | **`pdf-images` 整包合并进 `pdf-toolkit`** 为第 13 个页签「PDF↔图片」（`version 0.2.0`），删除独立包、侧边栏入口、薄壳页与 e2e（PDF 入口 2 → 1）；通道统一 `pdf-toolkit:images-*`；错误码保留 `PI_*`；**零新增依赖/二进制**（`@napi-rs/canvas` 仅测试 devDep）；详见 §4.76                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Q77 | 文本残余两件套合并（M77，2026-11-25 用户拍板，同上全选）                                                             | **`text-editor` / `text-diff` 整包合并进 `text-toolbox`** 为「编辑 / 对比」两页签（`version 0.5.0`），删除两包、两个侧边栏入口、两个薄壳页与两个 e2e（文本入口 3 → 1）；`text-toolbox` 新增主进程入口，通道统一 `text-toolbox:editor-*` / `diff-*`；错误码保留 `TE_*` / `TD_*`；**零新增依赖/二进制**（CodeMirror 6 最小集与 iconv-lite 已在锁定表）；详见 §4.77                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Q78 | 杂项与系统合并（M78，2026-11-25 用户拍板，同上全选）                                                                 | **`system-info` / `password-generator` / `clipboard-history` 整包合并进 `misc-toolbox`** 为「系统信息 / 密码生成 / 剪贴板」三页签（`version 0.4.0`），删除三包、三个侧边栏入口、三个薄壳页与三个 e2e（杂项入口 4 → 1，`qr-code` 归属图片明确不动）；通道统一 `misc-toolbox:sysinfo-*` / `clipboard-*`（密码生成纯 renderer 无通道）；错误码保留 `SI_*` / `CH_*`；**零新增依赖/二进制**；详见 §4.78                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Q79 | 计算器族 3 → 1（M79，2026-11-25 用户拍板「继续优化其他功能模块」→ 选「继续合并收敛」四组全选）                       | **`unit-converter` / `life-calculator` 整包合并进 `calculator`**（`version 0.3.0`）：四页签「计算 / 进制 / 单位换算 / 生活计算」，删除两包、两个侧边栏入口、两个薄壳页与两个 e2e（计算器入口 3 → 1）；两子模块原为纯 renderer（无 IPC 通道），单位换算收藏 localStorage 键改为 `lumin.tool.calculator.unit-favorites`（旧键不迁移）；错误码保留 `LC_*`；**零新增依赖/二进制**（mathjs 已在锁定表）；详见 §4.79                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Q80 | 文档输出合并（M80，同上全选）                                                                                        | **`print-tool` 整包合并进 `docx2pdf`**（显示名「文档输出」，`version 0.3.0`）：两页签「转为 PDF / 打印」，删除独立包、侧边栏入口、薄壳页与 e2e（文档入口 2 → 1）；通道 `docx2pdf:print-status / print-prepare / print-show / print-cleanup`；settings `tools.docx2pdf.print.*`；错误码保留 `PR_*`；**零新增依赖/二进制**；详见 §4.80                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Q81 | 压缩包并入文件扫描（M81，同上全选）                                                                                  | **`zip-tool` 整包合并进 `file-scanner`** 为第 7 页签「压缩包」（`version 0.3.0`），删除独立包、侧边栏入口、薄壳页与 e2e（工具入口 2 → 1）；通道 `file-scanner:zip-pack / zip-unpack / zip-config / zip-set-config`；settings `tools.file-scanner.zip.*`；错误码保留 `ZP_*`；依赖仅继承 `fflate 0.8.3`；详见 §4.81                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Q82 | OCR / 二维码并入图片工具箱（M82，同上全选）                                                                          | **`ocr-text` / `qr-code` 整包合并进 `image-toolbox`** 为「文字识别 / 二维码」两页签（`version 0.5.0`），删除两包、两个侧边栏入口、两个薄壳页与两个 e2e（图片入口 3 → 1）；通道 `image-toolbox:ocr-*` / `qr-*`；settings `tools.image-toolbox.ocr / qr.*`；错误码保留 `OCR_*` / `QR_*`；依赖继承 `@lumin/ocr-kit`、`jsqr 1.4.0`、`qrcode 1.5.4`；详见 §4.82                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | —   | 硬约束                                                                                                               | 工具独立可插拔、零耦合；公共代码上提根 `packages/`；工具间禁止互相依赖                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ### 门禁阈值（Q17 附带锁定）
@@ -221,6 +225,8 @@ lumin/
 - **验收**：表达式求值用例覆盖 ≥80%
 
 ### 4.2 单位换算（M1）
+
+> **已于 M79 并入 `calculator`（见 §4.79）**：工具 id `unit-converter` 不再存在，本节为历史决策记录。
 
 - 数据驱动：`{ category, units[{id,name,factor}] }`；10 类 = 长度/重量/温度（偏移换算单独模型）/面积/体积/速度/时间/数据量/压强/功率；**无汇率**
 - 双向换算 + 单位收藏
@@ -395,6 +401,7 @@ lumin/
 - 形态：`packages/tools/qr-code`；生成与解码都在 renderer（`qrcode@1.5.4` + `jsqr@1.4.0`），主进程只做输出目录记忆与原子写盘（临时文件 + rename），**无三段式长任务**
 - 通道：`config` / `set-output-dir` / `save` 三条同步；`save` zod 校验 → 文件名清洗（非法字符/路径穿越）→ 冲突 `(n)` → 原子写盘；识别图片上限 20MB，错误码 `QR_*` 8 个（可重试：OUTPUT_WRITE_FAILED）
 - 字段级清单：`docs/spec/qr-code.md`；冒烟：`docs/smoke/qr-code.md`（R2 八类映射 + chunk **372,970 B raw / 88,831 B gzip**）；e2e `apps/desktop/e2e/qr-code-smoke.spec.ts`（5 用例）
+  - **M82 后**：文档并入 `docs/spec/image-toolbox.md §12.3` / `docs/smoke/image-toolbox.md §12`，e2e 迁至 `image-toolbox-qr.spec.ts`，原两文件与 spec 已删除
 - **验收**：本包覆盖率 ≥80%；e2e 覆盖生成/保存/识别闭环/损坏图/超大图/ACL 不可写/并发保存；chunk < 200KB gzip；gate 全绿
 
 ### 4.17 PDF 水印与页码（M17，2026-11-19 R8 登记）
@@ -438,6 +445,7 @@ lumin/
 - **UI 三态（AGENTS §5.3）**：空态拖拽/选择图片；加载态进度 + 取消；报错态结构化文案 + 重试/详情；结果态缩略图 + 可编辑文本框 + 行/字数统计 + 复制 / 导出 TXT
 - **图标**：`@lucide/vue` `scan-text`
 - **验收**：本包与 `ocr-kit` 覆盖率 ≥80%；e2e `apps/desktop/e2e/ocr-text-smoke.spec.ts` 3/3；R2 八类映射；chunk < 200KB gzip；零新增第三方依赖；gate 全绿
+  - **M82 后**：能力并入 `image-toolbox`「文字识别」页签（见 §4.82），文档并入 `docs/spec/image-toolbox.md §12.2` / `docs/smoke/image-toolbox.md §12`，e2e 迁至 `image-toolbox-ocr.spec.ts`，原两文件已删除
 
 ### 4.21 图片批量水印（M21，2026-11-20 R8 登记）
 
@@ -500,6 +508,7 @@ lumin/
 - **UI 三态（AGENTS §5.3）**：空态双 Tab 引导；加载态条目进度 + 取消；报错态结构化文案 + 重试/详情
 - **图标**：`@lucide/vue` `archive`（壳 iconMap 注册 `Archive`）
 - **验收**：本包覆盖率 ≥80%；e2e `apps/desktop/e2e/zip-tool-smoke.spec.ts` 2/2（UI 打包→解压回读；IPC zip slip 拒绝 / 非法 zip / 计数）；R2 八类映射；chunk（含 fflate）< 200KB gzip；gate 全绿
+  - **M81 后**：能力并入 `file-scanner` 第 7 页签「压缩包」（见 §4.81），通道前缀改 `file-scanner:zip-*`，文档并入 `docs/spec/file-scanner.md §8.x` / `docs/smoke/file-scanner.md`，e2e 迁至 `file-scanner-smoke.spec.ts`，原两文件与旧 spec 已删除
 
 ### 4.26 侧边栏分类分组（M26，2026-11-20 R8 登记）
 
@@ -612,6 +621,7 @@ lumin/
 - **错误码**：`LC_MORTGAGE_INVALID` / `LC_TAX_INVALID` / `LC_PERCENT_INVALID` / `LC_CLIPBOARD_FAILED`
 - **三态**：三页签默认参数即出结果（空态无白屏）、全同步纯函数加载态豁免、各页签/小节独立 `role="alert"` 报错态
 - **验收**：单测 37 用例（本包 lines/functions/branches 均 ≥80%）；e2e 4/4（三页签、还款方式切换与报错恢复、个税 290/9710、百分比联动）；chunk 39,696 B raw / 8,415 B gzip；gate 全绿
+  - **M79 后**：能力并入 `calculator`「生活计算」页签（见 §4.79），文档并入 `docs/spec/calculator.md §7.3` / `docs/smoke/calculator.md §5`，e2e 迁至 `calculator-smoke.spec.ts`，原两文件与 spec 已删除
 
 ### 4.38 PDF 能力补全（M38，2026-11-21 R8 登记）
 
@@ -968,6 +978,7 @@ lumin/
 - **三态**：空态（拖拽区 + 支持格式说明）、加载态（逐份进度 + 取消）、报错态（结构化错误码 → 中文 + 重试/详情；取消不入报错态）。
 - **E2E 口径**：`--lumin-print-dry-run`（或 `LUMIN_PRINT_DRY_RUN=1`）下 `print:show` 改走 `printToPDF` 落盘并断言产物非空，避免真实弹框阻塞 CI；真机出纸为人工验收项（`docs/smoke/print-tool.md`）。
 - **验收**：`docs/spec/print-tool.md` 字段级清单；本包覆盖率 ≥80%；e2e dry-run；R2 八类映射 + 真机出纸人工项；chunk < 200KB gzip（renderer 不引 pdfjs）；`pnpm gate` 全绿；文档五处同步。
+  - **M80 后**：整包并入 `docx2pdf`（显示名「文档输出」）的「打印」页签（见 §4.80），通道前缀改 `docx2pdf:print-*`，文档并入 `docs/spec/docx2pdf.md §10` / `docs/smoke/docx2pdf.md §6`，e2e 迁至 `docx2pdf-smoke.spec.ts`，原两文件与旧 spec 已删除
 
 ---
 
@@ -1072,6 +1083,38 @@ lumin/
 - **通道与设置**：`src/node.ts` 经适配器注册 `misc-toolbox:sysinfo-*` / `clipboard-*`（密码生成纯 renderer 无通道）；settings 键 `tools.misc-toolbox.sysinfo|clipboard.*`；错误码保留 `SI_*` / `CH_*`。
 - **UI**：宿主 `NTabs` 增三页签，内容懒挂载；剪贴板页签仅在其激活时启动轮询（避免打开工具即采集）；并入页签去掉原页内标题。
 - **验收**：本包覆盖率 ≥80%；e2e 页签标签可见 + 原子网/标尺/中文信息用例；chunk <200KB gzip；`pnpm gate` 全绿。
+
+### 4.79 计算器族合并（M79，2026-11-25 R8 登记）
+
+- **决策**：`unit-converter` / `life-calculator` **整包并入 `@lumin/tool-calculator`**（`version 0.3.0`）为「计算 / 进制 / 单位换算 / 生活计算」四页签，计算器入口 3 → 1；**零新增依赖、零新增二进制**（mathjs 已在锁定表，体积按 R5 求值类例外 ≤300KB gzip）。
+- **代码落位**：源码平移至 `src/units/`（换算类别/纯函数/单测/收藏）与 `src/life/`（房贷/个税/百分比/数值/错误码 + 单测）；删除两包、两个侧边栏入口、两个薄壳页与两个 e2e。
+- **通道与设置**：两子模块均为纯 renderer，无 IPC 通道；换算收藏 localStorage 键改为 `lumin.tool.calculator.unit-favorites`，Pinia store id 改为 `calculator-unit-favorites`（旧键不迁移）；错误码保留 `LC_*`。
+- **UI**：宿主 `NTabs` 四页签，单位换算/生活计算页签去掉原页内标题；进制面板标题降为 h2。
+- **验收**：`mathjs` 相关 chunk 实测 **202.1KB gzip**（raw 947,852 B，≤300KB 例外上限）；本包覆盖率 ≥80%；e2e 四页签可见 + 房贷/个税/百分比/换算用例；`pnpm gate` 全绿。
+
+### 4.80 文档输出合并（M80，2026-11-25 R8 登记）
+
+- **决策**：`print-tool` **整包并入 `@lumin/tool-docx2pdf`**（显示名「文档输出」，`version 0.3.0`）为「转为 PDF / 打印」两页签，文档入口 2 → 1；**零新增依赖、零新增二进制**（打印统一走系统对话框 `silent:false`，沿用 Q69 决策）。
+- **代码落位**：源码平移至 `src/print/`（errors/formats/jobs/node/schema + renderer client 与单测）；删除独立包、侧边栏入口、薄壳页与 e2e，打印用例迁入 `docx2pdf-smoke.spec.ts`。
+- **通道与设置**：`src/node.ts` 经适配器注册 `docx2pdf:print-status` / `print-prepare` / `print-show` / `print-cleanup`；settings 键 `tools.docx2pdf.print.*`；错误码保留 `PR_*`。
+- **UI**：宿主 `NTabs` 两页签（`display-directive="show:lazy"`，切换不中断转换任务）；打印页签保留原空态/加载/报错三态，页内标题降为 h2。
+- **验收**：chunk 实测 **10.4KB gzip**（raw 46,746 B）；e2e 两页签可见 + dry-run 打印全链路（`%PDF-` + cleanup）+ `PR_NOT_FOUND`；`pnpm gate` 全绿。
+
+### 4.81 压缩包并入文件扫描（M81，2026-11-25 R8 登记）
+
+- **决策**：`zip-tool` **整包并入 `@lumin/tool-file-scanner`** 为第 7 页签「压缩包」（`version 0.3.0`），工具入口 2 → 1；依赖仅继承 `fflate 0.8.3`（M25 已在锁定表），**零新增二进制**。
+- **代码落位**：源码平移至 `src/zip/`（contract/errors/schema/node/renderer + 单测与 env.d.ts）；删除独立包、侧边栏入口、薄壳页与 e2e，压缩包用例迁入 `file-scanner-smoke.spec.ts`。
+- **通道与设置**：`src/node.ts` 的 `MergedPrefix` 扩为 `rename|clean|disk|zip`，经适配器注册 `file-scanner:zip-pack` / `zip-unpack` / `zip-config` / `zip-set-config`；settings 键 `tools.file-scanner.zip.*`；错误码保留 `ZP_*`。
+- **UI**：宿主七页签；「压缩包」页签内部保留打包/解压二级 tabs，去掉原页内 h1。
+- **验收**：chunk 实测 **46.1KB gzip**（raw 229,129 B）；e2e 七页签可见 + 打包→解压回读 + GBK 条目名 + zip slip 跳过计数 + `ZP_ARCHIVE_INVALID`；`pnpm gate` 全绿。
+
+### 4.82 OCR / 二维码并入图片工具箱（M82，2026-11-25 R8 登记）
+
+- **决策**：`ocr-text` / `qr-code` **整包并入 `@lumin/tool-image-toolbox`** 为「文字识别 / 二维码」两页签（`version 0.5.0`），图片入口 3 → 1；依赖继承 `@lumin/ocr-kit`、`jsqr 1.4.0`、`qrcode 1.5.4`（均已在锁定表），**零新增二进制**。
+- **代码落位**：源码平移至 `src/ocr/` 与 `src/qr/`（含 renderer client 与单测）；删除两包、两个侧边栏入口、两个薄壳页与两个 e2e，用例迁入 `image-toolbox-ocr.spec.ts` / `image-toolbox-qr.spec.ts`。
+- **通道与设置**：`src/node.ts` 的 `MergedPrefix` 扩为 `ocr|qr`，经适配器注册 `image-toolbox:ocr-*` / `qr-*`；settings 键 `tools.image-toolbox.ocr|qr.*`；错误码保留 `OCR_*` / `QR_*`。
+- **UI**：宿主十二页签；OCR/二维码页签常驻挂载（`v-show`），二维码页签去掉原页内 h1。**e2e 注意**：多页签同时挂载导致全局 `input[type="file"]` / `textarea` 命中错页签，规格必须按 DropZone `aria-label` 与占位符定位。
+- **验收**：chunk 实测 **138.8KB gzip**（raw 622,761 B，<200KB）；OCR 模型仍走主进程 onnxruntime-node（非 renderer 资产）；e2e 两页签可见 + OCR 单张/批量/PDF + 二维码生成/识别/批量/超大图；`pnpm gate` 全绿。
 
 ---
 
@@ -1196,6 +1239,10 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M76 v5.23** | PDF 图片互转合并（§4.76，2026-11-25 用户拍板）：`pdf-images` **整包并入 `pdf-toolkit`** 为第 13 页签「PDF↔图片」，删除独立包/侧边栏入口/薄壳页/e2e（PDF 入口 2 → 1）；通道 `pdf-toolkit:images-*`；错误码保留 `PI_*`；零新增依赖/二进制 | §4.76 验收；本包覆盖率 ≥80%；e2e 页签可见 + 原有用例；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
 | **M77 v5.24** | 文本残余两件套合并（§4.77，2026-11-25 用户拍板）：`text-editor`/`text-diff` **整包并入 `text-toolbox`** 为「编辑 / 对比」两页签，`text-toolbox` 新增主进程入口，删除两包/侧边栏入口/薄壳页/e2e（文本入口 3 → 1）；通道 `text-toolbox:editor-*` / `diff-*`；错误码保留 `TE_*`/`TD_*`；零新增依赖/二进制 | §4.77 验收；本包覆盖率 ≥80%；e2e 页签可见 + 原有用例；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
 | **M78 v5.25** | 杂项与系统合并（§4.78，2026-11-25 用户拍板）：`system-info`/`password-generator`/`clipboard-history` **整包并入 `misc-toolbox`** 为「系统信息 / 密码生成 / 剪贴板」三页签，删除三包/侧边栏入口/薄壳页/e2e（杂项入口 4 → 1，`qr-code` 不动）；通道 `misc-toolbox:sysinfo-*` / `clipboard-*`；错误码保留 `SI_*`/`CH_*`；零新增依赖/二进制 | §4.78 验收；本包覆盖率 ≥80%；e2e 页签可见 + 原有用例；R2 八类映射；chunk <200KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
+| **M79 v5.26** | 计算器族合并（§4.79，2026-11-25 用户拍板「继续优化其他功能模块」四组全选）：`unit-converter`/`life-calculator` **整包并入 `calculator`** 为「计算 / 进制 / 单位换算 / 生活计算」四页签，删除两包/侧边栏入口/薄壳页/e2e（计算器入口 3 → 1）；纯 renderer 无通道；错误码保留 `LC_*`；零新增依赖/二进制 | §4.79 验收；本包覆盖率 ≥80%；e2e 四页签 + 房贷/个税/百分比/换算；R2 八类映射；chunk 202.1KB gzip（mathjs 例外 ≤300KB）；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
+| **M80 v5.27** | 文档输出合并（§4.80，同上全选）：`print-tool` **整包并入 `docx2pdf`**（显示名「文档输出」）为「转为 PDF / 打印」两页签，删除独立包/侧边栏入口/薄壳页/e2e（文档入口 2 → 1）；通道 `docx2pdf:print-*`；错误码保留 `PR_*`；零新增依赖/二进制 | §4.80 验收；本包覆盖率 ≥80%；e2e 两页签 + dry-run 打印全链路；R2 八类映射；chunk 10.4KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
+| **M81 v5.28** | 压缩包并入文件扫描（§4.81，同上全选）：`zip-tool` **整包并入 `file-scanner`** 为第 7 页签「压缩包」，删除独立包/侧边栏入口/薄壳页/e2e；通道 `file-scanner:zip-*`；错误码保留 `ZP_*`；依赖仅继承 `fflate 0.8.3` | §4.81 验收；本包覆盖率 ≥80%；e2e 七页签 + 打包解压/GBK/zip slip；R2 八类映射；chunk 46.1KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
+| **M82 v5.29** | OCR / 二维码并入图片工具箱（§4.82，同上全选）：`ocr-text`/`qr-code` **整包并入 `image-toolbox`** 为「文字识别 / 二维码」两页签，删除两包/侧边栏入口/薄壳页/e2e（图片入口 3 → 1）；通道 `image-toolbox:ocr-*` / `qr-*`；错误码保留 `OCR_*`/`QR_*`；依赖继承 `@lumin/ocr-kit`/`jsqr`/`qrcode` | §4.82 验收；本包覆盖率 ≥80%；e2e 两页签 + OCR 单张/批量/PDF + 二维码全流程；R2 八类映射；chunk 138.8KB gzip；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

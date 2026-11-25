@@ -14,6 +14,7 @@ declare global {
 }
 
 const appDir = path.resolve(__dirname, '..')
+type Page = Awaited<ReturnType<ElectronApplication['firstWindow']>>
 const fixturesDir = path.resolve(__dirname, '../../../packages/tools/docx2pdf/fixtures')
 const fixtureFile = path.join(fixturesDir, '保真样例.docx')
 const encryptedFixture = path.join(fixturesDir, '加密样例.docx')
@@ -62,12 +63,15 @@ async function pollNoNewTaskDirs(baseline: Set<string>, timeoutMs = 8000): Promi
   }
 }
 
-test.describe('docx2pdf（Office 转 PDF）冒烟', () => {
+test.describe('docx2pdf（文档输出）冒烟', () => {
   test('状态与自定义路径往返：status 枚举 + set-path 保存/清空', async () => {
     const { app, page } = await launch()
     try {
-      await clickSidebarTool(page, 'Office 转 PDF')
-      await expect(page.getByRole('heading', { name: 'Office 转 PDF' })).toBeVisible()
+      await clickSidebarTool(page, '文档输出')
+      await expect(page.getByRole('heading', { name: '文档输出' })).toBeVisible()
+      // M80 并入打印页签
+      await expect(page.locator('.n-tabs-tab[data-name="convert"]')).toHaveText('转为 PDF')
+      await expect(page.locator('.n-tabs-tab[data-name="print"]')).toHaveText('打印')
 
       const status = await getStatus(page)
       expect(['custom', 'system', 'portable', 'none']).toContain(status.source)
@@ -573,6 +577,122 @@ test.describe('docx2pdf（Office 转 PDF）冒烟', () => {
     } finally {
       if (app) await app.close().catch(() => undefined)
       fs.rmSync(workDir, { recursive: true, force: true })
+    }
+  })
+})
+
+/** 1×1 透明 PNG（免 fixture） */
+const TINY_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64'
+)
+
+interface PrepareOutcome {
+  jobs: { jobId: string; name: string; kind: string; pageCount?: number }[]
+  failures: { inputPath: string; code: string }[]
+}
+
+/** 启动应用并开启打印 dry-run（printToPDF 落盘代替系统打印对话框） */
+async function launchPrintDryRun(): Promise<{ app: ElectronApplication; page: Page }> {
+  const app = await electron.launch({ args: ['.', '--lumin-print-dry-run'], cwd: appDir })
+  const page = await app.firstWindow()
+  await page.waitForLoadState('domcontentloaded')
+  await page.waitForFunction(() => typeof window.lumin !== 'undefined')
+  return { app, page }
+}
+
+/** 提交任务并等待 done/error（返回结果或错误码） */
+async function runTask(
+  page: Page,
+  channel: string,
+  payload: unknown
+): Promise<{ ok: true; result: unknown } | { ok: false; code: string }> {
+  return page.evaluate(
+    (args) =>
+      new Promise<{ ok: true; result: unknown } | { ok: false; code: string }>((resolve) => {
+        let currentTaskId = ''
+        const off = window.lumin.onTaskEvent((ev) => {
+          if (ev.taskId !== currentTaskId) return
+          if (ev.kind === 'progress' || ev.kind === 'log') return
+          off()
+          if (ev.kind === 'done') resolve({ ok: true, result: ev.result })
+          else resolve({ ok: false, code: ev.error.code })
+        })
+        window.lumin
+          .invoke<{ taskId: string }>(args.channel, args.payload)
+          .then(({ taskId }) => {
+            currentTaskId = taskId
+          })
+          .catch((err: unknown) => {
+            off()
+            resolve({ ok: false, code: String((err as { code?: string }).code ?? err) })
+          })
+      }),
+    { channel, payload }
+  )
+}
+
+test.describe('print（文档输出 · 打印页签）冒烟', () => {
+  test('打印页签加载 + 空态拖拽引导', async () => {
+    const { app, page } = await launchPrintDryRun()
+    try {
+      await clickSidebarTool(page, '文档输出')
+      await page.locator('.n-tabs-tab[data-name="print"]').click()
+      await expect(page.getByRole('heading', { name: '文档输出' })).toBeVisible()
+      await expect(page.getByText('拖拽文件到此处，或点击选择（最多 50 个）')).toBeVisible()
+      await expect(page.getByText('打印前会逐份预检')).toBeVisible()
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('dry-run 全链路：中文+空格图片 → prepare → show 落盘 PDF → cleanup', async () => {
+    const { app, page } = await launchPrintDryRun()
+    const dir = path.join(os.tmpdir(), 'lumin-print-e2e')
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    try {
+      const image = path.join(dir, '打印 样例.png')
+      fs.writeFileSync(image, TINY_PNG)
+
+      const prepared = await runTask(page, 'docx2pdf:print-prepare', { inputPaths: [image] })
+      expect(prepared.ok).toBe(true)
+      if (!prepared.ok) throw new Error(prepared.code)
+      const result = prepared.result as PrepareOutcome
+      expect(result.jobs).toHaveLength(1)
+      expect(result.jobs[0]?.kind).toBe('image')
+      const jobId = result.jobs[0]?.jobId ?? ''
+
+      const shown = await runTask(page, 'docx2pdf:print-show', { jobId })
+      expect(shown.ok).toBe(true)
+
+      const userData = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'))
+      const dryRun = path.join(userData, 'temp', 'lumin-print', jobId, 'dry-run.pdf')
+      const head = fs.readFileSync(dryRun).subarray(0, 5).toString('latin1')
+      expect(head).toBe('%PDF-')
+      expect(fs.statSync(dryRun).size).toBeGreaterThan(0)
+
+      const cleaned = await page.evaluate(
+        (id) =>
+          window.lumin.invoke<{ removed: number }>('docx2pdf:print-cleanup', { jobIds: [id] }),
+        jobId
+      )
+      expect(cleaned.removed).toBe(1)
+      expect(fs.existsSync(path.join(userData, 'temp', 'lumin-print', jobId))).toBe(false)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('缺失文件 → PR_NOT_FOUND（任务 error 事件）', async () => {
+    const { app, page } = await launchPrintDryRun()
+    try {
+      const missing = path.join(os.tmpdir(), 'lumin-print-e2e', '不存在.pdf')
+      const outcome = await runTask(page, 'docx2pdf:print-prepare', { inputPaths: [missing] })
+      expect(outcome).toEqual({ ok: false, code: 'PR_NOT_FOUND' })
+    } finally {
+      await app.close()
     }
   })
 })

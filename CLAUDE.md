@@ -60,7 +60,7 @@ packages/
   tools/<id>/     独立工具包
 ```
 
-已有工具：`calculator`、`unit-converter`（纯 renderer）、`docx2pdf`（soffice 子进程）、`exam-split`（pdf-lib/pdfjs + OCR ONNX）、`example`（契约链路占位）。
+已有工具（17 个包）：`calculator`（计算/进制/单位换算/生活计算）、`calendar`、`color-toolbox`、`dev-toolbox`、`docx2pdf`（显示名「文档输出」：转 PDF + 打印）、`exam-split`（pdf-lib/pdfjs + OCR ONNX）、`example`（契约链路占位）、`file-preview`、`file-scanner`（七页签：校验/重复/对比/重命名/清理/磁盘/压缩包）、`image-toolbox`（十二页签：图片处理 + 文字识别 + 二维码）、`markdown-tool`、`media-convert`（媒体工具箱：处理/下载/播放）、`mindmap`、`misc-toolbox`（系统信息/密码生成/剪贴板 + 实用工具）、`pdf-toolkit`、`text-toolbox`（格式/编码/编辑/对比）、`time-toolbox`。
 
 dependency-cruiser 强制：`tools/*` 只能依赖 `plugin-api / shared / ui / node-kit`；工具之间禁止互相 import；工具禁止依赖 `apps/*`；renderer 禁止 import main；禁止循环依赖。
 

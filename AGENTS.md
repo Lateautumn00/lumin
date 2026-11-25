@@ -188,6 +188,10 @@ Lumin：Windows 桌面实用工具箱（Electron），离线优先、无自建�
 - PDF 图片互转合并决策（2026-11-25，plan Q76/M76）：`pdf-images` **整包并入 `pdf-toolkit`** 为第 13 页签「PDF↔图片」（PDF 入口 2 → 1），删除独立包与侧边栏入口、薄壳页、e2e；通道统一 `pdf-toolkit:images-*`，错误码保留 `PI_*`；**零新增依赖/二进制**；修改须重走 R8
 - 文本残余两件套合并决策（2026-11-25，plan Q77/M77）：`text-editor` / `text-diff` **整包并入 `text-toolbox`** 为「编辑 / 对比」两页签（文本入口 3 → 1），`text-toolbox` 新增主进程入口；通道统一 `text-toolbox:editor-* / diff-*`，错误码保留 `TE_*`/`TD_*`；**零新增依赖/二进制**；修改须重走 R8
 - 杂项与系统合并决策（2026-11-25，plan Q78/M78）：`system-info` / `password-generator` / `clipboard-history` **整包并入 `misc-toolbox`** 为「系统信息 / 密码生成 / 剪贴板」三页签（杂项入口 4 → 1，`qr-code` 归属图片明确不动）；通道统一 `misc-toolbox:sysinfo-* / clipboard-*`（密码生成纯 renderer 无通道），错误码保留 `SI_*`/`CH_*`；**零新增依赖/二进制**；修改须重走 R8
+- 计算器族合并决策（2026-11-25，plan Q79/M79）：`unit-converter` / `life-calculator` **整包并入 `calculator`**（`version 0.3.0`）为「计算 / 进制 / 单位换算 / 生活计算」四页签（计算器入口 3 → 1），删除两包与侧边栏入口、薄壳页、e2e；纯 renderer 无通道，换算收藏键改 `lumin.tool.calculator.unit-favorites`（旧键不迁移），错误码保留 `LC_*`；**零新增依赖/二进制**；修改须重走 R8
+- 文档输出合并决策（2026-11-25，plan Q80/M80）：`print-tool` **整包并入 `docx2pdf`**（显示名「文档输出」，`version 0.3.0`）为「转为 PDF / 打印」两页签（文档入口 2 → 1），删除独立包与侧边栏入口、薄壳页、e2e；通道 `docx2pdf:print-*`，settings `tools.docx2pdf.print.*`，错误码保留 `PR_*`；**零新增依赖/二进制**；修改须重走 R8
+- 压缩包并入文件扫描决策（2026-11-25，plan Q81/M81）：`zip-tool` **整包并入 `file-scanner`** 为第 7 页签「压缩包」（`version 0.3.0`），删除独立包与侧边栏入口、薄壳页、e2e；通道 `file-scanner:zip-*`，settings `tools.file-scanner.zip.*`，错误码保留 `ZP_*`；依赖仅继承 `fflate 0.8.3`；修改须重走 R8
+- OCR/二维码并入图片工具箱决策（2026-11-25，plan Q82/M82）：`ocr-text` / `qr-code` **整包并入 `image-toolbox`** 为「文字识别 / 二维码」两页签（`version 0.5.0`，图片入口 3 → 1），删除两包与侧边栏入口、薄壳页、e2e；通道 `image-toolbox:ocr-* / qr-*`，settings `tools.image-toolbox.ocr|qr.*`，错误码保留 `OCR_*`/`QR_*`；依赖继承 `@lumin/ocr-kit`/`jsqr`/`qrcode`；**e2e 必须按 DropZone `aria-label` 与占位符定位输入框**（多页签常驻挂载）；修改须重走 R8
 
 ---
 

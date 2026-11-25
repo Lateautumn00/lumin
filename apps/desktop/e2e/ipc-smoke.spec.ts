@@ -12,6 +12,14 @@ declare global {
 
 const appDir = path.resolve(__dirname, '..')
 
+/** 切换计算器页签（Naive UI 的 tab 节点没有 role=tab，按 .n-tabs-tab 文本定位） */
+async function switchCalculatorTab(
+  page: Awaited<ReturnType<ElectronApplication['firstWindow']>>,
+  name: string
+): Promise<void> {
+  await page.locator('.n-tabs-tab', { hasText: name }).first().click()
+}
+
 test.describe('IPC 冒烟（R3）', () => {
   let app: ElectronApplication
 
@@ -43,9 +51,10 @@ test.describe('IPC 冒烟（R3）', () => {
 
   test('单位换算：类别切换单位重置 + 实时换算 + 收藏', async () => {
     const page = await app.firstWindow()
-    await page.evaluate(() => localStorage.removeItem('lumin.tool.unit-converter.favorites'))
-    await clickSidebarTool(page, '单位换算')
-    await expect(page.getByRole('heading', { name: '单位换算' })).toBeVisible()
+    await page.evaluate(() => localStorage.removeItem('lumin.tool.calculator.unit-favorites'))
+    await clickSidebarTool(page, '计算器')
+    await switchCalculatorTab(page, '单位换算')
+    await expect(page.getByPlaceholder('输入数值')).toBeVisible()
 
     const value = page.getByPlaceholder('输入数值')
     await value.fill('1')
@@ -72,7 +81,8 @@ test.describe('IPC 冒烟（R3）', () => {
     await expect(page.getByText('= -273.15').first()).toBeVisible()
 
     await page.reload()
-    await clickSidebarTool(page, '单位换算')
+    await clickSidebarTool(page, '计算器')
+    await switchCalculatorTab(page, '单位换算')
     await page.getByLabel('换算类别').click()
     await page.getByText('温度', { exact: true }).click()
     await expect(page.getByRole('button', { name: '取消收藏源单位' })).toBeVisible()
@@ -81,8 +91,9 @@ test.describe('IPC 冒烟（R3）', () => {
 
   test('单位换算：能量/油耗新类别（倒数换算与错误态）', async () => {
     const page = await app.firstWindow()
-    await clickSidebarTool(page, '单位换算')
-    await expect(page.getByRole('heading', { name: '单位换算' })).toBeVisible()
+    await clickSidebarTool(page, '计算器')
+    await switchCalculatorTab(page, '单位换算')
+    await expect(page.getByPlaceholder('输入数值')).toBeVisible()
     const value = page.getByPlaceholder('输入数值')
     const categorySelect = page.getByLabel('换算类别')
 

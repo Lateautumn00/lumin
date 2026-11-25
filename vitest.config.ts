@@ -88,13 +88,14 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
-        'packages/tools/unit-converter/src/manifest.ts': {
+        // M79 并入 calculator 的单位换算与生活计算（原 unit-converter / life-calculator）
+        'packages/tools/calculator/src/units/*.ts': {
           lines: 80,
           functions: 80,
           statements: 80,
           branches: 80
         },
-        'packages/tools/unit-converter/src/units/*.ts': {
+        'packages/tools/calculator/src/life/**/*.ts': {
           lines: 80,
           functions: 80,
           statements: 80,
@@ -148,12 +149,6 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
-        'packages/tools/zip-tool/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
         'packages/tools/media-convert/src/**/*.ts': {
           lines: 80,
           functions: 80,
@@ -167,24 +162,6 @@ export default defineConfig({
           statements: 80,
           branches: 80
         },
-        'packages/tools/print-tool/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
-        'packages/tools/qr-code/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
-        'packages/tools/ocr-text/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
         'packages/tools/color-toolbox/src/**/*.ts': {
           lines: 80,
           functions: 80,
@@ -192,12 +169,6 @@ export default defineConfig({
           branches: 80
         },
         'packages/tools/time-toolbox/src/**/*.ts': {
-          lines: 80,
-          functions: 80,
-          statements: 80,
-          branches: 80
-        },
-        'packages/tools/life-calculator/src/**/*.ts': {
           lines: 80,
           functions: 80,
           statements: 80,

@@ -1,6 +1,6 @@
 {
   "name": "@lumin/tool-image-toolbox",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -37,15 +37,19 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
-    "@napi-rs/canvas": "1.1.1"
+    "@napi-rs/canvas": "1.1.1",
+    "@types/qrcode": "1.5.6"
   },
   "dependencies": {
     "@lucide/vue": "1.72.0",
     "@lumin/node-kit": "workspace:*",
+    "@lumin/ocr-kit": "workspace:*",
     "@lumin/plugin-api": "workspace:*",
     "@lumin/shared": "workspace:*",
     "@lumin/ui": "workspace:*",
+    "jsqr": "1.4.0",
     "naive-ui": "2.45.3",
+    "qrcode": "1.5.4",
     "vue": "3.5.45",
     "zod": "4.6.7"
   }

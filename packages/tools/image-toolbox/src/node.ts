@@ -13,7 +13,13 @@ import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { runProcess, tail, type RunProcessResult } from '@lumin/node-kit'
 import { isStructuredError, makeError } from '@lumin/shared'
-import type { MainPluginContext, RegisterMain, TaskHandlerContext } from '@lumin/plugin-api'
+import type {
+  IpcHandler,
+  MainPluginContext,
+  RegisterMain,
+  TaskHandler,
+  TaskHandlerContext
+} from '@lumin/plugin-api'
 import {
   MAX_FILE_BYTES,
   appendHistoryPayloadSchema,
@@ -74,6 +80,11 @@ import {
   createNodeDeps as createStitchDeps,
   registerWith as registerStitchWith
 } from './stitch/node'
+import { registerMain as registerOcrMain } from './ocr/node'
+import { registerMain as registerQrMain } from './qr/node'
+
+/** 并入页签前缀（通道 `{prefix}-{action}`，settings 键 `{prefix}.{key}`） */
+type MergedPrefix = 'ocr' | 'qr'
 
 /** 可注入依赖（单测传假件；docx2pdf/video-download node.ts 同口径） */
 export interface ImageToolboxDeps {
@@ -662,6 +673,26 @@ async function processOne(
   return { input: file, output, beforeBytes: stat.size, afterBytes: afterStat.size }
 }
 
+/**
+ * 子功能上下文适配（M82 同 file-scanner 口径）：通道加 `{prefix}-`、settings 键加 `{prefix}.` 前缀，
+ * 并入页签仍按自身裸 action / 裸键注册，与宿主通道互不冲突
+ * @param ctx 宿主主进程上下文
+ * @param prefix 页签前缀（ocr / qr）
+ */
+function namespacedContext(ctx: MainPluginContext, prefix: MergedPrefix): MainPluginContext {
+  return {
+    ...ctx,
+    registerIpc: <P, R>(action: string, handler: IpcHandler<P, R>) =>
+      ctx.registerIpc(`${prefix}-${action}`, handler),
+    registerTask: <P, R>(action: string, handler: TaskHandler<P, R>) =>
+      ctx.registerTask(`${prefix}-${action}`, handler),
+    settings: {
+      get: <T>(key: string, defaultValue: T) => ctx.settings.get(`${prefix}.${key}`, defaultValue),
+      set: <T>(key: string, value: T) => ctx.settings.set(`${prefix}.${key}`, value)
+    }
+  }
+}
+
 /** 生产注册入口（壳 tool-mains.ts 调用；测试用 registerWith 注入假 deps） */
 export const registerMain: RegisterMain = (ctx) => {
   registerWith(ctx, createDefaultDeps())
@@ -669,4 +700,7 @@ export const registerMain: RegisterMain = (ctx) => {
   registerWatermarkWith(ctx, createWatermarkDeps())
   registerDewatermarkWith(ctx, createDewatermarkDeps())
   registerStitchWith(ctx, createStitchDeps())
+  // M82：文字识别 / 二维码两页签（通道 ocr-* / qr-*）
+  registerOcrMain(namespacedContext(ctx, 'ocr'))
+  registerQrMain(namespacedContext(ctx, 'qr'))
 }

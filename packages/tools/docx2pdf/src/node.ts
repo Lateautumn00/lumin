@@ -24,7 +24,13 @@ import {
   verifyPdfOutput,
   type MoveFs
 } from '@lumin/node-kit/office'
-import type { MainPluginContext, RegisterMain, TaskHandlerContext } from '@lumin/plugin-api'
+import type {
+  IpcHandler,
+  MainPluginContext,
+  RegisterMain,
+  TaskHandler,
+  TaskHandlerContext
+} from '@lumin/plugin-api'
 import { makeError } from '@lumin/shared'
 import { batchProgressMessage, dedupeInputPaths, toBatchFailure } from './batch'
 import { downloadMsi, type DownloadOptions } from './download'
@@ -32,6 +38,7 @@ import { convertFailureCode } from './convert-failure'
 import { toolError, errnoCode, isStructuredError } from './errors'
 import { OFFICE_INPUT_HINT } from './formats'
 import { resolveOutputPath } from './naming'
+import { registerMain as registerPrintMain } from './print/node'
 import {
   convertPayloadSchema,
   installPayloadSchema,
@@ -388,6 +395,27 @@ export function createNodeDeps(): Docx2pdfDeps {
   }
 }
 
-export const registerMain: RegisterMain = (ctx) => {
+/**
+ * 打印页签上下文适配（M80 同 file-scanner 口径）：通道加 `print-`、settings 键加 `print.` 前缀，
+ * 打印模块仍按自身裸 action / 裸键注册，与转换通道互不冲突
+ * @param ctx 宿主主进程上下文
+ */
+function printContext(ctx: MainPluginContext): MainPluginContext {
+  return {
+    ...ctx,
+    registerIpc: <P, R>(action: string, handler: IpcHandler<P, R>) =>
+      ctx.registerIpc(`print-${action}`, handler),
+    registerTask: <P, R>(action: string, handler: TaskHandler<P, R>) =>
+      ctx.registerTask(`print-${action}`, handler),
+    settings: {
+      get: <T>(key: string, defaultValue: T) => ctx.settings.get(`print.${key}`, defaultValue),
+      set: <T>(key: string, value: T) => ctx.settings.set(`print.${key}`, value)
+    }
+  }
+}
+
+export const registerMain: RegisterMain = async (ctx) => {
   registerWith(ctx, createNodeDeps())
+  await registerPrintMain(printContext(ctx))
+  ctx.log.info('docx2pdf registered')
 }

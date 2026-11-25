@@ -1,4 +1,11 @@
 <script setup lang="ts">
+/**
+ * @file ToolView.vue 计算器主视图（计算 / 进制 / 单位换算 / 生活计算 四页签）
+ * @author cuilanchao
+ * @date 2026-11-25
+ * @description M79 由独立工具 unit-converter（单位换算）与 life-calculator（生活计算）并入，
+ *              计算与进制为计算器原有能力；四页签扁平排列，仅计算页签挂全局键盘输入监听。
+ */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { NButton, NIcon, NInput, NPopconfirm, NSelect, NTabPane, NTabs } from 'naive-ui'
 import { Copy, Delete, type LucideIcon } from '@lucide/vue'
@@ -7,8 +14,13 @@ import { formatNumber } from '@lumin/shared'
 import { evaluate, type AngleMode } from '../calc/evaluate'
 import { convertBase, type Radix } from '../calc/base'
 import { useHistoryStore, type HistoryEntry } from '../calc/history'
+import UnitTab from './UnitTab.vue'
+import LifeTab from './LifeTab.vue'
 
 type Layout = 'basic' | 'scientific'
+
+/** 页签键 */
+type TabKey = 'calc' | 'base' | 'units' | 'life'
 
 interface PadKey {
   label: string
@@ -56,7 +68,7 @@ const SCIENTIFIC_KEYS: readonly PadKey[] = [
 
 const INSERTABLE_RE = /^[0-9a-zA-Z+\-*/^().%! ]$/
 
-const activeTab = ref('calc')
+const activeTab = ref<TabKey>('calc')
 
 const layout = ref<Layout>('scientific')
 const angleMode = ref<AngleMode>('deg')
@@ -234,19 +246,31 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-full min-h-0 flex-col gap-3">
-    <NTabs v-model:value="activeTab" type="line" size="small">
+    <div>
+      <h1 class="text-base font-semibold">计算器</h1>
+      <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
+        表达式求值与进制换算、17 类单位互转、房贷/个税/百分比折扣；全部本地计算，不联网、不存储。
+      </p>
+    </div>
+
+    <NTabs v-model:value="activeTab" type="line">
       <NTabPane name="calc">
         <template #tab>计算</template>
       </NTabPane>
       <NTabPane name="base">
         <template #tab>进制</template>
       </NTabPane>
+      <NTabPane name="units">
+        <template #tab>单位换算</template>
+      </NTabPane>
+      <NTabPane name="life">
+        <template #tab>生活计算</template>
+      </NTabPane>
     </NTabs>
 
     <div v-if="activeTab === 'calc'" class="flex min-h-0 flex-1 gap-4">
       <div class="flex min-w-0 flex-1 flex-col gap-3">
         <div class="flex items-center gap-2">
-          <h1 class="text-base font-semibold">计算器</h1>
           <div class="ml-auto flex items-center gap-1">
             <NButton
               size="small"
@@ -356,9 +380,9 @@ onBeforeUnmount(() => {
       </aside>
     </div>
 
-    <div v-else class="flex max-w-3xl flex-col gap-3">
+    <div v-else-if="activeTab === 'base'" class="flex max-w-3xl flex-col gap-3">
       <div>
-        <h1 class="text-base font-semibold">进制换算</h1>
+        <h2 class="text-sm font-semibold">进制换算</h2>
         <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
           2 / 8 / 10 / 16 进制整数互转，使用 BigInt 解析，大整数不丢精度
         </p>
@@ -423,5 +447,8 @@ onBeforeUnmount(() => {
         仅支持整数（可带正负号），十进制 512 字符以内；十六进制输入不区分大小写，输出为小写。
       </p>
     </div>
+
+    <UnitTab v-else-if="activeTab === 'units'" />
+    <LifeTab v-else />
   </div>
 </template>

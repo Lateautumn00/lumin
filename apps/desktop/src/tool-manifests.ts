@@ -9,39 +9,27 @@ import { manifest as examSplitManifest } from '@lumin/tool-exam-split/manifest'
 import { manifest as filePreviewManifest } from '@lumin/tool-file-preview/manifest'
 import { manifest as fileScannerManifest } from '@lumin/tool-file-scanner/manifest'
 import { manifest as imageToolboxManifest } from '@lumin/tool-image-toolbox/manifest'
-import { manifest as lifeCalculatorManifest } from '@lumin/tool-life-calculator/manifest'
 import { manifest as markdownToolManifest } from '@lumin/tool-markdown-tool/manifest'
 import { manifest as mediaConvertManifest } from '@lumin/tool-media-convert/manifest'
 import { manifest as mindmapManifest } from '@lumin/tool-mindmap/manifest'
 import { manifest as miscToolboxManifest } from '@lumin/tool-misc-toolbox/manifest'
-import { manifest as ocrTextManifest } from '@lumin/tool-ocr-text/manifest'
 import { manifest as pdfToolkitManifest } from '@lumin/tool-pdf-toolkit/manifest'
-import { manifest as printManifest } from '@lumin/tool-print/manifest'
-import { manifest as qrCodeManifest } from '@lumin/tool-qr-code/manifest'
 import { manifest as textToolboxManifest } from '@lumin/tool-text-toolbox/manifest'
 import { manifest as timeToolboxManifest } from '@lumin/tool-time-toolbox/manifest'
-import { manifest as unitConverterManifest } from '@lumin/tool-unit-converter/manifest'
-import { manifest as zipToolManifest } from '@lumin/tool-zip-tool/manifest'
 
 /** 壳内唯一工具清单（Q14）：新增工具 = 新包 + 此处 1 行 + tool-mains 1 行（如有主进程）+ renderer 薄壳 1 行 */
 export const toolManifests: readonly ToolManifest[] = [
   calculatorManifest,
   calendarManifest,
-  unitConverterManifest,
-  lifeCalculatorManifest,
   docx2pdfManifest,
   examSplitManifest,
   imageToolboxManifest,
   pdfToolkitManifest,
-  printManifest,
   textToolboxManifest,
   mindmapManifest,
   markdownToolManifest,
   fileScannerManifest,
   mediaConvertManifest,
-  qrCodeManifest,
-  ocrTextManifest,
-  zipToolManifest,
   colorToolboxManifest,
   timeToolboxManifest,
   devToolboxManifest,

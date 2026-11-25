@@ -45,24 +45,24 @@
 
 ### 2.4 调整 Tab（M40）
 
-| 字段     | 类型                              | 约束                                                                                    | 默认值 |
-| -------- | --------------------------------- | --------------------------------------------------------------------------------------- | ------ |
-| 效果     | enum `灰度 \| 反色 \| 黑白二值`   | 灰度 `hue=s=0`；反色 `negate`；黑白 = 灰度后按阈值二值化（扫描件/文字图常见）           | 灰度   |
-| 二值阈值 | 滑杆 0–255                        | 仅「黑白二值」显示；数值钳制到 0–255                                                    | 128    |
-| 质量     | 滑杆 1–100                        | jpg/webp/avif 生效；png/bmp/tiff 置灰                                                   | 75     |
+| 字段     | 类型                            | 约束                                                                          | 默认值 |
+| -------- | ------------------------------- | ----------------------------------------------------------------------------- | ------ |
+| 效果     | enum `灰度 \| 反色 \| 黑白二值` | 灰度 `hue=s=0`；反色 `negate`；黑白 = 灰度后按阈值二值化（扫描件/文字图常见） | 灰度   |
+| 二值阈值 | 滑杆 0–255                      | 仅「黑白二值」显示；数值钳制到 0–255                                          | 128    |
+| 质量     | 滑杆 1–100                      | jpg/webp/avif 生效；png/bmp/tiff 置灰                                         | 75     |
 
 - 输出格式固定「保持原格式」，复用压缩 Tab 的 `compressOutputExt` 映射：gif/webp 逐帧处理并保留动画（webp 动画路径），其余格式取首帧重编码。
 - 命名见 §6；调整不改变尺寸与元数据以外的内容。
 
 ### 2.5 GIF Tab（M40）
 
-| 字段     | 类型                                | 约束                                                                       | 默认值 |
-| -------- | ----------------------------------- | -------------------------------------------------------------------------- | ------ |
-| 图片列表 | 多选（拖拽 + 选择器）               | 顺序 = 帧顺序；行内 [↑][↓] 调整顺序、[按文件名排序]；1–100 张               | 空     |
-| 帧时长   | 数字输入（毫秒）                    | 50–5000，步进 50；换算帧率 `fps = 1000 / 帧时长`（GIF 时间片 10ms）        | 500    |
-| 循环     | enum `无限 \| 不循环 \| 2–10 次`    | 无限 → `-loop 0`；不循环 → `-loop -1`；N 次 → `-loop N`                    | 无限   |
-| 宽度     | 数字输入（px）                      | 0 = 按首张图片宽；64–4096                                                   | 0      |
-| 高度     | 只读（自动）                        | 全部图片按目标宽等比缩放后的最大高（≤4096），界面实时展示                    | —      |
+| 字段     | 类型                             | 约束                                                                | 默认值 |
+| -------- | -------------------------------- | ------------------------------------------------------------------- | ------ |
+| 图片列表 | 多选（拖拽 + 选择器）            | 顺序 = 帧顺序；行内 [↑][↓] 调整顺序、[按文件名排序]；1–100 张       | 空     |
+| 帧时长   | 数字输入（毫秒）                 | 50–5000，步进 50；换算帧率 `fps = 1000 / 帧时长`（GIF 时间片 10ms） | 500    |
+| 循环     | enum `无限 \| 不循环 \| 2–10 次` | 无限 → `-loop 0`；不循环 → `-loop -1`；N 次 → `-loop N`             | 无限   |
+| 宽度     | 数字输入（px）                   | 0 = 按首张图片宽；64–4096                                           | 0      |
+| 高度     | 只读（自动）                     | 全部图片按目标宽等比缩放后的最大高（≤4096），界面实时展示           | —      |
 
 - 编码链路：每张图以 `-framerate fps` 单帧输入 → `filter_complex` 逐路 `scale=W:H:force_original_aspect_ratio=decrease,pad=W:H:(ow-iw)/2:(oh-ih)/2:color=white,setsar=1` → `concat=n=N:v=1:a=0` → `split` → `palettegen` → `paletteuse` → 单个 GIF。
 - 画布上限：宽/高 ≤4096 且总像素 ≤16,777,216；超出 → `IT_GIF_TOO_LARGE`。
@@ -84,14 +84,14 @@
 
 ## 4. IPC 与数据
 
-| 通道                           | 类型 | payload → 返回                                                                                                                                                                                                                  |
-| ------------------------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `image-toolbox:probe`          | sync | `{files: string[]}` → `{items: [{file, format, width, height, sizeBytes, animated}]}`；单文件探测（`ffmpeg -i` stderr）超时 10s；选后即探测，列表实时展示尺寸/大小                                                              |
+| 通道                           | 类型 | payload → 返回                                                                                                                                                                                                                          |
+| ------------------------------ | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `image-toolbox:probe`          | sync | `{files: string[]}` → `{items: [{file, format, width, height, sizeBytes, animated}]}`；单文件探测（`ffmpeg -i` stderr）超时 10s；选后即探测，列表实时展示尺寸/大小                                                                      |
 | `image-toolbox:process`        | task | `{mode: compress\|convert\|resize\|effect, files, outputDir, options}`（options 形状随 mode zod discriminated union）→ `{taskId}`；progress `{current, total, message}`；done → `{outputs: [{input, output, beforeBytes, afterBytes}]}` |
-| `image-toolbox:make-gif`       | task | `{files: string[1..100], outputDir, options: {durationMs, loop, width}}` → `{taskId}`；progress `{current, total, message}`；done → `{outputPath, width, height, frames, sizeBytes}` |
-| `image-toolbox:config`         | sync | `{}` → `{outputDir}`（settings 记忆回填，缺省 `userData/images`）                                                                                                                                                               |
-| `image-toolbox:set-output-dir` | sync | `{outputDir: string}` → void；选择目录后即时记忆（空串 → `INVALID_PAYLOAD`）                                                                                                                                                    |
-| `lumin:shell:pick-directory`   | sync | `{title?: string}` → `string \| null`（壳通用能力；用户取消 → null）                                                                                                                                                            |
+| `image-toolbox:make-gif`       | task | `{files: string[1..100], outputDir, options: {durationMs, loop, width}}` → `{taskId}`；progress `{current, total, message}`；done → `{outputPath, width, height, frames, sizeBytes}`                                                    |
+| `image-toolbox:config`         | sync | `{}` → `{outputDir}`（settings 记忆回填，缺省 `userData/images`）                                                                                                                                                                       |
+| `image-toolbox:set-output-dir` | sync | `{outputDir: string}` → void；选择目录后即时记忆（空串 → `INVALID_PAYLOAD`）                                                                                                                                                            |
+| `lumin:shell:pick-directory`   | sync | `{title?: string}` → `string \| null`（壳通用能力；用户取消 → null）                                                                                                                                                                    |
 
 - 长任务三段式（提交 → progress/done/error 事件 → cancel 取消）：批量逐文件串行执行（单文件 ffmpeg 秒级，无需并发；取消 = AbortSignal 杀进程树，已完成文件保留）。
 - 入参全部 zod 校验；错误 `makeError`/`toolError` 结构化；输出命名与编码参数映射均为纯函数（可测）。
@@ -110,22 +110,22 @@
 - gif → webp 动画与 gif → 静态（首帧 `-frames:v 1`）在 `buildEncodeArgs` 内按 `animated` 标志分发。
 - 调整（M40）滤镜链（纯函数 `buildEffectFilter`）：
 
-| 效果     | ffmpeg `-vf`                                                                  |
-| -------- | ----------------------------------------------------------------------------- |
-| 灰度     | `hue=s=0`                                                                     |
-| 反色     | `negate`                                                                      |
-| 黑白二值 | `format=gray,lut=y='if(gt(val,{阈值}),255,0)'`（阈值钳制 0–255，默认 128）    |
+| 效果     | ffmpeg `-vf`                                                               |
+| -------- | -------------------------------------------------------------------------- |
+| 灰度     | `hue=s=0`                                                                  |
+| 反色     | `negate`                                                                   |
+| 黑白二值 | `format=gray,lut=y='if(gt(val,{阈值}),255,0)'`（阈值钳制 0–255，默认 128） |
 
 - GIF（M40）：`-framerate fps -i <帧1> … -framerate fps -i <帧N>` + `filter_complex`（逐路 scale/pad → concat → split → palettegen → paletteuse），`-loop` 见 §2.5；纯函数 `planGifCanvas(尺寸, 宽度)` 求画布与超限判定。
 
 ## 6. 输出命名（纯函数 `buildOutputName` / `uniqueName`）
 
-| 模式 | 命名模板（`.ext` = 目标格式扩展名）                                                                          | 示例                                |
-| ---- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
-| 压缩 | `{原名}.q{质量}.{ext}`                                                                                       | `photo.q75.jpg`                     |
-| 转换 | `{原名}.{ext}`                                                                                               | `photo.avif`                        |
-| 缩放 | 百分比 `{原名}.{p}%.{ext}`；宽 `{原名}.w{W}.{ext}`；高 `{原名}.h{H}.{ext}`；适配框 `{原名}.fit{W}x{H}.{ext}` | `photo.50%.jpg` / `photo.w1280.jpg` |
-| 调整 | 灰度 `{原名}.gray.{ext}`；反色 `{原名}.invert.{ext}`；黑白 `{原名}.bw{阈值}.{ext}`                          | `photo.gray.jpg` / `photo.bw128.png` |
+| 模式 | 命名模板（`.ext` = 目标格式扩展名）                                                                          | 示例                                 |
+| ---- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| 压缩 | `{原名}.q{质量}.{ext}`                                                                                       | `photo.q75.jpg`                      |
+| 转换 | `{原名}.{ext}`                                                                                               | `photo.avif`                         |
+| 缩放 | 百分比 `{原名}.{p}%.{ext}`；宽 `{原名}.w{W}.{ext}`；高 `{原名}.h{H}.{ext}`；适配框 `{原名}.fit{W}x{H}.{ext}` | `photo.50%.jpg` / `photo.w1280.jpg`  |
+| 调整 | 灰度 `{原名}.gray.{ext}`；反色 `{原名}.invert.{ext}`；黑白 `{原名}.bw{阈值}.{ext}`                           | `photo.gray.jpg` / `photo.bw128.png` |
 | GIF  | `动图_{yyyyMMdd-HHmmss}.gif`                                                                                 | `动图_20261121-153000.gif`           |
 
 - **冲突策略（拍板）**：目标已存在 → 自动重命名 `{base} ({n}){suffix}`（`photo.q75 (1).jpg`，n 从 1 起递增）；纯函数 `uniqueName(existing: Set<string>, candidate)`。
@@ -142,7 +142,7 @@
 | `IT_SCALE_INVALID`       | 缩放参数非法（≤0 / 超上限 / 适配框缺边）             | 缩放参数不正确，请检查后重试                       |
 | `IT_PROBE_FAILED`        | 探测超时 / stderr 无法解析出视频流                   | 无法读取图片信息                                   |
 | `IT_NO_FILES`            | 空文件列表提交（renderer 拦截为主，主进程兜底）      | 请先添加图片文件                                   |
-| `IT_GIF_TOO_LARGE`       | GIF 画布宽/高 >4096 或总像素 >1600 万                 | GIF 尺寸超出上限，请减小宽度或图片数量             |
+| `IT_GIF_TOO_LARGE`       | GIF 画布宽/高 >4096 或总像素 >1600 万                | GIF 尺寸超出上限，请减小宽度或图片数量             |
 | `IT_CANCELLED`           | 用户取消（复用 shared `CANCELLED` 语义）             | 已取消（已完成的 N 张保留）                        |
 
 - 批量语义：单张失败不中断批次，结果区逐文件标失败（`IT_FILE_CORRUPT` 等），批次终态 done；仅引擎缺失/目录不可写/取消为批次级 error。
@@ -188,16 +188,16 @@
 ### 字段级清单
 
 1. **添加文件夹（递归）**
-   * 入口：文件列表上方「添加文件夹」按钮（`data-testid="add-folder"`）；运行/收集中禁用，文案切换「正在收集…」。
-   * 交互：`window.lumin.pickDirectory('选择图片文件夹')` → `image-toolbox:collect-folder` → 结果并入列表（已有路径去重）。
-   * 收集规则：仅白名单扩展名（沿用 `extensionOf`）；跳过符号链接；子目录递归；结果按路径本地化排序；上限 `MAX_BATCH_FILES = 2000`，触达即停并回传 `truncated`。
-   * 提示：`folderHint` 显示「已新增 N 张 / 已在列表中 / 已达 2000 张上限 / 列表已达上限」；空目录或不可读 → `IT_FOLDER_EMPTY`。
-   * 列表容量：合并后行数不得超过 2000（超出部分丢弃并提示），与 `process` 载荷上限同口径。
+   - 入口：文件列表上方「添加文件夹」按钮（`data-testid="add-folder"`）；运行/收集中禁用，文案切换「正在收集…」。
+   - 交互：`window.lumin.pickDirectory('选择图片文件夹')` → `image-toolbox:collect-folder` → 结果并入列表（已有路径去重）。
+   - 收集规则：仅白名单扩展名（沿用 `extensionOf`）；跳过符号链接；子目录递归；结果按路径本地化排序；上限 `MAX_BATCH_FILES = 2000`，触达即停并回传 `truncated`。
+   - 提示：`folderHint` 显示「已新增 N 张 / 已在列表中 / 已达 2000 张上限 / 列表已达上限」；空目录或不可读 → `IT_FOLDER_EMPTY`。
+   - 列表容量：合并后行数不得超过 2000（超出部分丢弃并提示），与 `process` 载荷上限同口径。
 2. **处理历史（最近 20 条）**
-   * 记录时机：`process` / `make-gif` 任务 `done` 后追加（失败/取消不记录）。
-   * 条目：`{ at, mode, success, failed, outputDir, firstOutput }`；`mode ∈ compress|convert|resize|effect|gif`；`at` 由主进程 `Date.now()` 补齐；`firstOutput` 为首个产物绝对路径或 `null`。
-   * 存储：settings `tools.image-toolbox.history`，FIFO 20（新 → 旧），非法存量逐条丢弃。
-   * UI：底部 `<details data-testid="history-panel">`「处理历史（最近 N 条）」，每行「时间 · 模式 · 成功 x（失败 y）+ 输出目录」，首个产物存在时显示定位按钮；「清空历史」二次操作即清空并折叠面板。
+   - 记录时机：`process` / `make-gif` 任务 `done` 后追加（失败/取消不记录）。
+   - 条目：`{ at, mode, success, failed, outputDir, firstOutput }`；`mode ∈ compress|convert|resize|effect|gif`；`at` 由主进程 `Date.now()` 补齐；`firstOutput` 为首个产物绝对路径或 `null`。
+   - 存储：settings `tools.image-toolbox.history`，FIFO 20（新 → 旧），非法存量逐条丢弃。
+   - UI：底部 `<details data-testid="history-panel">`「处理历史（最近 N 条）」，每行「时间 · 模式 · 成功 x（失败 y）+ 输出目录」，首个产物存在时显示定位按钮；「清空历史」二次操作即清空并折叠面板。
 3. **设置**：`config` 回包增 `history`，其余不变。
 
 ### 契约（`schema.ts`）
@@ -227,25 +227,25 @@ export const collectFolderResultSchema = z.object({
 
 ### IPC
 
-| 通道 | 类型 | 入参 | 回包 |
-| --- | --- | --- | --- |
-| `image-toolbox:collect-folder` | sync | `{ dir }` | `{ files, truncated }`；空/不可读 → `IT_FOLDER_EMPTY` |
-| `image-toolbox:append-history` | sync | `{ mode, success, failed, outputDir, firstOutput }` | `{ history }`（20 条） |
-| `image-toolbox:clear-history` | sync | `{}` | `{ history: [] }` |
+| 通道                           | 类型 | 入参                                                | 回包                                                  |
+| ------------------------------ | ---- | --------------------------------------------------- | ----------------------------------------------------- |
+| `image-toolbox:collect-folder` | sync | `{ dir }`                                           | `{ files, truncated }`；空/不可读 → `IT_FOLDER_EMPTY` |
+| `image-toolbox:append-history` | sync | `{ mode, success, failed, outputDir, firstOutput }` | `{ history }`（20 条）                                |
+| `image-toolbox:clear-history`  | sync | `{}`                                                | `{ history: [] }`                                     |
 
 ### 纯函数
 
-| 文件 | 函数 | 语义 |
-| --- | --- | --- |
-| `folder.ts` | `collectImages(root)` | 迭代递归 + 白名单 + 跳过符号链接 + 2000 上限 + 排序 |
-| `history.ts` | `appendHistory(current, entry, limit=20)` | 置顶追加 + 截断（不改原数组） |
-| `history.ts` | `parseHistory(raw)` | 逐条 zod 校验 + 上限截断 |
+| 文件         | 函数                                      | 语义                                                |
+| ------------ | ----------------------------------------- | --------------------------------------------------- |
+| `folder.ts`  | `collectImages(root)`                     | 迭代递归 + 白名单 + 跳过符号链接 + 2000 上限 + 排序 |
+| `history.ts` | `appendHistory(current, entry, limit=20)` | 置顶追加 + 截断（不改原数组）                       |
+| `history.ts` | `parseHistory(raw)`                       | 逐条 zod 校验 + 上限截断                            |
 
 ### 错误码
 
-| 码 | 文案 | 可重试 |
-| --- | --- | --- |
-| `IT_FOLDER_EMPTY` | 文件夹不可读或未找到支持的图片 | 否 |
+| 码                | 文案                           | 可重试 |
+| ----------------- | ------------------------------ | ------ |
+| `IT_FOLDER_EMPTY` | 文件夹不可读或未找到支持的图片 | 否     |
 
 ### 验收
 
@@ -297,46 +297,46 @@ export const collectFolderResultSchema = z.object({
 
 ### 页签与通道对照
 
-| Tab（`TabId`） | 视图                                  | 通道（`image-toolbox:{action}`）                                       | 错误码前缀 |
-| -------------- | ------------------------------------- | ---------------------------------------------------------------------- | ---------- |
-| `watermark`    | `renderer/tabs/WatermarkTab.vue`      | `watermark`（任务）、`watermark-config`、`watermark-set-output-dir`    | `IW_*`     |
-| `dewatermark`  | `renderer/tabs/DewatermarkTab.vue`    | `dewatermark`（任务）、`dewatermark-config`、`dewatermark-set-output-dir` | `IDW_*`    |
-| `stitch`       | `renderer/tabs/StitchTab.vue`（内含「拼接 / 长图分割」二级 Tab） | `stitch`、`split`（任务）、`stitch-config`、`stitch-set-output-dir` | `IS_*`     |
+| Tab（`TabId`） | 视图                                                             | 通道（`image-toolbox:{action}`）                                          | 错误码前缀 |
+| -------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------- |
+| `watermark`    | `renderer/tabs/WatermarkTab.vue`                                 | `watermark`（任务）、`watermark-config`、`watermark-set-output-dir`       | `IW_*`     |
+| `dewatermark`  | `renderer/tabs/DewatermarkTab.vue`                               | `dewatermark`（任务）、`dewatermark-config`、`dewatermark-set-output-dir` | `IDW_*`    |
+| `stitch`       | `renderer/tabs/StitchTab.vue`（内含「拼接 / 长图分割」二级 Tab） | `stitch`、`split`（任务）、`stitch-config`、`stitch-set-output-dir`       | `IS_*`     |
 
 - 设置键（`tools.image-toolbox.*`）：`watermarkOutputDir`、`dewatermarkOutputDir`、`stitchOutputDir`（默认分别为 `userData/image-watermark`、`userData/image-dewatermark`、`userData/image-stitch`）。
 - 三页签与原有 7 页签同页共存；`v-show` 保留文件选择、框选与在跑任务状态；新页签不参与原有共享处理链路（`runProcess`）。
 
 ### 水印 Tab（原 image-watermark）
 
-| 项       | 规则                                                                                     |
-| -------- | ---------------------------------------------------------------------------------------- |
-| 输入     | 多选 PNG/JPG/WebP，单次 ≤100 张，单张 ≤40MB；DropZone 与追加选择                          |
-| 水印类型 | 文字（1–100 字）或图片（PNG/JPG/WebP ≤5MB）                                              |
-| 位置     | 九宫格锚点（默认右下）+ 平铺模式（`tile`）                                                |
-| 参数     | 透明度 0–100%（钳制）、旋转角度（归一化 0–359）、文字字号百分比 / 图片宽度百分比          |
-| 输出     | 指定输出目录；同名自动 `(1)` 递增；扩展名沿用输入编码；原图不改动                        |
+| 项       | 规则                                                                                                      |
+| -------- | --------------------------------------------------------------------------------------------------------- |
+| 输入     | 多选 PNG/JPG/WebP，单次 ≤100 张，单张 ≤40MB；DropZone 与追加选择                                          |
+| 水印类型 | 文字（1–100 字）或图片（PNG/JPG/WebP ≤5MB）                                                               |
+| 位置     | 九宫格锚点（默认右下）+ 平铺模式（`tile`）                                                                |
+| 参数     | 透明度 0–100%（钳制）、旋转角度（归一化 0–359）、文字字号百分比 / 图片宽度百分比                          |
+| 输出     | 指定输出目录；同名自动 `(1)` 递增；扩展名沿用输入编码；原图不改动                                         |
 | 界面     | 空态 DropZone；加载态逐张进度 + 取消；报错态 `IW_*` 中文文案 + 重试/详情；结果态「成功 N 张 · 失败 M 张」 |
 
 ### 去水印 Tab（原 image-dewatermark）
 
-| 项       | 规则                                                                       |
-| -------- | -------------------------------------------------------------------------- |
-| 输入     | 单张 PNG/JPG/WebP ≤40MB、≤10000×10000                                      |
-| 框选     | 预览画布拖拽新建；选中后移动 / 删除；最多 20 个区域，最小 2px              |
-| 填充模式 | `inpaint` 快速修复 / `blur` 模糊（半径 4–40，默认 12）/ `solid` 纯色       |
-| 输出     | 指定目录；编码 png/jpeg/webp 可选；原图不改动                              |
+| 项       | 规则                                                                                |
+| -------- | ----------------------------------------------------------------------------------- |
+| 输入     | 单张 PNG/JPG/WebP ≤40MB、≤10000×10000                                               |
+| 框选     | 预览画布拖拽新建；选中后移动 / 删除；最多 20 个区域，最小 2px                       |
+| 填充模式 | `inpaint` 快速修复 / `blur` 模糊（半径 4–40，默认 12）/ `solid` 纯色                |
+| 输出     | 指定目录；编码 png/jpeg/webp 可选；原图不改动                                       |
 | 界面     | 空态选择图片引导；加载态进度 + 取消；报错态 `IDW_*` + 重试/详情；结果态展示产物路径 |
 
 ### 拼接 Tab（原 image-stitch，含 M40 长图分割）
 
-| 项       | 规则                                                                                                  |
-| -------- | ----------------------------------------------------------------------------------------------------- |
-| 拼接输入 | 多选 PNG/JPG/WebP，≤100 张，单张 ≤40MB；顺序可调整                                                     |
-| 拼接模式 | `vertical` 纵向 / `horizontal` 横向 / `grid` 网格（列数 2–8）                                          |
-| 尺寸模式 | `first` 以首图 / `max` 以最大 / `fixed` 固定边长（100–10000px）                                        |
-| 版式参数 | 间距 0–100px、外边距 0–100px、编码 png/jpeg/webp、质量 60–100                                          |
-| 长图分割 | 单张长图；`height` 按高度（50–30000px）或 `parts` 按份数（2–20）；输出 `名称-01.ext` 序列             |
-| 输出     | 指定目录；拼接与分割均原图不改动                                                                      |
+| 项       | 规则                                                                                                             |
+| -------- | ---------------------------------------------------------------------------------------------------------------- |
+| 拼接输入 | 多选 PNG/JPG/WebP，≤100 张，单张 ≤40MB；顺序可调整                                                               |
+| 拼接模式 | `vertical` 纵向 / `horizontal` 横向 / `grid` 网格（列数 2–8）                                                    |
+| 尺寸模式 | `first` 以首图 / `max` 以最大 / `fixed` 固定边长（100–10000px）                                                  |
+| 版式参数 | 间距 0–100px、外边距 0–100px、编码 png/jpeg/webp、质量 60–100                                                    |
+| 长图分割 | 单张长图；`height` 按高度（50–30000px）或 `parts` 按份数（2–20）；输出 `名称-01.ext` 序列                        |
+| 输出     | 指定目录；拼接与分割均原图不改动                                                                                 |
 | 界面     | 空态 DropZone；加载态「量尺寸 / 绘制」两阶段进度 + 取消；报错态 `IS_*` + 重试/详情；结果态含尺寸与张数、分割段数 |
 
 ### 验收（M72）
@@ -347,3 +347,53 @@ export const collectFolderResultSchema = z.object({
 4. 拼接出图尺寸与模式一致；长图按份数切 3 段且 `01/02/03` 序号连续
 5. 缺参/编码不支持/目录不可写分别映射 `IW_*` / `IDW_*` / `IS_*`；取消为 `CANCELLED`
 6. 本包覆盖率 ≥80%，e2e 全绿，`pnpm gate` 全绿
+
+## 12. M82 并入：文字识别 / 二维码（原 ocr-text、qr-code，2026-11-25，plan Q82 / §4.82）
+
+> 原 `docs/spec/ocr-text.md`、`docs/spec/qr-code.md` 已并入本节后删除；`ocr-text` / `qr-code` 两个工具 id 不再存在（`version 0.5.0`）。
+> 依赖继承 `@lumin/ocr-kit`、`jsqr 1.4.0`、`qrcode 1.5.4`（均已在 plan §1.1），**零新增二进制**；OCR 引擎仍在主进程 worker（onnxruntime-node），二维码生成/解码在 renderer。
+
+### 12.1 页签与通道对照
+
+| Tab（`TabKey`） | 视图                       | 通道（`image-toolbox:{action}`）                              | 错误码前缀                |
+| --------------- | -------------------------- | ------------------------------------------------------------- | ------------------------- |
+| `ocr`           | `renderer/tabs/OcrTab.vue` | `ocr-recognize`（任务）、`ocr-export`、`ocr-config`（同步）   | `OCR_*` / `MODEL_MISSING` |
+| `qr`            | `renderer/tabs/QrTab.vue`  | `qr-config`、`qr-set-output-dir`、`qr-save`（同步，无长任务） | `QR_*`                    |
+
+- settings 键：`tools.image-toolbox.ocr.outputDir`（缺省 `userData/ocr-text`）、`tools.image-toolbox.qr.outputDir`（缺省 `userData/qrcodes`）。
+- 两页签常驻挂载（`v-show`）；**e2e 必须按 DropZone `aria-label`（hint）与占位符定位输入框/文本框**，原因：多页签同时挂载会让全局 `input[type=file]` / `textarea` 命中错误页签。
+
+### 12.2 文字识别页签（原 ocr-text：M20/M49/M64）
+
+| 区域/控件 | 单张模式                                                                                                         | 批量模式                                                                                              |
+| --------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 模式切换  | `NRadioGroup`「单张识别 / 批量识别」，默认单张，运行中禁用                                                       | 同左                                                                                                  |
+| 选择区    | DropZone 单选，选择后**自动识别**                                                                                | DropZone 多选，加入列表等待「开始识别」                                                               |
+| 格式      | `.png/.jpg/.jpeg/.webp/.pdf`（大小写不敏感），不符行内提示                                                       | 同左                                                                                                  |
+| 上限      | 1 个；≤20MB；PDF ≤30 页                                                                                          | 50 个；≤20MB/项；PDF ≤30 页                                                                           |
+| 列表      | 不显示                                                                                                           | 缩略图（PDF 显示图标）+ 文件名 + 状态标签 + 移除                                                      |
+| 结果      | textarea 可编辑，显示页数/宽高/字数；「复制文本」「导出 TXT」「重新选择文件」「更改导出目录」                    | 选中项 textarea 可编辑；「复制当前/全部」「导出全部/合并导出」「重试失败项/全部重新识别」「清空列表」 |
+| 完成提示  | 「识别完成：1 个文件全部成功」                                                                                   | 「识别完成：M 个文件成功，N 个失败」                                                                  |
+| 导出      | `{原名}-OCR.txt`，同名 `(1)…(99)` 递增；合并 `OCR-合并-{yyyyMMdd-HHmmss}.txt`，段首 `===== 文件名 =====`；原子写 | 同左                                                                                                  |
+| PDF       | 逐页渲染识别，多页按「===== 第 N 页 =====」分段，空白页不产生空段；全部空白 → `OCR_NO_TEXT`                      | 同左                                                                                                  |
+
+- 错误码沿用：`OCR_INVALID_PAYLOAD` / `OCR_FILE_NOT_FOUND` / `OCR_FILE_LOCKED` / `OCR_IMAGE_TOO_LARGE` / `OCR_PDF_TOO_MANY_PAGES` / `OCR_INPUT_INVALID` / `OCR_NO_TEXT` / `OCR_TOO_MANY_FILES` / `OCR_FAILED` / `MODEL_MISSING` / `OP_TIMEOUT` / `OUTPUT_WRITE_FAILED` / `CANCELLED`。
+- 三态：空态含模式切换 + DropZone + 边界提示；加载态进度（批量含当前/总数、PDF 含页级文案）+ 取消；报错态任务级 NAlert（码 + detail）+ 可重试「重试」+「重新选择/清空列表」，单项失败在列表展示并可重试。
+
+### 12.3 二维码页签（原 qr-code：M16/M55）
+
+| 区域       | 规则                                                                                                                                                                                                          |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 生成类型   | 文本（≤2000 字）/ 网址（`^https?://\S+$`，≤2048）/ WiFi（SSID ≤64、密码 ≤64、WPA/WEP/无密码、隐藏网络）/ 名片 vCard 3.0（姓名必填 ≤100，公司/职位 ≤100，电话 ≤50，邮箱 ≤254 且含 `@`，网址 ≤2048，地址 ≤200） |
+| 样式参数   | 纠错 L/M/Q/H（默认 M）；尺寸 128–2048（默认 512）；边距 0–10（默认 4）；前景/背景 `#RRGGBB`；导出 PNG/SVG（默认 PNG）；文件名 1–80 字符                                                                       |
+| 预览与保存 | 内容合法即实时预览（300ms 防抖）；「保存到文件」写盘（PNG base64 ≤8MB / SVG 文本 ≤2MB），重名 `(n)`；成功显示产物路径 + 打开所在文件夹；「选择目录」即时 `qr-set-output-dir`                                  |
+| 识别       | DropZone 单选 `.png/.jpg/.jpeg/.webp/.bmp/.gif` → canvas 取像素 → `jsqr` 解码；成功只读 textarea + 复制 + 尺寸；失败 `QR_IMAGE_TOO_LARGE`（>20MB）/ `QR_IMAGE_UNREADABLE` / `QR_DECODE_FAILED` + 详情 + 重试  |
+| 批量识别   | ≤50 张、单项失败不中断、逐项结果与「已识别 N / 未识别 N」汇总                                                                                                                                                 |
+| 三态       | 空态预览占位与 DropZone 引导；加载态保存 loading / 「识别中…」；报错态错误码 + 中文文案 + 详情（+ 重试）                                                                                                      |
+
+### 12.4 验收（M82）
+
+1. 十二页签标签渲染与切换正常；「文字识别 / 二维码」页签空态不白屏。
+2. e2e `image-toolbox-ocr.spec.ts`：双模式空态、类型不符、损坏图、超大图、单张识别→编辑、批量 1 好 1 坏不中断、逐项/合并导出、PDF 多页识别。
+3. e2e `image-toolbox-qr.spec.ts`：生成→保存→回读识别、损坏/空白图错误码、批量识别、超大图、输出目录不可写。
+4. chunk 复测：`image-toolbox-*.js` **622,761 B raw / 138.8KB gzip**（<200KB；OCR 模型与 worker 属主进程资产，不计入）；本包覆盖率 ≥80%；`pnpm gate` 全绿。

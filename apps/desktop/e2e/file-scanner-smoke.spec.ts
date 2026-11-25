@@ -1,15 +1,16 @@
 /**
- * @file file-scanner（文件扫描：校验 / 重复 / 对比）e2e 冒烟：真实 Electron + 真实磁盘
+ * @file file-scanner（文件扫描：校验 / 重复 / 对比 / 重命名 / 清理 / 磁盘 / 压缩包）e2e 冒烟：真实 Electron + 真实磁盘
  * @author cuilanchao
  * @date 2026-11-25
- * @description M71 三工具合并后的单入口冒烟：页面/三页签加载、哈希四算法与期望值比对、
+ * @description M71 / M75 / M81 合并后的单入口冒烟：页面与页签加载、哈希四算法与期望值比对、
  *              重复文件递归分组与 UI 勾选、目录对比配对/内容比较/筛选、结构化错误码、
- *              任务取消、3 任务并发、断电恢复（强杀重启）。
+ *              任务取消、3 任务并发、断电恢复（强杀重启）、ZIP 打包解压与 zip slip 防护。
  *              注意：临时目录名必须 ASCII（本机 Node fs 对非 ASCII 目录名会硬崩），文件名保留中文。
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import zlib from 'node:zlib'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
@@ -104,19 +105,22 @@ function touch(root: string, rel: string, mtimeMs: number): void {
   fs.utimesSync(path.join(root, rel), seconds, seconds)
 }
 
+/** 页签名 */
+type TabName = '文件校验' | '重复文件' | '目录对比' | '压缩包'
+
 /** 切换页签（Naive UI 的 tab 节点没有 role=tab，按 .n-tabs-tab 文本定位） */
-async function switchTab(page: Page, name: '文件校验' | '重复文件' | '目录对比'): Promise<void> {
+async function switchTab(page: Page, name: TabName): Promise<void> {
   await page.locator('.n-tabs-tab', { hasText: name }).first().click()
 }
 
 /** 打开工具并可指定页签（侧边栏两次切换以触达 mounted 读取记忆） */
-async function openTool(page: Page, tab?: '文件校验' | '重复文件' | '目录对比'): Promise<void> {
+async function openTool(page: Page, tab?: TabName): Promise<void> {
   await clickSidebarTool(page, '文件扫描')
   if (tab !== undefined) await switchTab(page, tab)
 }
 
 /** 记忆配置后重进页面并切到指定页签 */
-async function reopenTool(page: Page, tab: '文件校验' | '重复文件' | '目录对比'): Promise<void> {
+async function reopenTool(page: Page, tab: TabName): Promise<void> {
   await clickSidebarTool(page, '计算器')
   await openTool(page, tab)
 }
@@ -156,6 +160,132 @@ async function runTask<T>(
       }),
     { channel, payload }
   )
+}
+
+/** 提交任务并等待终态（done 返回结果；error 返回错误码，便于断言失败分支） */
+async function runTaskOutcome<T>(
+  page: Page,
+  channel: string,
+  payload: unknown
+): Promise<{ hasProgress: boolean; result?: T; errorCode?: string }> {
+  const outcome = await page.evaluate(
+    (args: { channel: string; payload: unknown }) =>
+      new Promise<{ hasProgress: boolean; result?: unknown; errorCode?: string }>(
+        (resolve, reject) => {
+          let hasProgress = false
+          let taskId = ''
+          const off = window.lumin.onTaskEvent((event) => {
+            if (event.taskId !== taskId) return
+            if (event.kind === 'progress') {
+              hasProgress = true
+            } else if (event.kind === 'done') {
+              off()
+              resolve({ hasProgress, result: event.result })
+            } else if (event.kind === 'error') {
+              off()
+              resolve({ hasProgress, errorCode: event.error.code })
+            }
+          })
+          window.lumin
+            .invoke<{ taskId: string }>(args.channel, args.payload)
+            .then((value) => {
+              taskId = value.taskId
+            })
+            .catch((err: unknown) => {
+              off()
+              reject(err)
+            })
+        }
+      ),
+    { channel, payload }
+  )
+  return outcome as { hasProgress: boolean; result?: T; errorCode?: string }
+}
+
+/** 手工构造 stored（无压缩）zip，用于注入 zip slip 条目 */
+function storedZip(entries: { name: string; content: string }[]): Buffer {
+  const locals: Buffer[] = []
+  const centrals: Buffer[] = []
+  let offset = 0
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name, 'utf8')
+    const data = Buffer.from(entry.content, 'utf8')
+    const crc = zlib.crc32(data)
+
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50, 0)
+    local.writeUInt16LE(20, 4)
+    local.writeUInt16LE(0x0800, 6)
+    local.writeUInt16LE(0, 8)
+    local.writeUInt32LE(crc, 14)
+    local.writeUInt32LE(data.length, 18)
+    local.writeUInt32LE(data.length, 22)
+    local.writeUInt16LE(name.length, 26)
+    locals.push(local, name, data)
+
+    const central = Buffer.alloc(46)
+    central.writeUInt32LE(0x02014b50, 0)
+    central.writeUInt16LE(0x031e, 4)
+    central.writeUInt16LE(20, 6)
+    central.writeUInt16LE(0x0800, 8)
+    central.writeUInt16LE(0, 10)
+    central.writeUInt32LE(crc, 16)
+    central.writeUInt32LE(data.length, 20)
+    central.writeUInt32LE(data.length, 24)
+    central.writeUInt16LE(name.length, 28)
+    central.writeUInt32LE((0o100644 << 16) >>> 0, 38)
+    central.writeUInt32LE(offset, 42)
+    centrals.push(central, name)
+
+    offset += 30 + name.length + data.length
+  }
+  const cd = Buffer.concat(centrals)
+  const eocd = Buffer.alloc(22)
+  eocd.writeUInt32LE(0x06054b50, 0)
+  eocd.writeUInt16LE(entries.length, 8)
+  eocd.writeUInt16LE(entries.length, 10)
+  eocd.writeUInt32LE(cd.length, 12)
+  eocd.writeUInt32LE(offset, 16)
+  return Buffer.concat([...locals, cd, eocd])
+}
+
+/** 手工构造单条目 stored zip（原始名字节 + 指定通用标志位，用于 GBK 名） */
+function storedZipRawName(name: Buffer, content: string, flags: number): Buffer {
+  const data = Buffer.from(content, 'utf8')
+  const crc = zlib.crc32(data)
+
+  const local = Buffer.alloc(30)
+  local.writeUInt32LE(0x04034b50, 0)
+  local.writeUInt16LE(20, 4)
+  local.writeUInt16LE(flags, 6)
+  local.writeUInt16LE(0, 8)
+  local.writeUInt32LE(crc, 14)
+  local.writeUInt32LE(data.length, 18)
+  local.writeUInt32LE(data.length, 22)
+  local.writeUInt16LE(name.length, 26)
+
+  const central = Buffer.alloc(46)
+  central.writeUInt32LE(0x02014b50, 0)
+  central.writeUInt16LE(0x031e, 4)
+  central.writeUInt16LE(20, 6)
+  central.writeUInt16LE(flags, 8)
+  central.writeUInt16LE(0, 10)
+  central.writeUInt32LE(crc, 16)
+  central.writeUInt32LE(data.length, 20)
+  central.writeUInt32LE(data.length, 24)
+  central.writeUInt16LE(name.length, 28)
+  central.writeUInt32LE((0o100644 << 16) >>> 0, 38)
+  central.writeUInt32LE(0, 42)
+
+  const centralOffset = local.length + name.length + data.length
+  const centralSize = central.length + name.length
+  const eocd = Buffer.alloc(22)
+  eocd.writeUInt32LE(0x06054b50, 0)
+  eocd.writeUInt16LE(1, 8)
+  eocd.writeUInt16LE(1, 10)
+  eocd.writeUInt32LE(centralSize, 12)
+  eocd.writeUInt32LE(centralOffset, 16)
+  return Buffer.concat([local, name, data, central, name, eocd])
 }
 
 /** 提交任务后立即取消，返回终态（done 或错误码） */
@@ -696,7 +826,8 @@ test.describe('file-scanner（文件扫描）冒烟', () => {
       for (const [name, label] of [
         ['rename', '批量重命名'],
         ['clean', '文件清理'],
-        ['disk', '磁盘分析']
+        ['disk', '磁盘分析'],
+        ['zip', '压缩包']
       ] as const) {
         const tab = page.locator(`.n-tabs-tab[data-name="${name}"]`)
         await tab.scrollIntoViewIfNeeded()
@@ -704,6 +835,170 @@ test.describe('file-scanner（文件扫描）冒烟', () => {
         expect(await tab.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(0)
       }
     } finally {
+      await app.close()
+    }
+  })
+
+  test('压缩包 UI：打包空态 → 产物落盘 → 解压回读', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const root = freshDir('lumin-fs-e2e-zip-ui')
+    const outDir = path.join(root, 'out')
+    const unpackDir = path.join(root, 'unpacked')
+    const source = path.join(root, '素材.txt')
+    try {
+      writeFile(root, '素材.txt', '压缩包内容')
+      fs.mkdirSync(outDir, { recursive: true })
+
+      await page.evaluate(() =>
+        window.lumin.invoke('file-scanner:zip-set-config', {
+          mode: 'pack',
+          packSources: [],
+          outputDir: null,
+          outputName: null,
+          archive: null,
+          targetDir: null,
+          conflict: 'rename'
+        })
+      )
+      await openTool(page, '压缩包')
+      await expect(
+        page.getByText('添加文件或文件夹后点击「开始打包」；目录会保留相对结构')
+      ).toBeVisible()
+      await expect(page.getByRole('button', { name: '开始打包' })).toBeDisabled()
+
+      // 预置记忆后重新进入页面触达 mounted 读取
+      await page.evaluate(
+        (args: { source: string; outDir: string }) =>
+          window.lumin.invoke('file-scanner:zip-set-config', {
+            mode: 'pack',
+            packSources: [args.source],
+            outputDir: args.outDir,
+            outputName: 'UI产物.zip',
+            archive: null,
+            targetDir: null,
+            conflict: 'rename'
+          }),
+        { source, outDir }
+      )
+      await reopenTool(page, '压缩包')
+      await expect(page.getByText('素材.txt', { exact: true })).toBeVisible()
+
+      await page.getByRole('button', { name: '开始打包' }).click()
+      const zipPath = path.join(outDir, 'UI产物.zip')
+      await expect(page.getByText(`已生成 ${zipPath}`)).toBeVisible({ timeout: 30_000 })
+      expect(fs.existsSync(zipPath)).toBe(true)
+
+      // 解压：记忆 archive/targetDir 后重新进入
+      await page.evaluate(
+        (args: { archive: string; targetDir: string }) =>
+          window.lumin.invoke('file-scanner:zip-set-config', {
+            mode: 'unpack',
+            packSources: [],
+            outputDir: null,
+            outputName: null,
+            archive: args.archive,
+            targetDir: args.targetDir,
+            conflict: 'rename'
+          }),
+        { archive: zipPath, targetDir: unpackDir }
+      )
+      await reopenTool(page, '压缩包')
+      await expect(page.getByText('已解压到', { exact: false })).toHaveCount(0)
+      await page.getByRole('button', { name: '开始解压' }).click()
+      await expect(page.getByText(`已解压到 ${unpackDir}`)).toBeVisible({ timeout: 30_000 })
+      expect(fs.readFileSync(path.join(unpackDir, '素材.txt'), 'utf8')).toBe('压缩包内容')
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('压缩包 IPC：GBK 条目名解压 → 中文名无乱码且落盘', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const root = freshDir('lumin-fs-e2e-zip-gbk')
+    const targetDir = path.join(root, 'gbk-out')
+    try {
+      // GBK：测 B2E2、试 CAD4；bit11 未置位
+      const gbkName = Buffer.from([0xb2, 0xe2, 0xca, 0xd4, 0x2e, 0x74, 0x78, 0x74])
+      const archive = path.join(root, 'gbk.zip')
+      fs.writeFileSync(archive, storedZipRawName(gbkName, 'GBK 内容', 0))
+
+      const outcome = await runTaskOutcome(page, 'file-scanner:zip-unpack', {
+        archive,
+        targetDir,
+        conflict: 'rename'
+      })
+      expect(outcome.errorCode).toBeUndefined()
+      expect(outcome.result).toMatchObject({ files: 1, skipped: 0, renamed: 0 })
+      expect(fs.readFileSync(path.join(targetDir, '测试.txt'), 'utf8')).toBe('GBK 内容')
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      await app.close()
+    }
+  })
+
+  test('压缩包 IPC：zip slip 条目跳过计数 + 打包解压闭环 + 非法 zip', async () => {
+    const { app, page } = await launch()
+    await ensureReady(page)
+    const root = freshDir('lumin-fs-e2e-zip-ipc')
+    const targetDir = path.join(root, 'slip-target')
+    try {
+      const evilZip = path.join(root, 'evil.zip')
+      fs.writeFileSync(
+        evilZip,
+        storedZip([
+          { name: '../越界.txt', content: 'evil' },
+          { name: '/绝对.txt', content: 'evil' },
+          { name: 'C:/盘符.txt', content: 'evil' },
+          { name: '正常.txt', content: 'ok' }
+        ])
+      )
+
+      const slipped = await runTaskOutcome(page, 'file-scanner:zip-unpack', {
+        archive: evilZip,
+        targetDir,
+        conflict: 'rename'
+      })
+      expect(slipped.errorCode).toBeUndefined()
+      expect(slipped.result).toMatchObject({ files: 1, skipped: 3, renamed: 0 })
+      expect(fs.readFileSync(path.join(targetDir, '正常.txt'), 'utf8')).toBe('ok')
+      expect(fs.existsSync(path.join(root, '越界.txt'))).toBe(false)
+
+      // 打包 → 解压闭环
+      const source = path.join(root, '往返.txt')
+      fs.writeFileSync(source, '往返内容')
+      const packed = await runTaskOutcome<{ outputZip: string; files: number; dirs: number }>(
+        page,
+        'file-scanner:zip-pack',
+        { sources: [source], outputDir: root, outputName: '往返.zip' }
+      )
+      expect(packed.hasProgress).toBe(true)
+      expect(packed.result).toMatchObject({ files: 1, dirs: 0 })
+      const unpacked = await runTaskOutcome<{ files: number; skipped: number }>(
+        page,
+        'file-scanner:zip-unpack',
+        {
+          archive: packed.result?.outputZip ?? '',
+          targetDir: path.join(root, '往返解压'),
+          conflict: 'skip'
+        }
+      )
+      expect(unpacked.result).toMatchObject({ files: 1, skipped: 0 })
+      expect(fs.readFileSync(path.join(root, '往返解压', '往返.txt'), 'utf8')).toBe('往返内容')
+
+      // 非法 zip：文本伪装 .zip
+      const junk = path.join(root, 'junk.zip')
+      fs.writeFileSync(junk, '这不是压缩包')
+      const failed = await runTaskOutcome(page, 'file-scanner:zip-unpack', {
+        archive: junk,
+        targetDir: path.join(root, 'junk-out'),
+        conflict: 'rename'
+      })
+      expect(failed.errorCode).toBe('ZP_ARCHIVE_INVALID')
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
       await app.close()
     }
   })

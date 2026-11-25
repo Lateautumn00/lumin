@@ -2,11 +2,13 @@
 /**
  * @file ToolView.vue
  * @author cuilanchao
- * @date 2026-11-19
- * @description Office 转 PDF 工具页：批量选择增删、批量转换进度（可取消）、成功/失败汇总与组件引导三态。
+ * @date 2026-11-25
+ * @description 文档输出（M80 由 docx2pdf 与 print 合并，id 保持 docx2pdf）：
+ *              「转为 PDF」页签负责批量选择增删、转换进度（可取消）、成功/失败汇总与组件引导三态；
+ *              「打印」页签由 PrintTab 承载。
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { NButton, NInput, NSpace, NText } from 'naive-ui'
+import { NButton, NInput, NSpace, NTabPane, NTabs, NText } from 'naive-ui'
 import { Download, FileText, FolderOpen, RefreshCw, RotateCcw, X } from '@lucide/vue'
 import { toStructuredError, type StructuredError, type TaskEvent } from '@lumin/shared'
 import DropZone from '@lumin/ui/DropZone.vue'
@@ -23,6 +25,12 @@ import {
   submitConvert,
   submitInstall
 } from './client'
+import PrintTab from './PrintTab.vue'
+
+/** 页签键 */
+type TabKey = 'convert' | 'print'
+
+const activeTab = ref<TabKey>('convert')
 
 interface PickedFile {
   path: string
@@ -261,244 +269,261 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex max-w-2xl flex-col gap-4">
+  <div class="flex flex-col gap-3">
     <div>
-      <h1 class="text-base font-semibold">Office 转 PDF</h1>
+      <h1 class="text-base font-semibold">文档输出</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        将 Word / Excel / PPT 文件批量转换为 PDF（LibreOffice 转换组件按需下载）
+        将 Word / Excel / PPT 批量转为 PDF，或打印 Office / PDF / 图片（统一弹系统打印对话框）
       </p>
     </div>
 
-    <!-- 组件状态横幅（spec §6 空态引导） -->
-    <div
-      class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-4 py-3"
-    >
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2 text-sm">
-            <span class="font-medium">转换组件</span>
-            <NText :type="status?.source === 'none' ? 'warning' : 'success'" depth="3">
-              {{ sourceLabel }}
-            </NText>
-          </div>
-          <div v-if="status?.path" class="mt-1 min-w-0">
-            <PathLink :path="status.path" />
-          </div>
-          <NText v-if="status?.customInvalid" type="warning" class="mt-1 block text-xs">
-            自定义路径无效，已回退系统检测
-          </NText>
-          <NText v-if="statusFailed" type="error" class="mt-1 block text-xs">
-            组件状态检测失败，请重新检测
-          </NText>
-        </div>
-        <NButton size="small" quaternary :loading="statusLoading" @click="refreshStatus">
-          <template #icon><RefreshCw :size="14" /></template>
-          重新检测
-        </NButton>
-      </div>
-      <template v-if="status?.source === 'none'">
-        <p class="mt-2 text-xs text-[var(--lumin-color-text-secondary)]">
-          未检测到可用的 LibreOffice。可下载便携组件（约 358.8 MB，解包后约 1.86
-          GiB），或指定本机已有的 soffice 路径。
-        </p>
-        <NSpace class="mt-2">
-          <NButton
-            size="small"
-            type="primary"
-            :disabled="busy"
-            :loading="phase === 'installing'"
-            @click="install"
+    <!-- 页签内容常驻（show:lazy）：切换不中断进行中的转换任务 -->
+    <NTabs v-model:value="activeTab" type="line" display-directive="show:lazy">
+      <NTabPane name="convert" tab="转为 PDF">
+        <div class="flex max-w-2xl flex-col gap-4 pt-2">
+          <!-- 组件状态横幅（spec §6 空态引导） -->
+          <div
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-4 py-3"
           >
-            <template #icon><Download :size="14" /></template>
-            下载安装组件
-          </NButton>
-          <NButton size="small" :disabled="busy" @click="focusPathInput">指定已有路径</NButton>
-        </NSpace>
-      </template>
-    </div>
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 text-sm">
+                  <span class="font-medium">转换组件</span>
+                  <NText :type="status?.source === 'none' ? 'warning' : 'success'" depth="3">
+                    {{ sourceLabel }}
+                  </NText>
+                </div>
+                <div v-if="status?.path" class="mt-1 min-w-0">
+                  <PathLink :path="status.path" />
+                </div>
+                <NText v-if="status?.customInvalid" type="warning" class="mt-1 block text-xs">
+                  自定义路径无效，已回退系统检测
+                </NText>
+                <NText v-if="statusFailed" type="error" class="mt-1 block text-xs">
+                  组件状态检测失败，请重新检测
+                </NText>
+              </div>
+              <NButton size="small" quaternary :loading="statusLoading" @click="refreshStatus">
+                <template #icon><RefreshCw :size="14" /></template>
+                重新检测
+              </NButton>
+            </div>
+            <template v-if="status?.source === 'none'">
+              <p class="mt-2 text-xs text-[var(--lumin-color-text-secondary)]">
+                未检测到可用的 LibreOffice。可下载便携组件（约 358.8 MB，解包后约 1.86
+                GiB），或指定本机已有的 soffice 路径。
+              </p>
+              <NSpace class="mt-2">
+                <NButton
+                  size="small"
+                  type="primary"
+                  :disabled="busy"
+                  :loading="phase === 'installing'"
+                  @click="install"
+                >
+                  <template #icon><Download :size="14" /></template>
+                  下载安装组件
+                </NButton>
+                <NButton size="small" :disabled="busy" @click="focusPathInput"
+                  >指定已有路径</NButton
+                >
+              </NSpace>
+            </template>
+          </div>
 
-    <!-- 空态：拖拽/多选 -->
-    <DropZone
-      v-if="showDropZone"
-      :accept="OFFICE_ACCEPT"
-      hint="拖拽 Office 文件到此处（可多选），或点击选择"
-      :disabled="busy"
-      multiple
-      @select="onSelect"
-      @invalid="onInvalid"
-    />
-    <NText v-if="invalidHint !== ''" type="error" class="text-sm">{{ invalidHint }}</NText>
-
-    <!-- 已选文件列表 -->
-    <div
-      v-if="showFileList"
-      class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-4 py-3"
-    >
-      <div class="flex items-center justify-between gap-3">
-        <p class="text-sm font-medium">
-          已选 {{ files.length }} 个文件
-          <span class="text-xs font-normal text-[var(--lumin-color-text-secondary)]">
-            （单次最多 {{ MAX_BATCH_FILES }} 个）
-          </span>
-        </p>
-        <NSpace>
-          <NButton size="small" quaternary :disabled="busy" @click="resetForNew">清空</NButton>
-        </NSpace>
-      </div>
-      <ul class="mt-3 max-h-64 space-y-2 overflow-auto" aria-label="待转换文件列表">
-        <li
-          v-for="(file, index) in files"
-          :key="file.path"
-          class="flex items-center gap-2 rounded-[var(--lumin-radius-md)] px-2 py-1 hover:bg-[var(--lumin-color-bg)]"
-        >
-          <FileText
-            :size="16"
-            class="shrink-0 text-[var(--lumin-color-text-secondary)]"
-            aria-hidden="true"
+          <!-- 空态：拖拽/多选 -->
+          <DropZone
+            v-if="showDropZone"
+            :accept="OFFICE_ACCEPT"
+            hint="拖拽 Office 文件到此处（可多选），或点击选择"
+            :disabled="busy"
+            multiple
+            @select="onSelect"
+            @invalid="onInvalid"
           />
-          <div class="min-w-0 flex-1">
-            <PathLink :path="file.path" :label="file.name" :reveal="false" />
-          </div>
-          <NButton
-            size="tiny"
-            quaternary
-            :disabled="busy"
-            :aria-label="`移除 ${file.name}`"
-            @click="removeFile(index)"
+          <NText v-if="invalidHint !== ''" type="error" class="text-sm">{{ invalidHint }}</NText>
+
+          <!-- 已选文件列表 -->
+          <div
+            v-if="showFileList"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-4 py-3"
           >
-            <template #icon><X :size="14" /></template>
-          </NButton>
-        </li>
-      </ul>
-      <NSpace class="mt-3">
-        <NButton type="primary" :disabled="busy || files.length === 0" @click="startConvert">
-          开始转换（{{ files.length }}）
-        </NButton>
-      </NSpace>
-    </div>
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-sm font-medium">
+                已选 {{ files.length }} 个文件
+                <span class="text-xs font-normal text-[var(--lumin-color-text-secondary)]">
+                  （单次最多 {{ MAX_BATCH_FILES }} 个）
+                </span>
+              </p>
+              <NSpace>
+                <NButton size="small" quaternary :disabled="busy" @click="resetForNew"
+                  >清空</NButton
+                >
+              </NSpace>
+            </div>
+            <ul class="mt-3 max-h-64 space-y-2 overflow-auto" aria-label="待转换文件列表">
+              <li
+                v-for="(file, index) in files"
+                :key="file.path"
+                class="flex items-center gap-2 rounded-[var(--lumin-radius-md)] px-2 py-1 hover:bg-[var(--lumin-color-bg)]"
+              >
+                <FileText
+                  :size="16"
+                  class="shrink-0 text-[var(--lumin-color-text-secondary)]"
+                  aria-hidden="true"
+                />
+                <div class="min-w-0 flex-1">
+                  <PathLink :path="file.path" :label="file.name" :reveal="false" />
+                </div>
+                <NButton
+                  size="tiny"
+                  quaternary
+                  :disabled="busy"
+                  :aria-label="`移除 ${file.name}`"
+                  @click="removeFile(index)"
+                >
+                  <template #icon><X :size="14" /></template>
+                </NButton>
+              </li>
+            </ul>
+            <NSpace class="mt-3">
+              <NButton type="primary" :disabled="busy || files.length === 0" @click="startConvert">
+                开始转换（{{ files.length }}）
+              </NButton>
+            </NSpace>
+          </div>
 
-    <!-- 加载态：转换 / 下载安装进度（可取消） -->
-    <TaskProgress
-      v-if="phase === 'converting' || phase === 'installing'"
-      :message="progress?.message ?? ''"
-      :current="progress?.current"
-      :total="progress?.total"
-      @cancel="onCancel"
-    />
+          <!-- 加载态：转换 / 下载安装进度（可取消） -->
+          <TaskProgress
+            v-if="phase === 'converting' || phase === 'installing'"
+            :message="progress?.message ?? ''"
+            :current="progress?.current"
+            :total="progress?.total"
+            @cancel="onCancel"
+          />
 
-    <!-- 成功结果（含部分失败汇总） -->
-    <div
-      v-if="result !== null"
-      class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-4 py-3"
-    >
-      <NText :type="failureList.length === 0 ? 'success' : 'warning'" class="text-sm font-medium">
-        转换完成：成功 {{ outputCount }} 个<template v-if="failureList.length > 0">
-          ，失败 {{ failureList.length }} 个</template
-        >
-      </NText>
-      <ul class="mt-2 max-h-40 space-y-1 overflow-auto" aria-label="转换产物">
-        <li
-          v-for="item in result.outputs"
-          :key="item.outputPath"
-          class="break-all text-xs"
-        >
-          <PathLink :path="item.outputPath" :reveal="false" />
-        </li>
-      </ul>
-      <ul
-        v-if="failureList.length > 0"
-        class="mt-2 max-h-40 space-y-1 overflow-auto"
-        aria-label="转换失败列表"
-      >
-        <li v-for="item in failureList" :key="item.inputPath" class="text-xs">
-          <PathLink :path="item.inputPath" :reveal="false" />
-          <span class="ml-1 text-[var(--lumin-color-text-secondary)]">
-            {{ item.code }} · {{ item.message }}
-          </span>
-        </li>
-      </ul>
-      <NSpace class="mt-3">
-        <NButton v-if="outputCount > 0" size="small" type="primary" @click="openFolder">
-          <template #icon><FolderOpen :size="14" /></template>
-          打开文件夹
-        </NButton>
-        <NButton size="small" @click="resetForNew">
-          <template #icon><RotateCcw :size="14" /></template>
-          再转一批
-        </NButton>
-      </NSpace>
-    </div>
+          <!-- 成功结果（含部分失败汇总） -->
+          <div
+            v-if="result !== null"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-4 py-3"
+          >
+            <NText
+              :type="failureList.length === 0 ? 'success' : 'warning'"
+              class="text-sm font-medium"
+            >
+              转换完成：成功 {{ outputCount }} 个<template v-if="failureList.length > 0">
+                ，失败 {{ failureList.length }} 个</template
+              >
+            </NText>
+            <ul class="mt-2 max-h-40 space-y-1 overflow-auto" aria-label="转换产物">
+              <li v-for="item in result.outputs" :key="item.outputPath" class="break-all text-xs">
+                <PathLink :path="item.outputPath" :reveal="false" />
+              </li>
+            </ul>
+            <ul
+              v-if="failureList.length > 0"
+              class="mt-2 max-h-40 space-y-1 overflow-auto"
+              aria-label="转换失败列表"
+            >
+              <li v-for="item in failureList" :key="item.inputPath" class="text-xs">
+                <PathLink :path="item.inputPath" :reveal="false" />
+                <span class="ml-1 text-[var(--lumin-color-text-secondary)]">
+                  {{ item.code }} · {{ item.message }}
+                </span>
+              </li>
+            </ul>
+            <NSpace class="mt-3">
+              <NButton v-if="outputCount > 0" size="small" type="primary" @click="openFolder">
+                <template #icon><FolderOpen :size="14" /></template>
+                打开文件夹
+              </NButton>
+              <NButton size="small" @click="resetForNew">
+                <template #icon><RotateCcw :size="14" /></template>
+                再转一批
+              </NButton>
+            </NSpace>
+          </div>
 
-    <!-- 报错态（spec §5/§6） -->
-    <div
-      v-if="phase === 'error' && error !== null"
-      class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-danger)] px-4 py-3"
-    >
-      <NText type="error" class="text-sm font-medium">{{ error.message }}</NText>
-      <p class="mt-1 text-xs text-[var(--lumin-color-text-secondary)]">错误码：{{ error.code }}</p>
-      <div v-if="hasDetail" class="mt-2">
-        <NButton size="small" quaternary @click="detailOpen = !detailOpen">
-          {{ detailOpen ? '收起详情' : '查看详情' }}
-        </NButton>
-        <p
-          v-if="detailOpen"
-          class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-[var(--lumin-color-text-secondary)]"
-        >
-          {{ error.detail }}
-        </p>
-      </div>
-      <NSpace class="mt-3">
-        <NButton v-if="retryable" size="small" type="primary" @click="retry">重试</NButton>
-        <NButton
-          v-if="error.code === 'SOFFICE_NOT_FOUND'"
-          size="small"
-          type="primary"
-          :disabled="busy"
-          @click="install"
-        >
-          <template #icon><Download :size="14" /></template>
-          下载安装组件
-        </NButton>
-        <NButton v-if="error.code === 'INPUT_NOT_FOUND'" size="small" @click="resetForNew">
-          重新选择
-        </NButton>
-      </NSpace>
-    </div>
+          <!-- 报错态（spec §5/§6） -->
+          <div
+            v-if="phase === 'error' && error !== null"
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-danger)] px-4 py-3"
+          >
+            <NText type="error" class="text-sm font-medium">{{ error.message }}</NText>
+            <p class="mt-1 text-xs text-[var(--lumin-color-text-secondary)]">
+              错误码：{{ error.code }}
+            </p>
+            <div v-if="hasDetail" class="mt-2">
+              <NButton size="small" quaternary @click="detailOpen = !detailOpen">
+                {{ detailOpen ? '收起详情' : '查看详情' }}
+              </NButton>
+              <p
+                v-if="detailOpen"
+                class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-[var(--lumin-color-text-secondary)]"
+              >
+                {{ error.detail }}
+              </p>
+            </div>
+            <NSpace class="mt-3">
+              <NButton v-if="retryable" size="small" type="primary" @click="retry">重试</NButton>
+              <NButton
+                v-if="error.code === 'SOFFICE_NOT_FOUND'"
+                size="small"
+                type="primary"
+                :disabled="busy"
+                @click="install"
+              >
+                <template #icon><Download :size="14" /></template>
+                下载安装组件
+              </NButton>
+              <NButton v-if="error.code === 'INPUT_NOT_FOUND'" size="small" @click="resetForNew">
+                重新选择
+              </NButton>
+            </NSpace>
+          </div>
 
-    <!-- 组件管理区（spec §3.2，留在工具页内） -->
-    <div
-      class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-4 py-3"
-    >
-      <p class="text-sm font-medium">组件管理</p>
-      <p class="mt-1 text-xs text-[var(--lumin-color-text-secondary)]">
-        下载便携组件到应用数据目录（不写系统注册表），或指定本机已安装的 soffice
-        路径；清空即恢复三级定位。
-      </p>
-      <NSpace class="mt-3" align="center">
-        <NButton
-          size="small"
-          :disabled="phase === 'converting' || phase === 'installing'"
-          :loading="phase === 'installing'"
-          @click="install"
-        >
-          <template #icon><Download :size="14" /></template>
-          下载安装组件
-        </NButton>
-      </NSpace>
-      <div class="mt-3 flex items-center gap-2">
-        <NInput
-          ref="pathInput"
-          v-model:value="customPathInput"
-          size="small"
-          placeholder="soffice.com / soffice.exe 完整路径"
-          :disabled="phase === 'converting' || phase === 'installing'"
-          @keydown.enter="savePath"
-        />
-        <NButton size="small" :disabled="busy" :loading="statusLoading" @click="savePath"
-          >保存</NButton
-        >
-        <NButton size="small" quaternary :disabled="busy" @click="clearPath">清空</NButton>
-      </div>
-    </div>
+          <!-- 组件管理区（spec §3.2，留在工具页内） -->
+          <div
+            class="rounded-[var(--lumin-radius-md)] border border-[var(--lumin-color-border)] px-4 py-3"
+          >
+            <p class="text-sm font-medium">组件管理</p>
+            <p class="mt-1 text-xs text-[var(--lumin-color-text-secondary)]">
+              下载便携组件到应用数据目录（不写系统注册表），或指定本机已安装的 soffice
+              路径；清空即恢复三级定位。
+            </p>
+            <NSpace class="mt-3" align="center">
+              <NButton
+                size="small"
+                :disabled="phase === 'converting' || phase === 'installing'"
+                :loading="phase === 'installing'"
+                @click="install"
+              >
+                <template #icon><Download :size="14" /></template>
+                下载安装组件
+              </NButton>
+            </NSpace>
+            <div class="mt-3 flex items-center gap-2">
+              <NInput
+                ref="pathInput"
+                v-model:value="customPathInput"
+                size="small"
+                placeholder="soffice.com / soffice.exe 完整路径"
+                :disabled="phase === 'converting' || phase === 'installing'"
+                @keydown.enter="savePath"
+              />
+              <NButton size="small" :disabled="busy" :loading="statusLoading" @click="savePath"
+                >保存</NButton
+              >
+              <NButton size="small" quaternary :disabled="busy" @click="clearPath">清空</NButton>
+            </div>
+          </div>
+        </div>
+      </NTabPane>
+      <NTabPane name="print" tab="打印">
+        <div class="pt-2">
+          <PrintTab />
+        </div>
+      </NTabPane>
+    </NTabs>
   </div>
 </template>

@@ -11,12 +11,8 @@ import { registerMain as markdownToolRegisterMain } from '@lumin/tool-markdown-t
 import { registerMain as mediaConvertRegisterMain } from '@lumin/tool-media-convert/node'
 import { registerMain as mindmapRegisterMain } from '@lumin/tool-mindmap/node'
 import { registerMain as miscToolboxRegisterMain } from '@lumin/tool-misc-toolbox/node'
-import { registerMain as ocrTextRegisterMain } from '@lumin/tool-ocr-text/node'
 import { registerMain as pdfToolkitRegisterMain } from '@lumin/tool-pdf-toolkit/node'
-import { registerMain as printRegisterMain } from '@lumin/tool-print/node'
-import { registerMain as qrCodeRegisterMain } from '@lumin/tool-qr-code/node'
 import { registerMain as textToolboxRegisterMain } from '@lumin/tool-text-toolbox/node'
-import { registerMain as zipToolRegisterMain } from '@lumin/tool-zip-tool/node'
 
 export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'color-toolbox': colorToolboxRegisterMain,
@@ -31,10 +27,6 @@ export const toolMains: Readonly<Record<string, RegisterMain>> = {
   'media-convert': mediaConvertRegisterMain,
   mindmap: mindmapRegisterMain,
   'misc-toolbox': miscToolboxRegisterMain,
-  'ocr-text': ocrTextRegisterMain,
   'pdf-toolkit': pdfToolkitRegisterMain,
-  print: printRegisterMain,
-  'qr-code': qrCodeRegisterMain,
-  'text-toolbox': textToolboxRegisterMain,
-  'zip-tool': zipToolRegisterMain
+  'text-toolbox': textToolboxRegisterMain
 }

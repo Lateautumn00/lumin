@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 图片工具箱主视图（M6 一期：压缩/转换/缩放三 Tab；M70 合并旋转/裁剪；M72 合并水印/去水印/拼接）
+// 图片工具箱主视图（M6 一期：压缩/转换/缩放三 Tab；M70 合并旋转/裁剪；M72 合并水印/去水印/拼接；M82 合并文字识别/二维码）
 // 作者：cuilanchao · 修改时间：2026-11-25
 // 三态强制（空态拖拽引导/加载进度可取消/报错码 + 详情）、tokens、@lucide/vue（spec §3）
 import { computed, onMounted, onUnmounted, ref } from 'vue'
@@ -59,6 +59,8 @@ import type {
 import WatermarkTab from './tabs/WatermarkTab.vue'
 import DewatermarkTab from './tabs/DewatermarkTab.vue'
 import StitchTab from './tabs/StitchTab.vue'
+import OcrTab from './tabs/OcrTab.vue'
+import QrTab from './tabs/QrTab.vue'
 
 /** Tab 标识（spec §2；M40 增补 effect/gif；M70 §4.48 合并 rotate/crop；M72 §4.72 合并水印/去水印/拼接） */
 type TabId =
@@ -72,6 +74,8 @@ type TabId =
   | 'watermark'
   | 'dewatermark'
   | 'stitch'
+  | 'ocr'
+  | 'qr'
 
 /** 原有 7 个页签（共享同一套文件列表与输出目录 UI；M72 新增三页签自带独立视图） */
 const LEGACY_TABS: readonly TabId[] = [
@@ -743,7 +747,8 @@ onUnmounted(detach)
     <div>
       <h1 class="text-base font-semibold">图片工具箱</h1>
       <p class="mt-1 text-sm text-[var(--lumin-color-text-secondary)]">
-        批量压缩、格式转换、缩放、效果调整、GIF 生成、批量水印、去水印与图片拼接（基于 ffmpeg）
+        批量压缩、格式转换、缩放、效果调整、GIF 生成、批量水印、去水印、图片拼接、图片/PDF
+        文字识别与二维码生成识别；本地离线执行
       </p>
     </div>
 
@@ -779,6 +784,12 @@ onUnmounted(detach)
       </NTabPane>
       <NTabPane name="stitch">
         <template #tab>拼接</template>
+      </NTabPane>
+      <NTabPane name="ocr">
+        <template #tab>文字识别</template>
+      </NTabPane>
+      <NTabPane name="qr">
+        <template #tab>二维码</template>
       </NTabPane>
     </NTabs>
 
@@ -1515,5 +1526,8 @@ onUnmounted(detach)
     <WatermarkTab v-show="tab === 'watermark'" />
     <DewatermarkTab v-show="tab === 'dewatermark'" />
     <StitchTab v-show="tab === 'stitch'" />
+    <!-- M82：文字识别 / 二维码两页签（各自独立视图与任务，v-show 保留状态） -->
+    <OcrTab v-show="tab === 'ocr'" />
+    <QrTab v-show="tab === 'qr'" />
   </div>
 </template>

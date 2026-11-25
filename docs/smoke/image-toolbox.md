@@ -73,16 +73,16 @@
 
 ### 8.2 R2 八类映射（增量）
 
-| 类别         | 验证                                                                                                                                   |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 中文/空格路径 | e2e 使用 `红 色.png`，输出 `红 色.gray.png` 等正常落盘                                                                                  |
-| 文件被占用   | GIF 逐帧探测/读取失败 → `IT_FILE_UNSUPPORTED`（沿用既有 probe 归类）                                                                    |
-| 加密文件     | `ffmpeg` 解码失败 → `IT_FILE_CORRUPT`（沿用既有 `classifyFfmpegFailure`）                                                               |
-| 超大文件     | 单文件 >200MB → `IT_FILE_UNSUPPORTED`；GIF 画布超限 → `IT_GIF_TOO_LARGE`                                                                 |
-| 任务取消     | 三段式 `cancel` 杀树，GIF 单进程整体中止 → `IT_CANCELLED`（无需清理半成品）                                                             |
-| 并发溢出     | 壳任务队列并发上限不变；GIF 为单任务单进程                                                                                              |
-| 磁盘满       | 输出侧 `no space left on device`/`access denied` → `IT_OUTPUT_WRITE_FAILED`                                                             |
-| 断电恢复     | GIF 输出为单文件，断电最多留下 `-y` 覆盖的半成品，重跑覆盖同名（命名含时间戳，不会误删）                                                |
+| 类别          | 验证                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| 中文/空格路径 | e2e 使用 `红 色.png`，输出 `红 色.gray.png` 等正常落盘                                   |
+| 文件被占用    | GIF 逐帧探测/读取失败 → `IT_FILE_UNSUPPORTED`（沿用既有 probe 归类）                     |
+| 加密文件      | `ffmpeg` 解码失败 → `IT_FILE_CORRUPT`（沿用既有 `classifyFfmpegFailure`）                |
+| 超大文件      | 单文件 >200MB → `IT_FILE_UNSUPPORTED`；GIF 画布超限 → `IT_GIF_TOO_LARGE`                 |
+| 任务取消      | 三段式 `cancel` 杀树，GIF 单进程整体中止 → `IT_CANCELLED`（无需清理半成品）              |
+| 并发溢出      | 壳任务队列并发上限不变；GIF 为单任务单进程                                               |
+| 磁盘满        | 输出侧 `no space left on device`/`access denied` → `IT_OUTPUT_WRITE_FAILED`              |
+| 断电恢复      | GIF 输出为单文件，断电最多留下 `-y` 覆盖的半成品，重跑覆盖同名（命名含时间戳，不会误删） |
 
 ### 8.3 R5 体积记录（增量）
 
@@ -101,16 +101,16 @@
 
 ### 9.2 R2 八类映射（增量）
 
-| 类别         | 验证                                                                 |
-| ------------ | -------------------------------------------------------------------- |
+| 类别          | 验证                                                                |
+| ------------- | ------------------------------------------------------------------- |
 | 中文/空格路径 | e2e 收集目录含 `子目录`、文件 `a 图.png`；历史 `outputDir` 中文正常 |
-| 文件被占用   | 收集只 `readdir`/`Dirent`，不打开文件内容；处理阶段沿用既有占用归类 |
-| 加密文件     | 收集不看内容；处理阶段沿用 `IT_FILE_CORRUPT`                        |
-| 超大文件     | 收集上限 2000 张（`truncated`）；单文件 >200MB 沿用既有拒入          |
-| 任务取消     | 收集为 sync IPC，不占任务队列；历史写入失败静默不影响主流程          |
-| 并发溢出     | 收集/历史为 sync IPC；批量处理仍走壳队列串行                         |
-| 磁盘满       | 历史写入 settings 失败静默（下次进入回落旧值），主流程不受影响        |
-| 断电恢复     | 历史为 settings 原子写；收集无写盘、无中间产物                        |
+| 文件被占用    | 收集只 `readdir`/`Dirent`，不打开文件内容；处理阶段沿用既有占用归类 |
+| 加密文件      | 收集不看内容；处理阶段沿用 `IT_FILE_CORRUPT`                        |
+| 超大文件      | 收集上限 2000 张（`truncated`）；单文件 >200MB 沿用既有拒入         |
+| 任务取消      | 收集为 sync IPC，不占任务队列；历史写入失败静默不影响主流程         |
+| 并发溢出      | 收集/历史为 sync IPC；批量处理仍走壳队列串行                        |
+| 磁盘满        | 历史写入 settings 失败静默（下次进入回落旧值），主流程不受影响      |
+| 断电恢复      | 历史为 settings 原子写；收集无写盘、无中间产物                      |
 
 ### 9.3 R5 体积记录（增量）
 
@@ -178,3 +178,40 @@
 - 迁入三包全部单测：`src/watermark/*`、`src/dewatermark/*`、`src/stitch/*`、`renderer/clients/*.test.ts`；
 - `pnpm vitest run packages/tools/image-toolbox` **400 passed**（合并后本包全部用例）；
 - 覆盖率分组已收敛为 `packages/tools/image-toolbox/src/**/*.ts` 80%（删除三旧包分组）。
+
+## 12. M82 合并后复测：文字识别 / 二维码（2026-11-25，plan Q82 / §4.82）
+
+> 并入 `ocr-text`（M20/M49/M64）与 `qr-code`（M16/M55）；原 `docs/smoke/ocr-text.md`、`docs/smoke/qr-code.md` 已并入本节后删除，e2e 迁入 `image-toolbox-ocr.spec.ts` / `image-toolbox-qr.spec.ts`。
+
+### 12.1 e2e 实测（本机，`--workers=1`）
+
+| spec                        | 用例                                                                                                                 | 结果   |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------ |
+| `image-toolbox-ocr.spec.ts` | 双模式空态 + 类型不符/损坏图/超大图；单张识别→编辑；批量 1 好 1 坏不中断 + 逐张/合并导出；并发合并导出；PDF 多页识别 | ✅ 6/6 |
+| `image-toolbox-qr.spec.ts`  | 生成→保存→回读识别；损坏/空白图错误码；批量识别汇总；超大图 `QR_IMAGE_TOO_LARGE`；输出目录不可写                     | ✅ 6/6 |
+
+- **定位注意**：图片工具箱十二页签常驻挂载（`v-show`），全局 `input[type="file"]` 会命中「文字识别」页签与共享区输入框、`textarea` 会命中二维码只读框；规格必须用 DropZone `aria-label`（hint）与 `getByPlaceholder('识别结果（可编辑）')` 定位。M82 迁入时已按此修正，否则用例静默走错页签。
+
+### 12.2 R2 八类增量映射
+
+| 类别            | 文字识别（原 ocr-text）                                                            | 二维码（原 qr-code）                                      |
+| --------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| 1 中文/空格路径 | ✅ 输入 `sample 1.png`、输出 `中文 目录`、产物 `sample 1-OCR.txt` 全链路           | ✅ 输出目录与文件名含中文/空格，`(n)` 递增                |
+| 2 文件被占用    | ✅ 单测 `checkExclusive` EBUSY → `OCR_FILE_LOCKED`，其余继续                       | ✅ 解码只读打开；写盘被占用 → `QR_OUTPUT_WRITE_FAILED`    |
+| 3 加密文件      | ✅ 不适用（图片无解密）；伪装 `.png` → `OCR_INPUT_INVALID` / `OCR_FAILED`          | ✅ 不适用；损坏图 → `QR_IMAGE_UNREADABLE`                 |
+| 4 超大文件      | ✅ 21MB → `OCR_IMAGE_TOO_LARGE`（预检拒绝）；PDF >30 页 → `OCR_PDF_TOO_MANY_PAGES` | ✅ 21MB → `QR_IMAGE_TOO_LARGE`；内容/尺寸越界 schema 拦截 |
+| 5 任务取消      | ✅ 识别任务 `CANCELLED`（信号透传 worker）                                         | ✅ 纯同步无任务；批量识别逐项可中断                       |
+| 6 并发溢出      | ✅ 5 个合并导出并发文件名互不冲突；50 张上限 schema 拦截                           | ✅ 批量 ≤50 张 schema 拦截；保存重名递增                  |
+| 7 磁盘满        | ✅ `OUTPUT_WRITE_FAILED`（`writeAtomic` ENOSPC 映射，单测覆盖）                    | ✅ `QR_OUTPUT_WRITE_FAILED`                               |
+| 8 断电恢复      | ✅ `writeAtomic` 原子写，无中间产物                                                | ✅ 产物先写临时再改名                                     |
+
+### 12.3 R5 体积与资产
+
+- 工具 chunk：`image-toolbox-*.js` = 622,761 B raw / **138.8KB gzip**（<200KB），含并入两页签 UI 与 `jsqr`/`qrcode`；
+- OCR 模型（det/rec/字典）与 ONNX 运行时属主进程 worker 资产（`out/main/chunks/ocr.worker-*.js` raw 206,689 B / gzip 52,395 B），按 R5 口径单列、不计入 renderer chunk；
+- 零新增二进制；`pnpm gate` 全绿。
+
+### 12.4 单测
+
+- 迁入 `src/ocr/*`、`src/qr/*` 全部单测与 client 测试；`pnpm vitest run packages/tools/image-toolbox` **515 passed**；
+- 覆盖率分组沿用 `packages/tools/image-toolbox/src/**/*.ts` 80%（两子目录自动纳入）。

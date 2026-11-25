@@ -96,3 +96,52 @@
 - 历史 100 条上限与持久化（刷新后仍在）
 - 门禁全绿
 - **chunk 实测（M1 记录，R5 口径 gzip）**：计算器专属增量 = `calculator-*` + 独占 `number-*`（mathjs/number 拆分）= **1,001,008 B raw / 219,463 B gzip（977.6KB / 214.3KB）**，较 mathjs 全量入口约 -44%。**R5 已修订（2026-11-13）**：求值类工具例外上限 300KB gzip（AGENTS §8 / plan.md R5），本工具达标。根因：mathjs 公开入口 `parse` 位于 side-effectful 聚合器（连带 algebra/help/embeddedDocs），官方无更小公开入口，按 Q13 不换库。
+
+## 7. M79 并入：单位换算 / 生活计算（2026-11-25，plan Q79 / §4.79）
+
+> 原 `docs/spec/unit-converter.md`、`docs/spec/life-calculator.md` 已并入本节后删除；`unit-converter` / `life-calculator` 两个工具 id 不再存在。
+> 两者均为**纯 renderer**（零 IPC、零主进程逻辑、零新增依赖），宿主统一为四页签「计算 / 进制 / 单位换算 / 生活计算」。
+
+### 7.1 页签与源码对照
+
+| Tab（`TabKey`） | 视图                    | 源码                 | 通道 | 错误码前缀                                                            |
+| --------------- | ----------------------- | -------------------- | ---- | --------------------------------------------------------------------- |
+| `calc`          | ToolView 内联（表达式） | `src/*.ts`（mathjs） | 无   | `CALC_*` / `NON_FINITE` / `EVAL_FAILED`                               |
+| `base`          | ToolView 内联（进制）   | `src/calc/base.ts`   | 无   | `CALC_*`                                                              |
+| `units`         | `renderer/UnitTab.vue`  | `src/units/*.ts`     | 无   | `INVALID_VALUE` / `UNKNOWN_CATEGORY` / `UNKNOWN_UNIT` / `INVALID_DPI` |
+| `life`          | `renderer/LifeTab.vue`  | `src/life/*.ts`      | 无   | `LC_*`                                                                |
+
+- 单位换算收藏：localStorage 键改为 `lumin.tool.calculator.unit-favorites`（Pinia store id `calculator-unit-favorites`）；旧键 `lumin.tool.unit-converter.favorites` **不迁移**。
+- 生活计算错误码沿用：`LC_MORTGAGE_INVALID` / `LC_TAX_INVALID` / `LC_PERCENT_INVALID` / `LC_CLIPBOARD_FAILED`。
+
+### 7.2 单位换算页签（原 unit-converter：M1 / M36 / M52）
+
+| 字段        | 规则                                                                                                        |
+| ----------- | ----------------------------------------------------------------------------------------------------------- |
+| 类别        | 17 类：长度/重量/温度/面积/体积/速度/时间/数据量/数据速率/压强/功率/能量/流量/油耗/角度/频率/像素（无汇率） |
+| 源/目标单位 | 必须属于当前类别；切换类别重置为该类 `units[0]` / `units[1]`；⇄ 互换                                        |
+| 数值        | 允许负数与小数；空输入显示 `—` 不报错；非有限数 → `INVALID_VALUE`                                           |
+| DPI         | 仅「像素/分辨率」类别显示，默认 96，须为 >0 有限数，否则 `INVALID_DPI`                                      |
+| 模型        | 线性 `factor`；温度为 `scale+offset`；像素走 DPI；油耗走倒数（值须 >0，否则 `INVALID_VALUE`）               |
+| 收藏        | 星标 toggle，收藏单位在两侧下拉置顶，localStorage 持久化，空态「暂无收藏单位」                              |
+| 三态        | 空态（placeholder + `—`）；加载态豁免（纯同步）；报错态输入框下行内红字，修正即恢复                         |
+| 单测        | 每类每单位 × 基准值/往返断言；温度/流量/角度/像素/能量/频率/数据速率/油耗锚点；≥80%                         |
+
+### 7.3 生活计算页签（原 life-calculator：M37）
+
+| 子页签 | 控件与默认值                                                                                                                         | 结果与校验                                                                                                                              |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 房贷   | 还款方式（等额本息/等额本金，默认本息）；本金 1–1e8（默认 1,000,000）；年利率 0–24（默认 4.9）；年限 1–50 整数（默认 30）            | 汇总 4 指标（月供或首月还款/总利息/还款总额/期数）+ 前 12 期计划；越界/非整数 → `LC_MORTGAGE_INVALID`；复制失败 → `LC_CLIPBOARD_FAILED` |
+| 个税   | 税前月薪 0–1e7（默认 10,000）；五险一金 ≥0（默认 1,000）；专项附加扣除 ≥0（默认 0）；说明「月度口径 + 起征点 5000，不含年终奖/汇算」 | 应纳税所得额/个税/税后/实际税负率 + 适用档位；扣除项大于税前 → `LC_TAX_INVALID`                                                         |
+| 百分比 | 增减（基数×百分比，                                                                                                                  | 百分比                                                                                                                                  | ≤10000）；变化率（原值不得 0）；折扣（力度 0–100）；反推原价（力度 0–99） | 四个结果块独立报错 `LC_PERCENT_INVALID`，互不阻塞 |
+
+- 纯函数：`src/life/mortgage.ts`（等额本息 `P·r·(1+r)^n/((1+r)^n−1)`、等额本金末期结清尾差、计划最长 600 期）、`tax.ts`（七档累进 + 速算扣除 0/210/1410/2660/4410/7160/15160）、`percent.ts`、`num.ts`（`round2` 含 EPSILON 补偿）。
+- 三态：空态即默认参数实时出结果（无白屏）；加载态豁免（单次 <5ms）；报错态各页签/小节独立 `role="alert"`。
+
+### 7.4 验收（M79）
+
+1. 侧边栏只有一个「计算器」入口；四页签标签渲染与切换正常，切换不丢输入。
+2. 单位换算 17 类可算、收藏置顶与持久化（新键）、`INVALID_DPI` / `INVALID_VALUE` 行内报错。
+3. 生活计算默认值即出结果；等额本金首卡变「首月还款」；本金 0 → `LC_MORTGAGE_INVALID`；五险一金 > 工资 → `LC_TAX_INVALID`；原值 0 → `LC_PERCENT_INVALID`。
+4. e2e：`calculator-smoke.spec.ts`（四页签 + 房贷/个税/百分比）+ `ipc-smoke.spec.ts`（单位换算）；本包覆盖率 ≥80%。
+5. `chunk 复测（M79）`：`calculator-*.js` **947,852 B raw / 202.1KB gzip**，≤300KB 求值类例外（mathjs），R5 达标；`pnpm gate` 全绿。

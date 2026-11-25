@@ -70,42 +70,6 @@ const workspaceAlias = [
     replacement: r('../../packages/tools/pdf-toolkit/src/renderer/$1')
   },
   {
-    find: /^@lumin\/tool-print\/manifest$/,
-    replacement: r('../../packages/tools/print-tool/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-print\/node$/,
-    replacement: r('../../packages/tools/print-tool/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-print\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/print-tool/src/renderer/$1')
-  },
-  {
-    find: /^@lumin\/tool-qr-code\/manifest$/,
-    replacement: r('../../packages/tools/qr-code/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-qr-code\/node$/,
-    replacement: r('../../packages/tools/qr-code/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-qr-code\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/qr-code/src/renderer/$1')
-  },
-  {
-    find: /^@lumin\/tool-ocr-text\/manifest$/,
-    replacement: r('../../packages/tools/ocr-text/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-ocr-text\/node$/,
-    replacement: r('../../packages/tools/ocr-text/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-ocr-text\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/ocr-text/src/renderer/$1')
-  },
-  {
     find: /^@lumin\/tool-color-toolbox\/manifest$/,
     replacement: r('../../packages/tools/color-toolbox/src/manifest.ts')
   },
@@ -128,18 +92,6 @@ const workspaceAlias = [
   {
     find: /^@lumin\/tool-file-scanner\/renderer\/(.+)$/,
     replacement: r('../../packages/tools/file-scanner/src/renderer/$1')
-  },
-  {
-    find: /^@lumin\/tool-zip-tool\/manifest$/,
-    replacement: r('../../packages/tools/zip-tool/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-zip-tool\/node$/,
-    replacement: r('../../packages/tools/zip-tool/src/node.ts')
-  },
-  {
-    find: /^@lumin\/tool-zip-tool\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/zip-tool/src/renderer/$1')
   },
   {
     find: /^@lumin\/tool-text-toolbox\/manifest$/,
@@ -176,14 +128,6 @@ const workspaceAlias = [
   {
     find: /^@lumin\/tool-file-preview\/renderer\/(.+)$/,
     replacement: r('../../packages/tools/file-preview/src/renderer/$1')
-  },
-  {
-    find: /^@lumin\/tool-life-calculator\/manifest$/,
-    replacement: r('../../packages/tools/life-calculator/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-life-calculator\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/life-calculator/src/renderer/$1')
   },
   {
     find: /^@lumin\/tool-time-toolbox\/manifest$/,
@@ -232,14 +176,6 @@ const workspaceAlias = [
   {
     find: /^@lumin\/tool-calculator\/renderer\/(.+)$/,
     replacement: r('../../packages/tools/calculator/src/renderer/$1')
-  },
-  {
-    find: /^@lumin\/tool-unit-converter\/manifest$/,
-    replacement: r('../../packages/tools/unit-converter/src/manifest.ts')
-  },
-  {
-    find: /^@lumin\/tool-unit-converter\/renderer\/(.+)$/,
-    replacement: r('../../packages/tools/unit-converter/src/renderer/$1')
   },
   {
     find: /^@lumin\/tool-mindmap\/manifest$/,

@@ -125,3 +125,66 @@
 - [x] M9：格式白名单扩至 6 种扩展名；批量队列（去重/上限 100/串行/失败不中断/全失败抛首错）单测与 e2e 覆盖
 - [x] M9：spec 更新（§1/§3.1/§4/§5/§6/§7/§8）+ plan §4.9/M9 登记 + smoke 记录 + CHANGELOG
 - [x] M9：门禁全绿（lint/typecheck/test/coverage/boundary/format；audit 为已知 picomatch 例外）；chunk 复测 24,412 B raw / **6,062 B gzip** < 200KB（R5）
+
+## 10. M80 并入：打印（原 print-tool，2026-11-25，plan Q80 / §4.80）
+
+> 原 `docs/spec/print-tool.md` 已并入本节后删除；工具 id 由 `print` 并入 `docx2pdf`，显示名改「**文档输出**」（`version 0.3.0`），两页签「转为 PDF / 打印」。
+> 打印为**纯主进程 + 隐藏窗口**能力，零新增依赖/二进制（沿用 Q69：统一系统打印对话框 `silent:false`，不做应用内预览与静默打印）。
+
+### 10.1 页签与通道对照
+
+| Tab（`TabKey`） | 视图                    | 通道（`docx2pdf:{action}`）                                       | 错误码前缀                        |
+| --------------- | ----------------------- | ----------------------------------------------------------------- | --------------------------------- |
+| `convert`       | ToolView 内联（原能力） | `status` / `convert` / `install` / `set-path` / `reveal`          | `SOFFICE_*` / `CONVERT_FAILED` 等 |
+| `print`         | `renderer/PrintTab.vue` | `print-status` / `print-prepare` / `print-show` / `print-cleanup` | `PR_*`                            |
+
+- settings 键：`tools.docx2pdf.print.*`（自定义 soffice 路径与打印相关记忆）；`print-status` 传 `{ customPath }` 即保存。
+- 宿主 `NTabs` 使用 `display-directive="show:lazy"`：切换页签不卸载、不中断进行中的转换任务。
+- `print-jobId` 映射仅存主进程内存（不落盘），临时产物 `<userData>/temp/lumin-print/<jobId>.pdf|.html`，注册时清理 mtime >24h 残留。
+
+### 10.2 打印页签字段级清单
+
+| 项        | 规则                                                                                                                                                                               |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 输入格式  | Office `doc/docx/xls/xlsx/ppt/pptx`；PDF `pdf`；图片 `png/jpg/jpeg/webp/bmp/gif`                                                                                                   |
+| 选择方式  | DropZone 拖拽多选 / 点击选择；`getPathForFile` 取绝对路径；同路径去重                                                                                                              |
+| 数量/体积 | 1–50 个（超 `PR_TOO_MANY_FILES`）；单文件 ≤500 MiB（超 `PR_TOO_LARGE`）                                                                                                            |
+| 按钮集    | 添加文件 / 清空（调 `print-cleanup`）/ 开始打印 / 取消 / 重试（按失败阶段）/ 详情折叠 / 移除 / 重新选择                                                                            |
+| 状态机    | `idle → preparing`（`print-prepare`，逐份进度）`→ printing`（逐份串行 `print-show`）`→ done`；任一阶段 error/cancel 回 error/idle                                                  |
+| 取消口径  | prepare 取消 → 任务 `CANCELLED` 并清理临时产物；printing 取消 → 关闭打印窗口并中止后续份                                                                                           |
+| 用户关框  | 关闭系统打印对话框 → `PR_PRINT_CANCELLED`，**不计入失败**，继续下一份                                                                                                              |
+| 结果态    | 成功/失败/已取消份数 + 失败项错误码与文案列表                                                                                                                                      |
+| 三态      | 空态 DropZone + 格式/上限说明 + LibreOffice 提示；加载态 `TaskProgress`（含取消），等待对话框用不确定进度 NSpin；报错态 `role="alert"` 中文文案 + 错误码 + 详情 + 可重试码「重试」 |
+
+### 10.3 错误码（沿用 `PR_*`）
+
+| 码                      | 文案                                                | 可重试         |
+| ----------------------- | --------------------------------------------------- | -------------- |
+| `PR_UNSUPPORTED_FORMAT` | 不支持的文件类型                                    | 否             |
+| `PR_NOT_FOUND`          | 文件不存在，请重新选择                              | 否             |
+| `PR_LOCKED`             | 文件被其他程序占用，请关闭后重试                    | 是             |
+| `PR_TOO_LARGE`          | 文件超过 500 MiB，无法打印                          | 否             |
+| `PR_SOFFICE_MISSING`    | 未检测到 LibreOffice 转换组件，无法打印 Office 文件 | 否             |
+| `PR_CONVERT_FAILED`     | Office 转 PDF 失败                                  | 是             |
+| `PR_CONVERT_TIMEOUT`    | Office 转 PDF 超时（60 秒），已终止                 | 是             |
+| `PR_PDF_PASSWORD`       | PDF 已加密，请先解除密码保护                        | 否             |
+| `PR_PDF_BROKEN`         | PDF 无法解析（可能已损坏）                          | 否             |
+| `PR_PRINT_FAILED`       | 打印失败，请重试或检查打印机                        | 是             |
+| `PR_PRINT_CANCELLED`    | 已取消打印                                          | 否（不计失败） |
+| `PR_PRINT_BUSY`         | 已有打印任务进行中，请等待完成                      | 是             |
+| `PR_INVALID_PATH`       | 文件路径无效                                        | 否             |
+| `PR_TOO_MANY_FILES`     | 单次最多打印 50 个文件                              | 否             |
+
+### 10.4 打印实现口径（不变）
+
+- PDF：隐藏 `BrowserWindow`（`plugins:true`、`sandbox:true`、`contextIsolation:true`、`nodeIntegration:false`、无 preload、deny `window.open`、拦截 `will-navigate`）加载 `file://` → `showInactive()` → `webContents.print({ silent:false })`。
+- 栅格兜底：视图装载失败时用 `node-kit/pdf` 按 scale 2 逐页渲染 PNG → `@page` A4 HTML → 同窗口打印。
+- Office：`node-kit/office` 定位 soffice（自定义 / 系统 / 便携三级）+ 串行锁 + 60s 超时 + `%PDF-` 产物校验。
+- 打印前置预检取页数：`PasswordException` → `PR_PDF_PASSWORD`，其余解析失败 → `PR_PDF_BROKEN`；同一时刻仅一份 `print-show`，并发 → `PR_PRINT_BUSY`。
+
+### 10.5 验收（M80）
+
+1. 两页签标签可见，切换不中断转换任务；打印页签空态含格式/上限与组件提示。
+2. e2e `docx2pdf-smoke.spec.ts`：页签断言 + dry-run 打印全链路（`%PDF-` 产物 + `print-cleanup`）+ 文件不存在 `PR_NOT_FOUND`。
+3. 手工：加密 PDF → `PR_PDF_PASSWORD`；损坏 PDF → `PR_PDF_BROKEN`；51 个文件 → `PR_TOO_MANY_FILES`；取消对话框 → 提示「已取消」无错误卡片。
+4. chunk 复测：`docx2pdf-*.js` **46,746 B raw / 10.4KB gzip**（<200KB）；`pnpm gate` 全绿。

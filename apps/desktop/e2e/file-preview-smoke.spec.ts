@@ -91,8 +91,7 @@ function writePng(file: string, width: number, height: number, color: string): v
 /** 同步通道 invoke */
 function invoke<T>(page: Page, channel: string, payload: unknown): Promise<T> {
   return page.evaluate(
-    ({ channel, payload }) =>
-      window.lumin.invoke(channel, payload) as Promise<unknown>,
+    ({ channel, payload }) => window.lumin.invoke(channel, payload) as Promise<unknown>,
     { channel, payload }
   ) as Promise<T>
 }
@@ -152,11 +151,11 @@ function expectPngBase64(png: string): void {
   expect(bytes.subarray(0, 8).equals(PNG_SIGNATURE)).toBe(true)
 }
 
-/** 用 pdf-images 生成 N 页 PDF（返回产物绝对路径） */
+/** 用 pdf-toolkit 的「PDF↔图片」页签生成 N 页 PDF（返回产物绝对路径；原 pdf-images 通道已于 M76 并入） */
 async function makePdf(page: Page, dir: string, name: string, pages = 1): Promise<string> {
   const png = path.join(dir, `${name}.png`)
   writePng(png, 300, 200, '#22aa55')
-  const outcome = await runTask(page, 'pdf-images:images-to-pdf', {
+  const outcome = await runTask(page, 'pdf-toolkit:images-images-to-pdf', {
     inputPaths: Array.from({ length: pages }, () => png),
     pageSize: 'auto',
     marginMm: 0,
@@ -177,10 +176,7 @@ test.describe('file-preview（文件预览）冒烟', () => {
       await clickSidebarTool(page, '文件预览')
       await expect(page.getByText('拖拽文件到此处，或点击选择')).toBeVisible()
       // 空态主操作：文件选择器 accept 覆盖文本与 Office
-      const accept = await page
-        .locator('input[type="file"]')
-        .first()
-        .getAttribute('accept')
+      const accept = await page.locator('input[type="file"]').first().getAttribute('accept')
       expect(accept ?? '').toContain('.md')
       expect(accept ?? '').toContain('.docx')
     } finally {
@@ -255,8 +251,7 @@ test.describe('file-preview（文件预览）冒烟', () => {
         'FP_UNSUPPORTED'
       )
       expect(
-        (await invokeError(page, 'file-preview:inspect', { path: path.join(dir, '缺失.txt') }))
-          .code
+        (await invokeError(page, 'file-preview:inspect', { path: path.join(dir, '缺失.txt') })).code
       ).toBe('FP_NOT_FOUND')
       const fakeDir = path.join(dir, '伪装目录.txt')
       fs.mkdirSync(fakeDir)
@@ -273,9 +268,9 @@ test.describe('file-preview（文件预览）冒烟', () => {
       fs.writeFileSync(lockedPath, '被占用')
       lock = await holdExclusiveLock(lockedPath)
       if (lock.acquired) {
-        expect(
-          (await invokeError(page, 'file-preview:read-text', { path: lockedPath })).code
-        ).toBe('FP_LOCKED')
+        expect((await invokeError(page, 'file-preview:read-text', { path: lockedPath })).code).toBe(
+          'FP_LOCKED'
+        )
       }
     } finally {
       lock?.release()

@@ -46,3 +46,16 @@
 | 全量门禁    | `pnpm typecheck` / `pnpm lint` / `pnpm coverage`     | ✅ 全绿                                                                                                                                                                                                                                                                      |
 | chunk（R5） | `pnpm build` 产物实测                                | ✅ `calculator-*.js` = 885,510 B raw / **194,339 B gzip（189.8KB）**，低于 200KB 基线（无需动用 300KB 例外）                                                                                                                                                                 |
 | R2 八类映射 | 纯 renderer、无文件 IO                               | 1 中文/空格路径、2 文件占用、3 加密文件、4 超大文件：**不适用**（无文件读写）；超大输入由 512 字符上限拦截 `BASE_TOO_LONG`；5 任务取消：同步 <1ms 无需取消；6 并发：无共享状态；7 磁盘满：仅 localStorage 历史，已按旧记录静默降级；8 断电恢复：历史损坏回退 `[]`（沿用 §2） |
+
+## 5. M79 合并后复测（2026-11-25，plan Q79 / §4.79）
+
+> 并入 `unit-converter`（M1/M36/M52）与 `life-calculator`（M37）；原 `docs/smoke/unit-converter.md`、`docs/smoke/life-calculator.md` 已并入本节后删除。
+
+| 项           | 方式                                                 | 结果                                                                                                                                                                                  |
+| ------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 四页签 UI    | e2e `calculator-smoke.spec.ts`（4 用例）+ 本机实跑   | ✅ 4/4：四页签可见且默认生活计算出房贷结果；还款方式切换与本金越界 `LC_MORTGAGE_INVALID`；个税 10000→290/9710 与 `LC_TAX_INVALID`；百分比联动与 `LC_PERCENT_INVALID`                  |
+| 单位换算回归 | e2e `ipc-smoke.spec.ts`（切「单位换算」页签）        | ✅ 换算结果与收藏置顶正常；收藏键改为 `lumin.tool.calculator.unit-favorites`                                                                                                          |
+| 单测         | `pnpm exec vitest run packages/tools/calculator/src` | ✅ 114 tests（原算器 43 + 单位换算 + 生活计算全量平移后通过）                                                                                                                         |
+| chunk（R5）  | `pnpm build` 产物实测                                | ✅ `calculator-*.js` = 947,852 B raw / **202.1KB gzip**，≤300KB 求值类例外（mathjs），达标                                                                                            |
+| R2 八类映射  | 两个子模块均为纯 renderer、无文件 IO                 | 同 §2/§4：1/2/3/4 不适用；超大输入由输入框上限与 `INVALID_VALUE` / `LC_*` 拦截；5 取消不适用（同步计算）；6 无共享状态；7 仅 localStorage 收藏/历史，写失败静默降级；8 损坏回退默认值 |
+| 生命周期     | 切换页签不丢输入；重进工具默认「计算」页签           | ✅ 本机手测                                                                                                                                                                           |

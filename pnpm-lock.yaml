@@ -278,9 +278,6 @@ importers:
       '@lumin/tool-image-toolbox':
         specifier: workspace:*
         version: link:../../packages/tools/image-toolbox
-      '@lumin/tool-life-calculator':
-        specifier: workspace:*
-        version: link:../../packages/tools/life-calculator
       '@lumin/tool-markdown-tool':
         specifier: workspace:*
         version: link:../../packages/tools/markdown-tool
@@ -293,30 +290,15 @@ importers:
       '@lumin/tool-misc-toolbox':
         specifier: workspace:*
         version: link:../../packages/tools/misc-toolbox
-      '@lumin/tool-ocr-text':
-        specifier: workspace:*
-        version: link:../../packages/tools/ocr-text
       '@lumin/tool-pdf-toolkit':
         specifier: workspace:*
         version: link:../../packages/tools/pdf-toolkit
-      '@lumin/tool-print':
-        specifier: workspace:*
-        version: link:../../packages/tools/print-tool
-      '@lumin/tool-qr-code':
-        specifier: workspace:*
-        version: link:../../packages/tools/qr-code
       '@lumin/tool-text-toolbox':
         specifier: workspace:*
         version: link:../../packages/tools/text-toolbox
       '@lumin/tool-time-toolbox':
         specifier: workspace:*
         version: link:../../packages/tools/time-toolbox
-      '@lumin/tool-unit-converter':
-        specifier: workspace:*
-        version: link:../../packages/tools/unit-converter
-      '@lumin/tool-zip-tool':
-        specifier: workspace:*
-        version: link:../../packages/tools/zip-tool
       '@playwright/test':
         specifier: 1.65.0
         version: 1.65.0
@@ -540,6 +522,9 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
     devDependencies:
+      electron:
+        specifier: 45.3.1
+        version: 45.3.1(supports-color@7.2.0)
       pdfjs-dist:
         specifier: 6.5.438
         version: 6.5.438
@@ -649,6 +634,9 @@ importers:
       '@lumin/ui':
         specifier: workspace:*
         version: link:../../ui
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       naive-ui:
         specifier: 2.45.3
         version: 2.45.3(vue@3.5.45(typescript@6.0.3))
@@ -667,6 +655,9 @@ importers:
       '@lumin/node-kit':
         specifier: workspace:*
         version: link:../../node-kit
+      '@lumin/ocr-kit':
+        specifier: workspace:*
+        version: link:../../ocr-kit
       '@lumin/plugin-api':
         specifier: workspace:*
         version: link:../../plugin-api
@@ -676,9 +667,15 @@ importers:
       '@lumin/ui':
         specifier: workspace:*
         version: link:../../ui
+      jsqr:
+        specifier: 1.4.0
+        version: 1.4.0
       naive-ui:
         specifier: 2.45.3
         version: 2.45.3(vue@3.5.45(typescript@6.0.3))
+      qrcode:
+        specifier: 1.5.4
+        version: 1.5.4
       vue:
         specifier: 3.5.45
         version: 3.5.45(typescript@6.0.3)
@@ -689,24 +686,9 @@ importers:
       '@napi-rs/canvas':
         specifier: 1.1.1
         version: 1.1.1
-
-  packages/tools/life-calculator:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
+      '@types/qrcode':
+        specifier: 1.5.6
+        version: 1.5.6
 
   packages/tools/markdown-tool:
     dependencies:
@@ -831,36 +813,6 @@ importers:
         specifier: 45.3.1
         version: 45.3.1(supports-color@7.2.0)
 
-  packages/tools/ocr-text:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/ocr-kit':
-        specifier: workspace:*
-        version: link:../../ocr-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-
   packages/tools/pdf-toolkit:
     dependencies:
       '@lucide/vue':
@@ -894,77 +846,6 @@ importers:
       '@napi-rs/canvas':
         specifier: 1.1.1
         version: 1.1.1
-
-  packages/tools/print-tool:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      electron:
-        specifier: 45.3.1
-        version: 45.3.1(supports-color@7.2.0)
-      pdfjs-dist:
-        specifier: 6.5.438
-        version: 6.5.438
-
-  packages/tools/qr-code:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      jsqr:
-        specifier: 1.4.0
-        version: 1.4.0
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      qrcode:
-        specifier: 1.5.4
-        version: 1.5.4
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@types/qrcode':
-        specifier: 1.5.6
-        version: 1.5.6
 
   packages/tools/text-toolbox:
     dependencies:
@@ -1023,57 +904,6 @@ importers:
       vue:
         specifier: 3.5.45
         version: 3.5.45(typescript@6.0.3)
-
-  packages/tools/unit-converter:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      pinia:
-        specifier: 4.1.0
-        version: 4.1.0(@vue/devtools-api@8.2.1)(typescript@6.0.3)(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-
-  packages/tools/zip-tool:
-    dependencies:
-      '@lucide/vue':
-        specifier: 1.72.0
-        version: 1.72.0(vue@3.5.45(typescript@6.0.3))
-      '@lumin/node-kit':
-        specifier: workspace:*
-        version: link:../../node-kit
-      '@lumin/plugin-api':
-        specifier: workspace:*
-        version: link:../../plugin-api
-      '@lumin/shared':
-        specifier: workspace:*
-        version: link:../../shared
-      '@lumin/ui':
-        specifier: workspace:*
-        version: link:../../ui
-      fflate:
-        specifier: 0.8.3
-        version: 0.8.3
-      naive-ui:
-        specifier: 2.45.3
-        version: 2.45.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 3.5.45
-        version: 3.5.45(typescript@6.0.3)
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
 
   packages/ui:
     dependencies:
