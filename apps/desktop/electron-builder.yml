@@ -47,6 +47,8 @@ extraResources:
       - '**/*'
 
 win:
+  # 应用图标（M85 补，2026-11-26）：512×512 PNG 由 electron-builder 自动生成多尺寸 .ico
+  icon: build/icon.png
   target:
     - nsis
     - portable
