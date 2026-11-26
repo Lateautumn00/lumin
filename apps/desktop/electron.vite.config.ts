@@ -204,14 +204,19 @@ const prodCspMeta = {
 
 export default defineConfig({
   main: {
+    // M85（2026-11-26）启动性能：产物压缩 + 关闭 sourcemap（V8 解析更省时）
+    build: { minify: true, sourcemap: false },
     plugins: [externalizeDepsPlugin()],
     resolve: { alias: workspaceAlias }
   },
   preload: {
+    build: { minify: true, sourcemap: false },
     plugins: [externalizeDepsPlugin()],
     resolve: { alias: workspaceAlias }
   },
   renderer: {
+    // M85（2026-11-26）首屏性能：electron-vite 默认不压缩 renderer，显式开启压缩
+    build: { minify: true, sourcemap: false },
     resolve: {
       alias: [
         ...workspaceAlias,

@@ -1137,6 +1137,16 @@ lumin/
 - **空 feed 保护**：首个 0.1.0 产物出包前 `updates/latest.yml` 为无更新条目（`version: 0.1.0` + `files: []`），避免 0.1.0 客户端把 0.9.0 当升级下载；发布时用 `pnpm dist` 产出的 `dist/latest.yml` 覆盖（真实 sha512/size/地址）。
 - **待补**：GitHub 仓库 `Lateautumn00/lumin` 已确认，README 与注释中的地址占位已回填；首个 0.1.0 产物发布后按 §4.10 的产物清单做一次双源一致性校验（安装包 SHA256 两处比对 + `latest.yml` 版本一致）。
 
+### 4.85 打包体积与运行时性能优化（M85，2026-11-26 R8 登记）
+
+- **渲染/主进程压缩**：electron-vite 默认不压缩产物，`electron.vite.config.ts` 三端显式 `build.minify = true` + `sourcemap: false`。实测 renderer chunk 减半（calculator 926→402KB、exam-split 697→481KB、image-toolbox 608→296KB、入口 index 590→303KB），`out/main` 9.10→4.23MB；首屏解析量同步下降（R5 gzip 基线更宽松）。
+- **剔除 GPU 后端死重量**：OCR 固定 CPU EP（`packages/ocr-kit/src/model.ts` `executionProviders: ['cpu']`），onnxruntime-node 自带的 `DirectML.dll`(17.7MB) + `dxcompiler.dll`(17.2MB) 无用，`electron-builder.yml` `files` 排除，共 **-34.9MB** 解包体积。
+- **依赖冗余裁剪**：`files` 排除 `**/*.map`、`**/*.md`、`**/{test,tests,__tests__,example,examples,doc,docs}/**`。
+- **安装包压缩**：`compression: maximum`（LZMA）。实测 setup **205.7→188.0MB**、portable **188.1→173.6MB**。
+- **启动路径**：`bootstrap` 内 `shell.taskConcurrency` / `shell.theme.mode` 两次设置读取改 `Promise.all`，去掉一次串行磁盘往返。
+- **未采纳**：`bytecodePlugin`（V8 字节码预编译）在 Vite 8（rolldown）下需额外安装 `esbuild`，涉及依赖治理，本里程碑不引入；如后续同意新增该 devDependency 可单独评估。
+- **验收**：`eslint`/`typecheck` 通过；e2e `ipc-smoke` 7/7 通过（压缩产物可正常启动）；`updates/latest.yml` 已按新产物更新 sha512/size（`size: 197138161`）。
+
 ---
 
 ## 5. 项目规则采纳（Q17=B）与 CI 门禁
@@ -1267,6 +1277,8 @@ MR 门禁：lint → typecheck → test（含 IPC 冒烟）→ pnpm audit（无 
 | **M83 v5.30** | 抖音/快手直链下载（§4.83，2026-11-25 用户拍板「抖音+快手+失败归因、默认去水印」）：`media-convert` 下载页签新增**分享页 SSR 解析**（`download/platforms/`），probe/start 前置分流，直链交 yt-dlp `-f b --add-header` 下载；抖音需**匿名访客态 ttwid**（真机实测：无 cookie 不下发 `videoInfoRes`）、`playwm→play` 默认去水印 + `ratio` 映射（1080p / audio→720p），快手 `hd15/_hd` 优先；新增 `VD_LINK_EXPIRED/VD_LOGIN_REQUIRED/VD_REGION_BLOCKED/VD_FORBIDDEN`；不改系统代理/不装证书/不接闭源 API；零新增依赖/二进制 | §4.83 验收；platforms 覆盖率 ≥80%；单测覆盖长短链/ttwid/去水印/ratio/失效/4xx；直链层真实网络实测通过（1080p 119MB `video/mp4`）；e2e 原下载用例不回归；R2 八类映射；`pnpm gate` 全绿；文档五处同步 | 0.5 天 |
 
 | **M84 发布** | 开源首发版本与双源发布（§4.84，2026-11-25）：版本与标签统一 `v0.1.0`，删除历史 `v0.9.0` 标签；CHANGELOG 收束 `0.1.0`；GitHub / Gitee Release 双源同产物同版本，`publish.url` 保持 Gitee 单点可切；`updates/latest.yml` 首发前为无更新空条目，发布时用 `dist/latest.yml` 覆盖 | 双源产物 SHA256 一致；0.1.0 客户端「检查更新」不误报 0.9.0；`pnpm dist` 出包后覆盖 feed 并复跑更新冒烟；README 中英三处入口对齐 | 0.5 天 |
+
+| **M85 优化** | 打包体积与运行时性能优化（§4.85，2026-11-26）：三端开启 `build.minify` 压缩（renderer chunk 约减半，out/main 9.1→4.2MB）；剔除 onnxruntime `DirectML.dll`/`dxcompiler.dll`（CPU EP，-34.9MB）；排除 map/md/测试目录；`compression: maximum`（LZMA）；启动设置读取并发化 | e2e ipc-smoke 7/7；setup 205.7→188.0MB、portable 188.1→173.6MB；`pnpm gate` 全绿；`updates/latest.yml` 同步新 sha512/size | 0.5 天 |
 
 **合计约 4–5 周**（单人全职）。每里程碑产出可安装包，随时可停。
 

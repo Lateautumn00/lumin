@@ -14,6 +14,17 @@ files:
   - '!**/onnxruntime-node/bin/napi-v*/darwin/**'
   - '!**/onnxruntime-node/bin/napi-v*/linux/**'
   - '!**/onnxruntime-node/bin/napi-v*/win32/arm64/**'
+  # 体积优化（M85，2026-11-26）：onnxruntime 仅用 CPU EP（packages/ocr-kit/src/model.ts
+  # executionProviders: ['cpu']），DirectML GPU 后端及其着色器编译器为死重量（约 35MB）
+  - '!**/onnxruntime-node/bin/napi-v*/win32/x64/DirectML.dll'
+  - '!**/onnxruntime-node/bin/napi-v*/win32/x64/dxcompiler.dll'
+  # 体积优化（M85）：依赖包内的文档/测试/示例与 sourcemap 不参与运行
+  - '!**/*.map'
+  - '!**/*.md'
+  - '!**/{test,tests,__tests__,example,examples,doc,docs}/**'
+
+# 体积优化（M85）：安装包与便携包用 LZMA 最高压缩（出包变慢，产物更小）
+compression: maximum
 
 # Electron 内置语言包裁剪（2026-11-19）：只保留简中/英文，去掉其余 50+ 语言（≈44MB）
 electronLanguages:

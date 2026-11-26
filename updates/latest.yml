@@ -1,17 +1,18 @@
 # 自动更新源（generic provider，客户端读取本文件）
-# v0.1.0 首次发布：条目取自 pnpm dist 产物（sha512 / size 为真实值），
+# v0.1.0：条目取自 pnpm dist 产物（sha512 / size 为真实值），
 # 下载地址使用 Release 资产绝对地址（generic provider 以本文件所在目录为 base，资产不在同目录时必须写绝对地址）。
 #
-# Q84（2026-11-25）双源发布：同一份 latest.yml 与安装包同时上传 GitHub Release 与 Gitee Release；
+# M85（2026-11-26）体积/性能优化后重新出包：renderer/main 开启压缩、剔除 onnxruntime DirectML GPU 库、
+# 安装包 LZMA 最高压缩；setup 205.7→188.0MB、portable 188.1→173.6MB。**sha512/size 已随新产物更新**。
+#
+# Q84 双源发布：同一份 latest.yml 与安装包同时上传 GitHub Release 与 Gitee Release；
 # 客户端固定读取 electron-builder.yml 里 publish.url 指向的一份 feed（当前为 Gitee），
 # 另一处仅作下载备用源，两处版本与 SHA256 必须一致。
-# 如需改为 GitHub 主源：把 publish.url 改成 https://raw.githubusercontent.com/Lateautumn00/lumin/master/updates，
-# 并把下方 url / path 换成 GitHub 资产地址。
 version: 0.1.0
 files:
   - url: https://gitee.com/Lateautumn00/lumin/releases/download/v0.1.0/Lumin-0.1.0-win-x64-setup.exe
-    sha512: 1vSYi4ZcrM0WFNUGIeG7gvafjYswMK2MxBuYOdhI1YkVtLWfKkOx4nAM1nUG9YYMIJ4dDpdZkNCXeccdxAz35w==
-    size: 215671209
+    sha512: OQIdRX1sdWAdyGYgj0CJrjDNPjYzngqOTY13WIxtYNwge6X67dA5NF9h7Mm4SixtxRuw9ZYRrF9pmID7mIpWsQ==
+    size: 197138161
 path: https://gitee.com/Lateautumn00/lumin/releases/download/v0.1.0/Lumin-0.1.0-win-x64-setup.exe
-sha512: 1vSYi4ZcrM0WFNUGIeG7gvafjYswMK2MxBuYOdhI1YkVtLWfKkOx4nAM1nUG9YYMIJ4dDpdZkNCXeccdxAz35w==
-releaseDate: '2026-11-25T12:50:03.159Z'
+sha512: OQIdRX1sdWAdyGYgj0CJrjDNPjYzngqOTY13WIxtYNwge6X67dA5NF9h7Mm4SixtxRuw9ZYRrF9pmID7mIpWsQ==
+releaseDate: '2026-11-26T03:48:50.530Z'

@@ -90,14 +90,17 @@ async function bootstrap(): Promise<void> {
   const logger = createRootLogger()
   const settings = createSettingsService(join(app.getPath('userData'), 'settings.json'))
 
-  const rawConcurrency = await settings.get<unknown>('shell.taskConcurrency', 2)
+  // M85（2026-11-26）启动性能：两次设置读取并发，减少一次串行磁盘往返
+  const [rawConcurrency, rawThemeMode] = await Promise.all([
+    settings.get<unknown>('shell.taskConcurrency', 2),
+    settings.get<unknown>('shell.theme.mode', 'system')
+  ])
   const concurrency =
     typeof rawConcurrency === 'number' && Number.isFinite(rawConcurrency) && rawConcurrency >= 1
       ? Math.floor(rawConcurrency)
       : 2
 
   // 首帧窗口底色按持久化主题解析，杜绝深色模式下启动白闪（renderer 挂载前窗口已着色）
-  const rawThemeMode = await settings.get<unknown>('shell.theme.mode', 'system')
   const darkWindow =
     rawThemeMode === 'dark' || (rawThemeMode !== 'light' && nativeTheme.shouldUseDarkColors)
   windowBackgroundColor = darkWindow ? '#0b1220' : '#f8fafc'
