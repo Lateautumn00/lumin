@@ -47,7 +47,7 @@
 请只用官方 Release 附带的安装包，并通过 SHA256 校验确认文件完整：
 
 ```powershell
-Get-FileHash .\Lumin-0.1.1-win-x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Lumin-0.1.2-win-x64-setup.exe -Algorithm SHA256
 ```
 
 对比 Release 说明中公布的 SHA256，不一致请重新下载。

@@ -5,6 +5,12 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-26
+
+### Changed
+
+- 新增应用图标：512×512 PNG（深海军蓝圆角底 + 青白光点 + 弧形灯臂）随包接入 `electron-builder.yml` `win.icon`，安装包/便携包/exe 不再是 Electron 默认图标；运行时窗口图标与关于页 logo 另行处理
+
 ## [0.1.1] - 2026-11-26
 
 ### Changed
