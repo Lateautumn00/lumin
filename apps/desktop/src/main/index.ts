@@ -18,6 +18,11 @@ import { toolManifests } from '../tool-manifests'
 // 自定义协议 scheme 必须在 app ready 前登记（handler 在 bootstrap 内 ready 后注册）
 registerMediaScheme()
 
+/** 启动耗时基准（M85）：模块加载时刻，用于验证 R5「首屏可交互 <1.5s」 */
+const startupAt = Date.now()
+/** 启动耗时埋点输出（bootstrap 内注入 logger；早于 bootstrap 的调用为空操作） */
+let markStartup: (stage: string) => void = () => {}
+
 let mainWindow: BrowserWindow | null = null
 /** 与 renderer tokens 同步：暗色 --lumin-color-bg=#0b1220 / 亮色 #f8fafc（main.css 单源） */
 let windowBackgroundColor = '#f8fafc'
@@ -38,8 +43,13 @@ function createWindow(): void {
     }
   })
   mainWindow.once('ready-to-show', () => {
+    markStartup('window-shown')
     mainWindow?.show()
   })
+  mainWindow.webContents.once('did-finish-load', () => {
+    markStartup('page-loaded')
+  })
+  markStartup('window-created')
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   mainWindow.webContents.on('will-navigate', (event) => {
     event.preventDefault()
@@ -88,6 +98,11 @@ function applyCsp(): void {
 async function bootstrap(): Promise<void> {
   initLog()
   const logger = createRootLogger()
+  // 启动耗时埋点（M85）：写 electron-log，便于按版本统计冷启动各阶段耗时
+  markStartup = (stage) => {
+    logger.info(`[startup] ${stage} +${Date.now() - startupAt}ms`)
+  }
+  markStartup('log-ready')
   const settings = createSettingsService(join(app.getPath('userData'), 'settings.json'))
 
   // M85（2026-11-26）启动性能：两次设置读取并发，减少一次串行磁盘往返
@@ -165,6 +180,7 @@ async function bootstrap(): Promise<void> {
     logger.error(`工具加载失败：${failure.id}`, failure.message)
   }
   logger.info(`已加载工具：${result.loaded.map((manifest) => manifest.id).join(', ')}`)
+  markStartup('tools-loaded')
 
   // 移除 Electron 默认原生菜单栏（Q60）；dev 快捷键见 createWindow 内 before-input-event
   Menu.setApplicationMenu(null)

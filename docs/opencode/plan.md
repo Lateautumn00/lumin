@@ -1145,6 +1145,8 @@ lumin/
 - **安装包压缩**：`compression: maximum`（LZMA）。实测 setup **205.7→188.0MB**、portable **188.1→173.6MB**。
 - **启动路径**：`bootstrap` 内 `shell.taskConcurrency` / `shell.theme.mode` 两次设置读取改 `Promise.all`，去掉一次串行磁盘往返。
 - **未采纳**：`bytecodePlugin`（V8 字节码预编译）在 Vite 8（rolldown）下需额外安装 `esbuild`，涉及依赖治理，本里程碑不引入；如后续同意新增该 devDependency 可单独评估。
+- **启动耗时埋点（2026-11-26 补）**：`apps/desktop/src/main` 以模块加载时刻为基准，向 electron-log 输出 `[startup] <stage> +Nms`（log-ready / tools-loaded / window-created / page-loaded / window-shown）。开发产物实测：log-ready +75ms、tools-loaded +105ms、window-created +135ms、page-loaded +266ms、window-shown **+471ms**，远低于 R5 的 1.5s 基线；工具注册仅占 ~30ms，故**不调整「先加载工具后建窗」的顺序**（改动风险大于收益），埋点留作后续回归观测。
+- **ffmpeg 精简构建调研结论（2026-11-26 补，不采纳替换）**：HEAD 实测 BtbN `win64-lgpl` 170.8MB、`win64-gpl` 196.0MB、gyan `essentials` 113.9MB（压缩包），解包后 ffmpeg.exe 均大于现有 `ffmpeg-static b6.1.1` 的 **79.1MB**；现有构建已是精简档。若要再减近百 MB，只能改为「引擎首次使用时按需下载」，与 AGENTS §1 离线优先冲突，需另行决策（未实施）。
 - **验收**：`eslint`/`typecheck` 通过；e2e `ipc-smoke` 7/7 通过（压缩产物可正常启动）；`updates/latest.yml` 已按新产物更新 sha512/size（`size: 197138161`）。
 
 ---
