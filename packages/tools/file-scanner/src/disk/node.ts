@@ -130,7 +130,7 @@ export function registerWith(ctx: MainPluginContext, deps: DiskAnalyzerDeps): vo
     }
   })
 
-  ctx.log.info('disk-analyzer registered')
+  ctx.log.info('file-scanner disk registered')
 }
 
 /** 生产实现：node-kit worker 运行器 */

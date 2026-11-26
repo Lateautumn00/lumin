@@ -213,7 +213,7 @@ export function registerWith(
     return saveAsResultSchema.parse({ path: target, mtimeMs })
   })
 
-  ctx.log.info('text-editor registered')
+  ctx.log.info('text-toolbox editor registered')
 }
 
 /** 生产实现：node:fs（测试可作基底再覆盖） */

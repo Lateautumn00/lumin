@@ -300,7 +300,7 @@ export function registerWith(
     return okResultSchema.parse({ ok: true })
   })
 
-  ctx.log.info('clipboard-history registered')
+  ctx.log.info('misc-toolbox clipboard registered')
 }
 
 /** 生产注册入口（壳 tool-mains.ts 调用） */

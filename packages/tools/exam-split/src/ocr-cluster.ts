@@ -14,11 +14,11 @@ import type { OcrLine, OcrRegion } from './schema'
  * 一级题号（spec §10.4）：`1.` `1、` `一、` `第1题`。
  * `．` 为 OCR 常见全角变体；`.` 后接数字视为小数（如 `1.5`）不匹配。
  */
-export const PRIMARY_QNUM_RE =
+const PRIMARY_QNUM_RE =
   /^\s*(?:第\s*\d+\s*题|\d+\s*(?:、|[.．](?!\d))|[一二三四五六七八九十]{1,2}\s*[、.．])/
 
 /** 二级题号（spec §10.4）：`(1)` / `（1）`，仅当所在列/页无一级题号时启用 */
-export const SECONDARY_QNUM_RE = /^\s*[（(]\s*\d+\s*[）)]/
+const SECONDARY_QNUM_RE = /^\s*[（(]\s*\d+\s*[）)]/
 
 /**
  * 栏缝/书脊最小宽度（归一化页宽；spec §10.4：谷底 ≥3% 才判分栏或跨页展开）。

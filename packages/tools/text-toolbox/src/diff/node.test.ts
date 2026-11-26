@@ -147,7 +147,7 @@ describe('通道注册', () => {
     } as unknown as MainPluginContext
     registerMain(ctx)
     expect([...handlers.keys()].sort()).toEqual(['compare-files', 'copy-text', 'pick-file'])
-    expect(log.info).toHaveBeenCalledWith('text-diff registered')
+    expect(log.info).toHaveBeenCalledWith('text-toolbox diff registered')
   })
 })
 

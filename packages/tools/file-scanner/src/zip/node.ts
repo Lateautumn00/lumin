@@ -174,7 +174,7 @@ export function registerWith(ctx: MainPluginContext, deps: ZipToolDeps): void {
     }
   })
 
-  ctx.log.info('zip-tool registered')
+  ctx.log.info('file-scanner zip registered')
 }
 
 /** 生产实现：node-kit worker 运行器 */

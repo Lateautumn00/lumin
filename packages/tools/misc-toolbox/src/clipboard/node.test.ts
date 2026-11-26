@@ -207,7 +207,7 @@ describe('clipboard-history 7 同步通道', () => {
         'poll',
         'remove'
       ])
-      expect(log.info).toHaveBeenCalledWith('clipboard-history registered')
+      expect(log.info).toHaveBeenCalledWith('misc-toolbox clipboard registered')
       const result = await invoke<ListResult>(handlers, 'list', {})
       expect(result.items).toEqual([])
     } finally {

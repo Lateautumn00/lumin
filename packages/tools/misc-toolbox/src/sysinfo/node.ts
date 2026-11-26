@@ -26,7 +26,7 @@ export function registerWith(
       throw toolError('SI_COLLECT_FAILED', detailOf(err))
     }
   })
-  ctx.log.info('system-info registered')
+  ctx.log.info('misc-toolbox sysinfo registered')
 }
 
 /** 生产注册入口（壳 tool-mains.ts 调用） */

@@ -5,8 +5,6 @@ import { resolveConflictPath } from '@lumin/node-kit'
  * 全部占用返回 null（调用方报 OUTPUT_MISSING）。冲突递增核心上提 `@lumin/node-kit`
  * （AGENTS 铁律 3，与 exam-split 共用），本模块只保留 docx2pdf 的输入基名推导。
  */
-export { MAX_CONFLICT_SUFFIX as MAX_OUTPUT_SUFFIX } from '@lumin/node-kit'
-
 export function resolveOutputPath(
   inputPath: string,
   exists: (path: string) => boolean

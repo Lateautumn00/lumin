@@ -462,7 +462,7 @@ export function registerWith(ctx: MainPluginContext, deps: FsCleanerDeps): void 
     })
   })
 
-  ctx.log.info('fs-cleaner registered')
+  ctx.log.info('file-scanner clean registered')
 }
 
 /** 生产注册入口（壳 tool-mains.ts 调用；测试用 registerWith 注入假 deps） */

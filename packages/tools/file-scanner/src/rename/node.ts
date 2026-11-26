@@ -85,7 +85,7 @@ export function registerWith(ctx: MainPluginContext, deps: FileRenamerDeps): voi
     }
   })
 
-  ctx.log.info('file-renamer registered')
+  ctx.log.info('file-scanner rename registered')
 }
 
 /**

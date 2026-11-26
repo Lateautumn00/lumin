@@ -89,7 +89,7 @@ export function registerWith(ctx: MainPluginContext, deps: QrCodeDeps = {}): voi
     return saveResultSchema.parse({ output: target })
   })
 
-  ctx.log.info('qr-code registered', { defaultOutputDir })
+  ctx.log.info('image-toolbox qr registered', { defaultOutputDir })
 }
 
 /** 壳注册入口（plugin-host 调用） */

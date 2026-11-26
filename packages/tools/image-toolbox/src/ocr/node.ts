@@ -269,7 +269,7 @@ export function registerWith(ctx: MainPluginContext, deps: OcrTextDeps): void {
     return configResultSchema.parse({ outputDir: saved ?? defaultOutputDir })
   })
 
-  ctx.log.info('ocr-text registered', { defaultOutputDir })
+  ctx.log.info('image-toolbox ocr registered', { defaultOutputDir })
 }
 
 /** 生产实现：fs 预检 + 真实 worker + 模型资产预检（测试可作基底再覆盖） */

@@ -199,7 +199,7 @@ export function registerWith(
     return { ok: true }
   })
 
-  ctx.log.info('text-diff registered')
+  ctx.log.info('text-toolbox diff registered')
 }
 
 /** 生产注册入口（壳 tool-mains.ts 调用） */

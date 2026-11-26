@@ -117,14 +117,14 @@ async function loadSource(inputPath: string): Promise<PDFDocument> {
 }
 
 /** 冲突递增解析唯一输出路径（99 次耗尽 → PT_OUTPUT_WRITE_FAILED） */
-export function resolveOutput(desired: string): string {
+function resolveOutput(desired: string): string {
   const resolved = resolveConflictPath(desired, existsSync)
   if (resolved === null) throw toolError('PT_OUTPUT_WRITE_FAILED', 'conflict-exhausted')
   return resolved
 }
 
 /** 目录冲突递增：`dir`、`dir (1)`…（99 次耗尽 → PT_OUTPUT_WRITE_FAILED，M38） */
-export function resolveOutputDir(desired: string): string {
+function resolveOutputDir(desired: string): string {
   if (!existsSync(desired)) return desired
   for (let index = 1; index <= 99; index += 1) {
     const candidate = `${desired} (${index})`
@@ -566,7 +566,7 @@ function selectPages(ranges: string | undefined, pageCount: number): number[] {
 }
 
 /** 文本提取：逐页重建文本，页前插入分隔行；全文档无文本 → PT_NO_TEXT_LAYER（M38） */
-export async function extractText(
+async function extractText(
   payload: ExtractTextPayload,
   progress: EmitProgress
 ): Promise<OpResult> {
@@ -597,7 +597,7 @@ export async function extractText(
 }
 
 /** 图片提取：新建 `{基名}_图片` 目录逐张写 PNG；无图/超限给结构化错误（M38） */
-export async function extractImages(
+async function extractImages(
   payload: ExtractImagesPayload,
   progress: EmitProgress
 ): Promise<OpResult> {
@@ -647,7 +647,7 @@ export async function extractImages(
 }
 
 /** 压缩：逐页按档位渲染为 JPEG 并按原页 pt 尺寸重建文档；有损（M38） */
-export async function compressPdf(
+async function compressPdf(
   payload: CompressPayload,
   progress: EmitProgress
 ): Promise<OpResult> {

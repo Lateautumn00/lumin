@@ -17,13 +17,13 @@ export const MSI_SOURCES = [
 ] as const
 
 /** MSI 字节数（spike 实测） */
-export const MSI_SIZE = 376_311_808
+const MSI_SIZE = 376_311_808
 /** MSI SHA256（spike 实测） */
-export const MSI_SHA256 = '0e6918c273eabbdbbd800ee0dacbbf130a14c13c2e4cec861b06dd59e015bf94'
+const MSI_SHA256 = '0e6918c273eabbdbbd800ee0dacbbf130a14c13c2e4cec861b06dd59e015bf94'
 /** 下载重试次数（按 [aliyun, tdf] 轮换） */
 export const DOWNLOAD_RETRIES = 3
 /** 进度节流间隔（ms） */
-export const PROGRESS_INTERVAL_MS = 100
+const PROGRESS_INTERVAL_MS = 100
 
 export interface DownloadOptions {
   destDir: string
@@ -38,7 +38,7 @@ export interface DownloadOptions {
 }
 
 /** 文件 SHA256（小写 hex） */
-export async function sha256File(path: string): Promise<string> {
+async function sha256File(path: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const hash = createHash('sha256')
     const stream = createReadStream(path)
