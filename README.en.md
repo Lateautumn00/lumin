@@ -47,7 +47,7 @@ Builds are not code-signed yet, so SmartScreen may show "Windows protected your 
 Only use installers from the official Releases page, and verify the SHA256 checksum listed in the release notes:
 
 ```powershell
-Get-FileHash .\Lumin-0.1.0-win-x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Lumin-0.1.1-win-x64-setup.exe -Algorithm SHA256
 ```
 
 ## Privacy

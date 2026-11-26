@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-26
+
 ### Changed
 
 - M85 打包体积与运行时性能优化：三端开启 `build.minify`（electron-vite 默认不压缩）——renderer 主要 chunk 约减半（calculator 926→402KB、exam-split 697→481KB、image-toolbox 608→296KB、入口 590→303KB），`out/main` 9.10→4.23MB；`electron-builder.yml` 剔除 onnxruntime 的 `DirectML.dll` + `dxcompiler.dll`（OCR 固定 CPU EP，共 -34.9MB）、排除 `*.map`/`*.md`/测试与示例目录、`compression: maximum`（LZMA）；实测 setup **205.7→188.0MB**、portable **188.1→173.6MB**；`bootstrap` 两次设置读取改 `Promise.all`；`updates/latest.yml` 按新产物更新 sha512/size；e2e ipc-smoke 7/7、lint/typecheck 通过；plan §4.85/M85
